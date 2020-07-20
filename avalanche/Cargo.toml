@@ -1,0 +1,9 @@
+[package]
+name = "avalanche"
+version = "0.0.0"
+authors = ["Darius Jankauskas <d5926j@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+avalanche-macro = {path = '../avalanche-macro'}
+downcast-rs = "1.1"

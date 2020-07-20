@@ -1,0 +1,8 @@
+[workspace]
+
+members = [
+    "avalanche-macro",
+    "avalanche",
+    "avalanche-web",
+    "avalanche-web/examples/counter",
+]
