@@ -108,7 +108,7 @@ pub fn generate_vnode(component: View, vdom: Shared<VDom>, renderer: &mut Box<dy
 
 pub fn update_vnode(mut vnode: Shared<VNode>, mut new_component: Option<View>, renderer: &mut Box<dyn Renderer>) {
     let props_updated = match new_component {
-        Some(ref other) => updated(other.updates()),
+        Some(ref other) => other.updates() != 0,
         None => false
     };
     let state_updated = vnode.exec(|vnode| vnode.dirty);
@@ -206,8 +206,4 @@ pub fn destroy_vnode(mut vnode: Shared<VNode>, renderer: &mut Box<dyn Renderer>)
     //TODO: call recursively on children?
     //perhaps a new component method revealing whether recursive detruction needed
     //currently not needed for web platform
-}
-
-fn updated(updates: &[u64]) -> bool {
-    updates.iter().any(|u| *u != 0)
 }

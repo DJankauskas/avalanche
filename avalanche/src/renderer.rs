@@ -40,7 +40,7 @@ impl Component for HasChildrenMarker {
     fn render(&self, _: InternalContext) -> View {
         unreachable!()
     }
-    fn updates(&self) -> &[u64] {
+    fn updates(&self) -> u64 {
         todo!()
     }
 }

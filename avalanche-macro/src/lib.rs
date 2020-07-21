@@ -11,7 +11,7 @@ use std::collections::HashSet;
 
 use syn::{Item, Block, Stmt, Expr, Pat, Lit, parse_macro_input, parse_quote, parse::Parse, punctuated::Punctuated};
 use quote::{quote, format_ident};
-use proc_macro_error::{proc_macro_error, abort};
+use proc_macro_error::{proc_macro_error, abort, emit_error};
 
 use macro_expr::{ReactiveAssert, ComponentInit, Hooks};
 
@@ -930,6 +930,10 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
     let mut function = Function::new();
     let mut param_scope = Scope::new();
 
+    if item_fn.sig.inputs.len() > 64 {
+        emit_error!(item_fn.sig.inputs, "more than 64 properties are unsupported");
+    }
+
     //process render code
     for param in item_fn.sig.inputs.iter() {
         match param {
@@ -998,7 +1002,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
         #[derive(std::default::Default)]
         struct #builder_name {
             #(#param_ident: std::result::Result<#param_type>),*
-            __internal_updates: [u64; 1]
+            __internal_updates: u64
         }
 
         impl #builder_name {
@@ -1031,7 +1035,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
 
         struct #name {
             #(#param_ident: #param_type),*
-            __internal_updates: [u64; 1]
+            __internal_updates: u64
         }
 
         impl avalanche::Component for #name {
@@ -1059,8 +1063,8 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                 #render_body
             }
 
-            fn updates(&self) -> &[u64] {
-                &self.__internal_updates
+            fn updates(&self) -> u64 {
+                self.__internal_updates
             }
 
         }

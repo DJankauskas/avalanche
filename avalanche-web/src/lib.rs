@@ -21,7 +21,7 @@ pub struct Element {
     tag: &'static str,
     on_click: Option<Shared<dyn FnMut()>>,
     children: Vec<View>,
-    updates: [u64; 1]
+    updates: u64
 }
 
 #[derive(Default)]
@@ -29,7 +29,7 @@ pub struct ElementBuilder {
     tag: Option<&'static str>,
     on_click: Option<Shared<dyn FnMut()>>,
     children: Option<Vec<View>>,
-    updates: [u64; 1]
+    updates: u64
 }
 
 impl ElementBuilder {
@@ -40,7 +40,7 @@ impl ElementBuilder {
     pub fn tag(mut self, tag: &'static str, updated: bool) -> Self {
         self.tag = Some(tag);
         if updated {
-            self.updates[0] |= 1;
+            self.updates |= 1;
         };
         self
     }
@@ -52,7 +52,7 @@ impl ElementBuilder {
         let on_click: Box<RefCell<dyn FnMut()>> = Box::new(RefCell::new(on_click));
         self.on_click = Some(on_click.into());
         if updated {
-            self.updates[0] |= 2;
+            self.updates |= 2;
         };
         self
     }
@@ -60,7 +60,7 @@ impl ElementBuilder {
     pub fn children<T: Into<Vec<View>>>(mut self, children: T, updated: bool) -> Self {
         self.children = Some(children.into());
         if updated {
-            self.updates[0] |= 4;
+            self.updates |= 4;
         };
         self
     }
@@ -85,8 +85,8 @@ impl Component for Element {
         }.into()
     }
 
-    fn updates(&self) -> &[u64] {
-        &self.updates
+    fn updates(&self) -> u64 {
+        self.updates
     }
 
     fn native_type(&self) -> Option<NativeType> {
@@ -294,7 +294,7 @@ impl Renderer for WebRenderer {
                 // add_listeners(&element, &new_comp.listeners, &mut web_handle.listeners);
 
                 //on_click
-                if new_comp.updates[0] & 2 != 0 {
+                if new_comp.updates & 2 != 0 {
                     web_handle.listeners.remove("click");
                     if let Some(handler) = &new_comp.on_click {
                         add_listener(&element, "click", handler.clone(), &mut web_handle.listeners);
@@ -314,7 +314,7 @@ impl Renderer for WebRenderer {
             },
             "oak_web_text" => {
                 let new_text = new_comp.downcast_ref::<Text>().expect("Text component");
-                if new_text.updates[0] & 1 != 0 {
+                if new_text.updates & 1 != 0 {
                     //TODO: compare with old text?
                     web_handle.node.set_text_content(Some(&new_text.text));
                 }
@@ -366,12 +366,12 @@ fn add_listener(
 #[derive(Clone, PartialEq)]
 pub struct Text {
     text: String,
-    updates: [u64; 1]
+    updates: u64
 }
 #[derive(Default)]
 pub struct TextBuilder {
     text: Option<String>,
-    updates: [u64; 1]
+    updates: u64
 }
 
 impl TextBuilder {
@@ -382,7 +382,7 @@ impl TextBuilder {
     pub fn text<T: ToString>(mut self, text: T, updated: bool) -> Self {
         self.text = Some(text.to_string());
         if updated {
-            self.updates[0] |= 1;
+            self.updates |= 1;
         };
         self
     }
@@ -410,7 +410,7 @@ impl Component for Text {
         Some(action)
     }
 
-    fn updates(&self) -> &[u64] {
-        &self.updates
+    fn updates(&self) -> u64 {
+        self.updates
     }
 }
