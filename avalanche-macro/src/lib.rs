@@ -924,7 +924,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
 
     let item_fn = match item {
         Item::Fn(ref mut fun) => fun,
-        _ => abort!(item, "component only supports function input")
+        _ => abort!(item, "component requires function input")
     };
 
     let mut function = Function::new();
@@ -933,6 +933,22 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
     if item_fn.sig.inputs.len() > 64 {
         emit_error!(item_fn.sig.inputs, "more than 64 properties are unsupported");
     }
+
+    if let Some(token) = &item_fn.sig.asyncness {
+        abort!(token, "async components currently unsupported");
+    };
+
+    if let Some(token) = &item_fn.sig.unsafety {
+        abort!(
+            token,
+            "unsafe components unsupported"; 
+            note = "to write unsafe code, use an unsafe block"
+        );
+    };
+
+    if let Some(token) = &item_fn.sig.variadic {
+        abort!(token, "variadic components unsupported");
+    };
 
     //process render code
     for param in item_fn.sig.inputs.iter() {
@@ -975,32 +991,46 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
         Punctuated::new()
     };
 
-    let (hook_name, hook_type): (Vec<_>, Vec<_>) = hooks.iter().map(|h| (&h.name, &h.ty)).unzip();
-    let hook_get_fn_name: Vec<_> = hooks.iter().enumerate().map(|(i, h)| format_ident!("get_{}_{}", h.name, i)).collect();
+    let mut hook_name = Vec::with_capacity(hooks.len());
+    let mut hook_type = Vec::with_capacity(hooks.len());
+    let mut hook_get_fn_name = Vec::with_capacity(hooks.len());
 
-    let (param_ident, param_type): (Vec<_>, Vec<_>) = item_fn.sig.inputs.iter().map(|i| {
-        let i = match i {
+    for (i, hook) in hooks.iter().enumerate() {
+        hook_name.push(&hook.name);
+        hook_type.push(&hook.ty);
+        hook_get_fn_name.push(format_ident!("get_{}_{}", hook.name, i));
+    };
+
+    let mut param_ident = Vec::with_capacity(hooks.len());
+    let mut param_type = Vec::with_capacity(hooks.len());
+    let mut param_attributes = Vec::with_capacity(hooks.len());
+    let mut flag = Vec::with_capacity(hooks.len());
+
+    for (i, input) in item_fn.sig.inputs.iter().enumerate() {
+        let input = match input {
             syn::FnArg::Receiver(rec) => {
                 abort!(rec, "receiver not allowed");
             }
             syn::FnArg::Typed(typed) => typed
         };
-        let ident = match &*i.pat {
+        let ident = match &*input.pat {
             Pat::Ident(ident) => ident,
             _ => {
-                abort!(i.pat, "expected identifier");
+                abort!(input.pat, "expected identifier");
             }
         };
-        (ident, &i.ty)
-    }).unzip();
-
-    let flag: Vec<_> = item_fn.sig.inputs.iter().enumerate().map(|(i, _)| 2u64.pow(i as u32)).collect();
+        param_ident.push(ident);
+        param_type.push(&input.ty);
+        param_attributes.push(&ident.attrs);
+        flag.push(2u64.pow(i as u32));
+    };
 
     let render_body = &item_fn.block;
+    let visibility = &item_fn.vis;
 
     let component = quote!{
         #[derive(std::default::Default)]
-        struct #builder_name {
+        #visibility struct #builder_name {
             #(#param_ident: std::result::Result<#param_type>),*
             __internal_updates: u64
         }
@@ -1018,6 +1048,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #(
+                #(#param_attributes)*
                 fn #param_ident(mut self, val: #param_type, updated: bool) -> Self {
                     if updated {
                         self.__internal_updates |= #flag;
@@ -1029,11 +1060,11 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
         }
 
         #[derive(std::default::Default)]
-        struct #state_name {
+        #visibility struct #state_name {
             #( #hook_name: #hook_type ),*
         }
 
-        struct #name {
+        #visibility struct #name {
             #(#param_ident: #param_type),*
             __internal_updates: u64
         }
