@@ -28,10 +28,10 @@ impl<T: ?Sized> Shared<T> {
     /// # Example
     /// 
     /// ```
-    /// # use shared::Shared;
+    /// # use avalanche::shared::Shared;
     /// let num = Shared::new(10u8);
-    /// let squared = num.exec(|*n| n * n);
-    /// println!("Shared squared: {}", squared); //prints "100"
+    /// let squared = num.exec(|&n| n * n);
+    /// assert_eq!(squared, 100);
     /// ```
     pub fn exec<Ret, F: FnOnce(&T) -> Ret>(&self, f: F) -> Ret {
         f(&self.rc.borrow())
@@ -50,10 +50,10 @@ impl<T: ?Sized> Shared<T> {
     /// # Example
     /// 
     /// ```
-    /// # use shared::Shared;
-    /// let sequence = Shared::new(vec![1u8, 2, 3]);
-    /// sequence.exec_mut(|nums| nums.iter_mut().map(|num| num *= *num));
-    /// sequence.exec(|nums| println!("{:?}"), nums); //prints "[1,4,9]"
+    /// # use avalanche::shared::Shared;
+    /// let mut sequence = Shared::new([1u8, 2, 3]);
+    /// sequence.exec_mut(|nums| nums.iter_mut().for_each(|num| *num *= *num));
+    /// sequence.exec(|nums| assert_eq!(nums, &[1, 4, 9]));
     /// ```
     pub fn exec_mut<Ret, F: FnOnce(&mut T) -> Ret>(&mut self, f: F) -> Ret {
         f(&mut self.rc.borrow_mut())
