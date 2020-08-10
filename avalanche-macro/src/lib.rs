@@ -7,7 +7,7 @@ mod tests {
 mod macro_expr;
 
 use proc_macro::TokenStream;
-use std::{borrow::Borrow, collections::HashSet};
+use std::collections::HashMap;
 
 use syn::{Item, Block, Stmt, Expr, Pat, Lit, parse_macro_input, parse_quote, parse::Parse, punctuated::Punctuated};
 use quote::{quote, format_ident};
@@ -15,38 +15,15 @@ use proc_macro_error::{proc_macro_error, abort, emit_error};
 
 use macro_expr::{ReactiveAssert, ComponentInit, Hooks};
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-struct Dependency {
-    name: String,
+#[derive(Debug, Clone, Default)]
+struct DependencyInfo {
     ///the path to the dependency's relevant subpart
     //e.g. if a is a value provided by UseState,
     //a.0 would have sub `Some(vec![0])`
     sub: Option<Vec<usize>>
 }
 
-impl Dependency {
-    fn as_str(&self) -> &str {
-        &self.name
-    }
-}
-
-impl From<String> for Dependency {
-    fn from(string: String) -> Self {
-        Self {
-            name: string,
-            sub: None
-        }
-    }
-}
-
-impl Borrow<str> for Dependency {
-    fn borrow(&self) -> &str {
-        &self.name
-    }
-    
-}
-
-type Dependencies = HashSet<Dependency>;
+type Dependencies = HashMap<String, DependencyInfo>;
 
 #[derive(Debug)]
 struct Var {
@@ -66,7 +43,7 @@ impl ExprType {
     fn unify(&self) -> Dependencies {
         match self {
             ExprType::NumberedFields(fields) => {
-                let mut dependencies = HashSet::new();
+                let mut dependencies = Dependencies::new();
                 for field in fields.iter() {
                     dependencies.extend(field.unify());
                 }
@@ -103,7 +80,7 @@ impl ExprType {
     fn get_sub(&self) -> Option<&Vec<usize>> {
         if let ExprType::Opaque(dependencies) = self {
             if dependencies.len() == 1 {
-                return dependencies.iter().next().unwrap().sub.as_ref();
+                return dependencies.iter().next().unwrap().1.sub.as_ref();
             }
         }
         None
@@ -113,15 +90,11 @@ impl ExprType {
     fn append_to_sub(&mut self, index: usize) -> bool {
         if let Self::Opaque(opaque) = self {
             if opaque.len() == 1 {
-                let mut dep = opaque.clone().drain().next().unwrap();
-                if let Some(sub) = &mut dep.sub {
+                let (_, dep_info) = opaque.iter_mut().next().unwrap();
+                if let Some(sub) = &mut dep_info.sub {
                     sub.push(index as usize);
-                    opaque.insert(dep);
-                    return false;
+                    return true;
                 }
-                else {
-                    opaque.insert(dep);
-                };
             }
         };
         false
@@ -197,7 +170,7 @@ impl Function {
 
 
         //todo: add dependencies of last statement
-        dependencies.unwrap_or_else(|| ExprType::Opaque(HashSet::new()))
+        dependencies.unwrap_or_else(|| ExprType::Opaque(Dependencies::new()))
     }
 
     fn stmt(&mut self, stmt: &mut Stmt) -> Option<ExprType> {
@@ -205,7 +178,7 @@ impl Function {
             Stmt::Local(local) => {
                 let init_dependencies = match &mut local.init {
                     Some(expr) => self.expr(&mut expr.1),
-                    None => ExprType::Opaque(HashSet::new())
+                    None => ExprType::Opaque(Dependencies::new())
                 };
                 let scope = self.scopes.last_mut().unwrap();
                 // for ident in pat_lhs_idents(&local.pat).into_iter() {
@@ -262,8 +235,10 @@ impl Function {
 
                             let dependent_dependencies = dependent.dependencies.unify();
 
+                            println!("dependent_dependencies: {:#?}, dependency_name: {}", dependent_dependencies, dependency_name);
+
                             if let None = dependent_dependencies.get(dependency_name.as_str()) {
-                                let dependencies: Vec<_> = dependent_dependencies.iter().map(|s| s.as_str()).collect();
+                                let dependencies: Vec<_> = dependent_dependencies.iter().map(|(name, _)| name.as_str()).collect();
                                 let dependencies_string: String = dependencies.join(", ");
 
                                 abort!{
@@ -407,8 +382,9 @@ impl Function {
                 let mut closure_scope = Scope::new();
 
                 for input in closure.inputs.iter() {
-                    let idents = IdentPack::from_pat(&input, &ExprType::Opaque(HashSet::new()));
-                    let vars = idents.to_vars(ExprType::Opaque(HashSet::new()));
+                    let rhs = ExprType::Opaque(Dependencies::new());
+                    let idents = IdentPack::from_pat(&input, &rhs);
+                    let vars = idents.to_vars(rhs);
                     closure_scope.vars.extend(vars);
                 }
 
@@ -524,42 +500,26 @@ impl Function {
                 if let Expr::Lit(lit) = &*index.index {
                     if let Lit::Int(int) = &lit.lit {
                         if let Ok(index) = int.base10_parse::<usize>() {
+                            //if we do not affect sub, we must not return, as if we did,
+                            //a render function's return might depend on what index is used,
+                            //but we do not add that to dependencies here.
+                            if deps.append_to_sub(index) {
+                                return EscapeExprRet {
+                                    dependencies: deps,
+                                    escape: false
+                                };
+                            };
                             match &deps {
-                                //if the indexed expression contains fields, then return the dependencies
-                                //of the specific field referred to by the index
                                 ExprType::NumberedFields(fields) => {
-                                    if let Some(field) = fields.get(index) {
-                                        return EscapeExprRet {
-                                            dependencies: field.clone(),
+                                    if let Some(field_deps) = fields.get(index) {
+                                        return EscapeExprRet{
+                                            dependencies: field_deps.clone(),
                                             escape: false
                                         };
                                     }
                                 }
-                                //if the ExprType is opaque and has only one dependency within
-                                //the Dependencies object, then append the index to the sub array if sub is Some
-                                //otherwise, head to catch-all code
-                                //we check for exactly one dependency, as handling multiple may introduce bugs
-                                ExprType::Opaque(opaque_deps) => {
-                                    if opaque_deps.len() == 1 {
-                                        let mut dep = opaque_deps.clone().drain().next().unwrap();
-                                        //if we do not affect sub, we must not return, as if we did,
-                                        //a render function's return might depend on what index is used,
-                                        //but we do not add that to dependencies here.
-                                        if let Some(sub) = &mut dep.sub {
-                                            sub.push(index);
-                                            return EscapeExprRet {
-                                                dependencies: ExprType::Opaque({
-                                                    let mut set = HashSet::new();
-                                                    set.insert(dep);
-                                                    set
-                                                }),
-                                                escape: false
-                                            }
-                                        };
-                                    }
-                                }
-                                ExprType::Closure(_) => {}
-                            };
+                                _ => {}
+                            }
                         }
                     }
                 }
@@ -700,7 +660,7 @@ impl Function {
         }
 
         EscapeExprRet {
-            dependencies: dependencies.unwrap_or_else(|| ExprType::Opaque(HashSet::new())),
+            dependencies: dependencies.unwrap_or_else(|| ExprType::Opaque(Dependencies::new())),
             escape
         }
     }
@@ -715,11 +675,27 @@ struct EscapeExprRet {
 }
 
 #[derive(Debug, Clone)]
+struct Atom {
+    name: String,
+    sub: Option<Vec<usize>>
+}
+
+impl From<String> for Atom {
+    fn from(name: String) -> Self {
+        Self {
+            name,
+            sub: None
+        }
+    }
+    
+}
+
+#[derive(Debug, Clone)]
 enum IdentPack {
     //indivisible ident
     //note: dependency contains name and potentially sub
     //but the actual variable referred to by the name may have other dependencies
-    Atom(Dependency),
+    Atom(Atom),
     Nested(Vec<IdentPack>),
     //for the .. in tuples and arrays
     Rest,
@@ -808,7 +784,7 @@ impl IdentPack {
             Pat::Ident(ident) => {
                 let sub = rhs.get_sub().cloned();
                 return IdentPack::Atom(
-                    Dependency {
+                    Atom {
                         name: ident.ident.to_string(),
                         sub
                     }
@@ -823,7 +799,7 @@ impl IdentPack {
                     let ident_name = segments.first().unwrap().ident.to_string();
                     let sub = rhs.get_sub().cloned();
                     return IdentPack::Atom(
-                        Dependency {
+                        Atom {
                             name: ident_name,
                             sub
                         }
@@ -1097,7 +1073,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
         match param {
             syn::FnArg::Receiver(_) => {},
             syn::FnArg::Typed(param) => {
-                let rhs = ExprType::Opaque(HashSet::new());
+                let rhs = ExprType::Opaque(Dependencies::new());
                 let ident_pack = IdentPack::from_pat(&param.pat, &rhs);
                 let mut vars = ident_pack.to_vars(rhs);
                 for var in vars.iter_mut() {
@@ -1106,7 +1082,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                             //this acts as a sort of base case
                             //parameters depend on themselves
                             //as such other vars will depend on them too
-                            deps.insert(var.name.clone().into());
+                            deps.insert(var.name.clone().into(), DependencyInfo::default());
                         },
                         _ => {
                             unreachable!()
