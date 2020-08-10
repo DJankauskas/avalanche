@@ -235,8 +235,6 @@ impl Function {
 
                             let dependent_dependencies = dependent.dependencies.unify();
 
-                            println!("dependent_dependencies: {:#?}, dependency_name: {}", dependent_dependencies, dependency_name);
-
                             if let None = dependent_dependencies.get(dependency_name.as_str()) {
                                 let dependencies: Vec<_> = dependent_dependencies.iter().map(|(name, _)| name.as_str()).collect();
                                 let dependencies_string: String = dependencies.join(", ");
@@ -434,7 +432,8 @@ impl Function {
                         }
                         _ => {}
                     }
-                }
+                };
+                dependencies = Some(deps);
             }
             Expr::ForLoop(for_expr) => {
                 //create scope for the variables created by 
