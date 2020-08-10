@@ -1127,8 +1127,8 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
     let component = quote!{
         #[derive(std::default::Default)]
         #visibility struct #builder_name {
-            #(#param_ident: std::result::Result<#param_type>),*
-            __internal_updates: u64
+            __internal_updates: u64,
+            #(#param_ident: std::option::Option<#param_type>),*
         }
 
         impl #builder_name {
@@ -1138,8 +1138,8 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
 
             fn build(self) -> #name {
                 #name {
+                    __internal_updates: self.__internal_updates,
                     #(#param_ident: self.#param_ident.unwrap()),*
-                    __internal_updates: self.__internal_updates
                 }
             }
 
@@ -1149,7 +1149,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                     if updated {
                         self.__internal_updates |= #flag;
                     }
-                    self.#param_ident = std::result::Result::Some(val);
+                    self.#param_ident = std::option::Option::Some(val);
                     self
                 }
             )*
@@ -1161,8 +1161,8 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
         }
 
         #visibility struct #name {
+            __internal_updates: u64,
             #(#param_ident: #param_type),*
-            __internal_updates: u64
         }
 
         impl avalanche::Component for #name {
@@ -1185,7 +1185,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                 let _ = state;
                 let _ = context;
 
-                let #name { #(#param_ident),* .. } = self;
+                let #name { #(#param_ident,)* .. } = self;
                 
                 #render_body
             }
