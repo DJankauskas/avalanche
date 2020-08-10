@@ -1,9 +1,3 @@
-#[cfg(test)]
-#[allow(unused_variables)]
-#[allow(dead_code)]
-#[allow(unused_assignments)]
-mod tests;
-
 ///A reference-counted interior-mutable type designed to reduce runtime borrow rule violations.
 pub mod shared;
 ///An in-memory representation of the current component tree.
@@ -27,7 +21,7 @@ macro_rules! reactive_assert {
 ///A hack used to work around a seeming syn limitation
 ///syn will interpret some macro calls as items rather than expressions
 ///syn expects an item to be replaced by another, so when parsing Component! type macros,
-///#[reactive] will replace that call with an expression within this macro
+///`#[reactive]` will replace that call with an expression within this macro
 ///to syn, this is replacing one macro item with another
 #[doc(hidden)]
 #[macro_export]

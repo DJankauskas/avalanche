@@ -29,6 +29,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "avalanche_macro_test"
+version = "0.1.0"
+dependencies = [
+ "avalanche",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

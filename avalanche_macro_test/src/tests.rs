@@ -1,19 +1,25 @@
 //TODO: update functions to be valid component invocations, and allow its use in this crate
 
-// use super::{component, reactive_assert};
+use avalanche::{component, reactive_assert};
 
-// struct HasFields {
-//     field_one: u8,
-//     field_two: u8
-// }
+#[component]
+fn Bare() {
+    ().into()
+}
 
-// #[component]
-// fn _identity(a: u8) -> u8 {
-//     reactive_assert!(a => a);
-//     let a = a;
-//     reactive_assert!(a => a);
-//     a
-// }
+struct HasFields {
+    field_one: u8,
+    field_two: u8
+}
+
+#[component]
+fn Identity(a: u8) {
+    reactive_assert!(a => a);
+    let a = a;
+    reactive_assert!(a => a);
+
+    ().into()
+}
 
 // #[component]
 // fn _array_index(a: u8, b: u8, c: u8) {
