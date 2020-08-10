@@ -7,7 +7,7 @@ mod tests {
 mod macro_expr;
 
 use proc_macro::TokenStream;
-use std::collections::HashSet;
+use std::{borrow::Borrow, collections::HashSet};
 
 use syn::{Item, Block, Stmt, Expr, Pat, Lit, parse_macro_input, parse_quote, parse::Parse, punctuated::Punctuated};
 use quote::{quote, format_ident};
@@ -15,7 +15,38 @@ use proc_macro_error::{proc_macro_error, abort, emit_error};
 
 use macro_expr::{ReactiveAssert, ComponentInit, Hooks};
 
-type Dependencies = HashSet<String>;
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct Dependency {
+    name: String,
+    ///the path to the dependency's relevant subpart
+    //e.g. if a is a value provided by UseState,
+    //a.0 would have sub `Some(vec![0])`
+    sub: Option<Vec<usize>>
+}
+
+impl Dependency {
+    fn as_str(&self) -> &str {
+        &self.name
+    }
+}
+
+impl From<String> for Dependency {
+    fn from(string: String) -> Self {
+        Self {
+            name: string,
+            sub: None
+        }
+    }
+}
+
+impl Borrow<str> for Dependency {
+    fn borrow(&self) -> &str {
+        &self.name
+    }
+    
+}
+
+type Dependencies = HashSet<Dependency>;
 
 #[derive(Debug)]
 struct Var {
@@ -67,6 +98,33 @@ impl ExprType {
                 opaque.extend(other.unify());
             }
         }
+    }
+
+    fn get_sub(&self) -> Option<&Vec<usize>> {
+        if let ExprType::Opaque(dependencies) = self {
+            if dependencies.len() == 1 {
+                return dependencies.iter().next().unwrap().sub.as_ref();
+            }
+        }
+        None
+    }
+
+    ///Returns whether push succeeded
+    fn append_to_sub(&mut self, index: usize) -> bool {
+        if let Self::Opaque(opaque) = self {
+            if opaque.len() == 1 {
+                let mut dep = opaque.clone().drain().next().unwrap();
+                if let Some(sub) = &mut dep.sub {
+                    sub.push(index as usize);
+                    opaque.insert(dep);
+                    return false;
+                }
+                else {
+                    opaque.insert(dep);
+                };
+            }
+        };
+        false
     }
 }
 
@@ -155,7 +213,7 @@ impl Function {
                 //     var.dependencies = init_dependencies.clone();
                 //     scope.vars.push(var);
                 // }
-                let ident_pack = pat_lhs_ident_pack(&local.pat);
+                let ident_pack = IdentPack::from_pat(&local.pat, &init_dependencies);
                 let vars = ident_pack.to_vars(init_dependencies);
                 scope.vars.extend(vars);
             },
@@ -204,7 +262,7 @@ impl Function {
 
                             let dependent_dependencies = dependent.dependencies.unify();
 
-                            if let None = dependent_dependencies.get(dependency_name) {
+                            if let None = dependent_dependencies.get(dependency_name.as_str()) {
                                 let dependencies: Vec<_> = dependent_dependencies.iter().map(|s| s.as_str()).collect();
                                 let dependencies_string: String = dependencies.join(", ");
 
@@ -349,7 +407,7 @@ impl Function {
                 let mut closure_scope = Scope::new();
 
                 for input in closure.inputs.iter() {
-                    let idents = pat_lhs_ident_pack(&input);
+                    let idents = IdentPack::from_pat(&input, &ExprType::Opaque(HashSet::new()));
                     let vars = idents.to_vars(ExprType::Opaque(HashSet::new()));
                     closure_scope.vars.extend(vars);
                 }
@@ -378,16 +436,28 @@ impl Function {
             }
             Expr::Continue(_) => {}
             Expr::Field(field) => {
-                let deps = self.expr(&mut field.base);
-                if let ExprType::NumberedFields(fields) = deps {
-                    if let syn::Member::Unnamed(unnamed) = &field.member {
-                        if let Some(field_deps) = fields.get(unnamed.index as usize) {
-                            dependencies = Some(field_deps.clone());
+                let mut deps = self.expr(&mut field.base);
+                if let syn::Member::Unnamed(unnamed) = &field.member {
+                    //if we do not affect sub, we must not return, as if we did,
+                    //a render function's return might depend on what index is used,
+                    //but we do not add that to dependencies here.
+                    if deps.append_to_sub(unnamed.index as usize) {
+                        return EscapeExprRet {
+                            dependencies: deps,
+                            escape: false
+                        };
+                    };
+                    match &deps {
+                        ExprType::NumberedFields(fields) => {
+                            if let Some(field_deps) = fields.get(unnamed.index as usize) {
+                                return EscapeExprRet{
+                                    dependencies: field_deps.clone(),
+                                    escape: false
+                                };
+                            }
                         }
+                        _ => {}
                     }
-                }
-                else {
-                    dependencies = Some(deps);
                 }
             }
             Expr::ForLoop(for_expr) => {
@@ -395,9 +465,11 @@ impl Function {
                 //for pat in expr {}
                 let mut scope = Scope::new();
 
+                let expr = self.expr(&mut for_expr.expr);
+
                 //create variables for those created by pat
-                let ident_pack = pat_lhs_ident_pack(&for_expr.pat);
-                let vars = ident_pack.to_vars(ExprType::Opaque(HashSet::new()));
+                let ident_pack = IdentPack::from_pat(&for_expr.pat, &expr);
+                let vars = ident_pack.to_vars(expr);
                 scope.vars = vars;
                 self.scopes.push(scope);
 
@@ -421,15 +493,11 @@ impl Function {
                 //this scope is for variables created via let.
                 let mut if_scope = Scope::new();
                 let cond_dependencies = self.expr(&mut if_expr.cond);
-                match &*if_expr.cond {
+                match &mut *if_expr.cond {
                     Expr::Let(let_expr) => {
-                        // for ident in pat_lhs_ident_pack(&let_expr.pat).into_iter() {
-                        //     let mut var = Var::new(ident);
-                        //     var.dependencies = cond_dependencies.clone();
-                        //     if_scope.vars.push(var);
-                        // }
-                        let ident_pack = pat_lhs_ident_pack(&let_expr.pat);
-                        if_scope.vars = ident_pack.to_vars(cond_dependencies.clone());
+                        let let_dependencies = self.expr(&mut let_expr.expr);
+                        let ident_pack = IdentPack::from_pat(&let_expr.pat, &let_dependencies);
+                        if_scope.vars = ident_pack.to_vars(let_dependencies);
                     },
                     _ => {}
                 }
@@ -453,20 +521,52 @@ impl Function {
             }
             Expr::Index(index) => {
                 let mut deps = self.expr(&mut index.expr);
-                if let ExprType::NumberedFields(fields) = deps {
-                    if let Expr::Lit(lit) = &*index.index {
-                        if let Lit::Int(int) = &lit.lit {
-                            if let Ok(index) = int.base10_parse::<usize>() {
-                                dependencies = fields.get(index).cloned();
-                            }
+                if let Expr::Lit(lit) = &*index.index {
+                    if let Lit::Int(int) = &lit.lit {
+                        if let Ok(index) = int.base10_parse::<usize>() {
+                            match &deps {
+                                //if the indexed expression contains fields, then return the dependencies
+                                //of the specific field referred to by the index
+                                ExprType::NumberedFields(fields) => {
+                                    if let Some(field) = fields.get(index) {
+                                        return EscapeExprRet {
+                                            dependencies: field.clone(),
+                                            escape: false
+                                        };
+                                    }
+                                }
+                                //if the ExprType is opaque and has only one dependency within
+                                //the Dependencies object, then append the index to the sub array if sub is Some
+                                //otherwise, head to catch-all code
+                                //we check for exactly one dependency, as handling multiple may introduce bugs
+                                ExprType::Opaque(opaque_deps) => {
+                                    if opaque_deps.len() == 1 {
+                                        let mut dep = opaque_deps.clone().drain().next().unwrap();
+                                        //if we do not affect sub, we must not return, as if we did,
+                                        //a render function's return might depend on what index is used,
+                                        //but we do not add that to dependencies here.
+                                        if let Some(sub) = &mut dep.sub {
+                                            sub.push(index);
+                                            return EscapeExprRet {
+                                                dependencies: ExprType::Opaque({
+                                                    let mut set = HashSet::new();
+                                                    set.insert(dep);
+                                                    set
+                                                }),
+                                                escape: false
+                                            }
+                                        };
+                                    }
+                                }
+                                ExprType::Closure(_) => {}
+                            };
                         }
                     }
                 }
-                else {
-                    let index = self.expr(&mut index.index);
-                    deps.extend(index);
-                    dependencies = Some(deps);
-                }
+                //catch-all if specific cases above aren't applicable
+                let index = self.expr(&mut index.index);
+                deps.extend(index);
+                dependencies = Some(deps);
             }
             Expr::Let(let_expr) => {
                 //note: this should not be called,
@@ -616,7 +716,10 @@ struct EscapeExprRet {
 
 #[derive(Debug, Clone)]
 enum IdentPack {
-    Name(String),
+    //indivisible ident
+    //note: dependency contains name and potentially sub
+    //but the actual variable referred to by the name may have other dependencies
+    Atom(Dependency),
     Nested(Vec<IdentPack>),
     //for the .. in tuples and arrays
     Rest,
@@ -628,9 +731,9 @@ enum IdentPack {
 impl IdentPack {
     fn to_vars(self, rhs: ExprType) -> Vec<Var> {
         match self {
-            IdentPack::Name(name) => {
+            IdentPack::Atom(atom) => {
                 let var = Var {
-                    name,
+                    name: atom.name,
                     dependencies: rhs
                 };
                 vec![var]
@@ -695,6 +798,94 @@ impl IdentPack {
                 Vec::new()
             }
         }
+    }
+
+    fn from_pat(lhs: &Pat, rhs: &ExprType) -> IdentPack {
+        match lhs {
+            Pat::Box(_) => {
+                //invalid lhs?
+            }
+            Pat::Ident(ident) => {
+                let sub = rhs.get_sub().cloned();
+                return IdentPack::Atom(
+                    Dependency {
+                        name: ident.ident.to_string(),
+                        sub
+                    }
+                );
+            }
+            Pat::Lit(_) => {}
+            Pat::Macro(_) => {}
+            Pat::Or(_) => {}
+            Pat::Path(path) => {
+                let segments = &path.path.segments;
+                if segments.len() == 1 {
+                    let ident_name = segments.first().unwrap().ident.to_string();
+                    let sub = rhs.get_sub().cloned();
+                    return IdentPack::Atom(
+                        Dependency {
+                            name: ident_name,
+                            sub
+                        }
+                    );
+                }
+            }
+            Pat::Range(_) => {}
+            Pat::Reference(_) => {
+                //TODO: needs to be handled?
+                todo!("reference")
+            }
+            Pat::Rest(_) => {
+                return IdentPack::Rest;
+            }
+            Pat::Slice(slice) => {
+                let mut idents = Vec::with_capacity(slice.elems.len());
+    
+                for elem in slice.elems.iter() {
+                    idents.push(Self::from_pat(&elem, rhs));
+                }
+                return IdentPack::Nested(idents);
+            }
+            Pat::Struct(struct_pat) => {
+                let mut idents = Vec::with_capacity(struct_pat.fields.len());
+    
+                for field in struct_pat.fields.iter() {
+                    idents.push(IdentPack::from_pat(&field.pat, &rhs));
+                }
+                //note: while we return as nested, all idents are always given the
+                //same dependencies when handling structs.
+                return IdentPack::Nested(idents);
+            }
+            Pat::Tuple(tuple) => {
+                return Self::from_pat_tuple(&tuple, rhs);
+            }
+            Pat::TupleStruct(tuple_struct) => {
+                return Self::from_pat_tuple(&tuple_struct.pat, rhs);
+            }
+            Pat::Type(type_pat) => {
+                return IdentPack::from_pat(&type_pat.pat, &rhs);
+            }
+            Pat::Verbatim(_) => {}
+            Pat::Wild(_) => {}
+            _ => {
+                eprintln!("Warn: unknown Pat type.");
+            }
+        }
+    
+        IdentPack::None
+    }
+
+    fn from_pat_tuple(lhs: &syn::PatTuple, rhs: &ExprType) -> IdentPack {
+        //TODO: handle per-element info
+        let mut idents = Vec::with_capacity(lhs.elems.len());
+    
+        for (i, elem) in lhs.elems.iter().enumerate() {
+            let mut rhs = rhs.clone();
+            rhs.append_to_sub(i);
+            idents.push(IdentPack::from_pat(elem, &rhs));
+        }
+        
+        IdentPack::Nested(idents)
     }
 }
 
@@ -785,7 +976,7 @@ fn expr_lhs_ident_pack(expr: &Expr) -> IdentPack {
             let segments = &path.path.segments;
             if segments.len() == 1 {
                 let ident_name = segments.first().unwrap().ident.to_string();
-                return IdentPack::Name(ident_name);
+                return IdentPack::Atom(ident_name.into());
             }
         }
         Expr::Range(_) => {
@@ -843,80 +1034,6 @@ fn expr_lhs_ident_pack(expr: &Expr) -> IdentPack {
     IdentPack::None
 }
 
-fn pat_lhs_ident_pack(pat: &Pat) -> IdentPack {
-    match pat {
-        Pat::Box(_) => {
-            //invalid lhs?
-        }
-        Pat::Ident(ident) => {
-            return IdentPack::Name(ident.ident.to_string());
-        }
-        Pat::Lit(_) => {}
-        Pat::Macro(_) => {}
-        Pat::Or(_) => {}
-        Pat::Path(path) => {
-            let segments = &path.path.segments;
-            if segments.len() == 1 {
-                let ident_name = segments.first().unwrap().ident.to_string();
-                return IdentPack::Name(ident_name)
-            }
-        }
-        Pat::Range(_) => {}
-        Pat::Reference(_) => {
-            //TODO: needs to be handled?
-            todo!("reference")
-        }
-        Pat::Rest(_) => {
-            return IdentPack::Rest;
-        }
-        Pat::Slice(slice) => {
-            let mut idents = Vec::with_capacity(slice.elems.len());
-
-            for elem in slice.elems.iter() {
-                idents.push(pat_lhs_ident_pack(&elem));
-            }
-            return IdentPack::Nested(idents);
-        }
-        Pat::Struct(struct_pat) => {
-            let mut idents = Vec::with_capacity(struct_pat.fields.len());
-
-            for field in struct_pat.fields.iter() {
-                idents.push(pat_lhs_ident_pack(&field.pat));
-            }
-            //note: while we return as nested, all idents are always given the
-            //same dependencies when handling structs.
-            return IdentPack::Nested(idents);
-        }
-        Pat::Tuple(tuple) => {
-            return pat_tuple_lhs_idents(&tuple);
-        }
-        Pat::TupleStruct(tuple_struct) => {
-            return pat_tuple_lhs_idents(&tuple_struct.pat);
-        }
-        Pat::Type(type_pat) => {
-            return pat_lhs_ident_pack(&type_pat.pat);
-        }
-        Pat::Verbatim(_) => {}
-        Pat::Wild(_) => {}
-        _ => {
-            eprintln!("Warn: unknown Pat type.");
-        }
-    }
-
-    IdentPack::None
-}
-
-fn pat_tuple_lhs_idents(tuple: &syn::PatTuple) -> IdentPack {
-    //TODO: handle per-element info
-    let mut idents = Vec::with_capacity(tuple.elems.len());
-
-    for elem in tuple.elems.iter() {
-        idents.push(pat_lhs_ident_pack(elem));
-    }
-    
-    IdentPack::Nested(idents)
-}
-
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
@@ -950,20 +1067,46 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
         abort!(token, "variadic components unsupported");
     };
 
+    let hooks = if !metadata.is_empty() {
+        let hooks = parse_macro_input!(metadata as Hooks);
+        hooks.hooks
+    }
+    else {
+        Punctuated::new()
+    };
+
+    let mut hook_name = Vec::with_capacity(hooks.len());
+    let mut hook_type = Vec::with_capacity(hooks.len());
+    let mut hook_get_fn_name = Vec::with_capacity(hooks.len());
+    let mut hook_updates_name = Vec::with_capacity(hooks.len());
+
+    for (i, hook) in hooks.iter().enumerate() {
+        hook_name.push(&hook.name);
+        hook_type.push(&hook.ty);
+        hook_get_fn_name.push(format_ident!("get_{}_{}", hook.name, i));
+        hook_updates_name.push(format_ident!("__avalanche_internal_{}_update", i));
+    };
+
+    let mut param_ident = Vec::with_capacity(hooks.len());
+    let mut param_type = Vec::with_capacity(hooks.len());
+    let mut param_attributes = Vec::with_capacity(hooks.len());
+    let mut flag = Vec::with_capacity(hooks.len());
+
     //process render code
     for param in item_fn.sig.inputs.iter() {
         match param {
             syn::FnArg::Receiver(_) => {},
             syn::FnArg::Typed(param) => {
-                let ident_pack = pat_lhs_ident_pack(&param.pat);
-                let mut vars = ident_pack.to_vars(ExprType::Opaque(HashSet::new()));
+                let rhs = ExprType::Opaque(HashSet::new());
+                let ident_pack = IdentPack::from_pat(&param.pat, &rhs);
+                let mut vars = ident_pack.to_vars(rhs);
                 for var in vars.iter_mut() {
                     match &mut var.dependencies {
                         ExprType::Opaque(deps) => {
                             //this acts as a sort of base case
                             //parameters depend on themselves
                             //as such other vars will depend on them too
-                            deps.insert(var.name.clone());
+                            deps.insert(var.name.clone().into());
                         },
                         _ => {
                             unreachable!()
@@ -982,29 +1125,6 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
     let name = &item_fn.sig.ident;
     let builder_name = format_ident!("{}Builder", name);
     let state_name = format_ident!("{}State", name);
-
-    let hooks = if !metadata.is_empty() {
-        let hooks = parse_macro_input!(metadata as Hooks);
-        hooks.hooks
-    }
-    else {
-        Punctuated::new()
-    };
-
-    let mut hook_name = Vec::with_capacity(hooks.len());
-    let mut hook_type = Vec::with_capacity(hooks.len());
-    let mut hook_get_fn_name = Vec::with_capacity(hooks.len());
-
-    for (i, hook) in hooks.iter().enumerate() {
-        hook_name.push(&hook.name);
-        hook_type.push(&hook.ty);
-        hook_get_fn_name.push(format_ident!("get_{}_{}", hook.name, i));
-    };
-
-    let mut param_ident = Vec::with_capacity(hooks.len());
-    let mut param_type = Vec::with_capacity(hooks.len());
-    let mut param_attributes = Vec::with_capacity(hooks.len());
-    let mut flag = Vec::with_capacity(hooks.len());
 
     for (i, input) in item_fn.sig.inputs.iter().enumerate() {
         let input = match input {
@@ -1084,7 +1204,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                     };
                 )*
                 let state = std::option::Option::unwrap(std::any::Any::downcast_mut::<#state_name>(&mut **context.state));
-                #( let #hook_name = state.#hook_name.hook(context.vnode.clone(), #hook_get_fn_name); );*
+                #( let (#hook_name, _) = state.#hook_name.hook(context.vnode.clone(), #hook_get_fn_name); );*
 
                 let _ = state;
                 let _ = context;
