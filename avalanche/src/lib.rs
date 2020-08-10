@@ -141,13 +141,15 @@ pub struct InternalContext<'a> {
 
 ///A hook that allows a component to keep persistent state across renders.
 pub struct UseState<T: 'static> {
-    state: Option<T>
+    state: Option<T>,
+    updated: bool
 }
 
 impl<T> Default for UseState<T> {
     fn default() -> Self {
         Self {
-            state: None
+            state: None,
+            updated: false
         }
     }
 }
@@ -159,26 +161,34 @@ impl<T> UseState<T> {
         &'a mut self, 
         vnode: Shared<VNode>, 
         get_self: fn(&mut Box<dyn Any>) -> &mut UseState<T>
-    ) -> impl FnOnce(T) -> (&'a T, SetStateSetter<T>) + 'a {
-        move |val| {
+    ) -> (impl FnOnce(T) -> (&'a T, UseStateSetter<T>), UseStateUpdates) {
+        let updates = UseStateUpdates {
+            update: self.updated
+        };
+        let closure = move |val| {
+            if self.updated {
+                self.updated = false;
+            }
             if let None = self.state {
-                self.state = Some(val)
+                self.state = Some(val);
+                self.updated = true;
             };
             let state_ref = self.state.as_ref().unwrap();
-            let setter = SetStateSetter::new(vnode, get_self);
+            let setter = UseStateSetter::new(vnode, get_self);
             (state_ref, setter)
-        }
+        };
+        (closure, updates)
     }
 }
 
 ///Provides a setter for a piece of state managed by `UseState<T>`.
 #[derive(Clone)]
-pub struct SetStateSetter<T: 'static> {
+pub struct UseStateSetter<T: 'static> {
     vnode: Shared<VNode>,
     get_mut: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
 }
 
-impl<T: 'static> SetStateSetter<T> {
+impl<T: 'static> UseStateSetter<T> {
     fn new(vnode: Shared<VNode>, get_mut: fn(&mut Box<dyn Any>) -> &mut UseState<T>) -> Self {
         Self {
             vnode,
@@ -210,6 +220,30 @@ impl<T: 'static> SetStateSetter<T> {
             });
         });
     }
+}
+
+#[doc(hidden)]
+pub struct UseStateUpdates {
+    update: bool
+}
+
+impl UseStateUpdates {
+    #[doc(hidden)]
+    ///Used to get the status of a portion of returned state
+    ///Usage: if the return type is an array or tuple, passing a &[num] will
+    ///yield whether that element has been updated. If that element is also 
+    //a tuple or array, this logic applies recursively.
+    pub fn index(&self, idx: &[usize]) -> bool {
+        match idx {
+            //corresponds to &'a T in hook()
+            [0, ..] => self.update,
+            //corresponds to UseStateSetter
+            //this never meaningfully changes
+            [1, ..] => false,
+            _ => self.update,
+        }
+    }
+    
 }
 
 
