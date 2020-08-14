@@ -9,21 +9,31 @@ mod macro_expr;
 use proc_macro::TokenStream;
 use std::collections::HashMap;
 
-use syn::{Item, Block, Stmt, Expr, Pat, Lit, parse_macro_input, parse_quote, parse::Parse, punctuated::Punctuated};
+use syn::{Item, Block, Stmt, Expr, Pat, Lit, Ident, parse_macro_input, parse_quote, parse::Parse, punctuated::Punctuated};
 use quote::{quote, format_ident};
 use proc_macro_error::{proc_macro_error, abort, emit_error};
 
 use macro_expr::{ReactiveAssert, ComponentInit, Hooks};
 
-#[derive(Debug, Clone, Default)]
-struct DependencyInfo {
-    ///the path to the dependency's relevant subpart
-    //e.g. if a is a value provided by UseState,
-    //a.0 would have sub `Some(vec![0])`
-    sub: Option<Vec<usize>>
+#[derive(Debug, Clone)]
+enum DependencyInfo {
+    ///The path to the dependency's relevant subpart,
+    ///e.g. if a is a value provided by UseState,
+    ///a.0 would have sub `Some(vec![0])`
+    Hook(HookInfo),
+    ///Prop update bit pattern: 
+    ///bitwise and of this value with `updates`
+    ///determines whether the prop has been updated
+    Prop(u64)
 }
 
-type Dependencies = HashMap<String, DependencyInfo>;
+#[derive(Debug, Clone)]
+struct HookInfo {
+    sub: Vec<usize>,
+    hook_update_ident: Ident
+}
+
+type Dependencies = HashMap<Ident, DependencyInfo>;
 
 #[derive(Debug)]
 struct Var {
@@ -77,10 +87,15 @@ impl ExprType {
         }
     }
 
-    fn get_sub(&self) -> Option<&Vec<usize>> {
+    ///Gets the sub-dependency path for a Hook
+    ///Returns `None` if it is not opaque
+    fn get_hook_sub(&self) -> Option<&Vec<usize>> {
         if let ExprType::Opaque(dependencies) = self {
             if dependencies.len() == 1 {
-                return dependencies.iter().next().unwrap().1.sub.as_ref();
+                match &dependencies.iter().next().unwrap().1 {
+                    DependencyInfo::Hook(hook_info) => return Some(&hook_info.sub),
+                    _ => return None
+                }
             }
         }
         None
@@ -91,8 +106,8 @@ impl ExprType {
         if let Self::Opaque(opaque) = self {
             if opaque.len() == 1 {
                 let (_, dep_info) = opaque.iter_mut().next().unwrap();
-                if let Some(sub) = &mut dep_info.sub {
-                    sub.push(index as usize);
+                if let DependencyInfo::Hook(hook_info) = dep_info {
+                    hook_info.sub.push(index);
                     return true;
                 }
             }
@@ -150,6 +165,12 @@ impl Function {
         None
     }
 
+    ///Find a prop or hook value, if it exists.
+    fn get_input_var(&self, name: &str) -> Option<&Var> {
+        let scope = &self.scopes[0];
+        scope.vars.iter().rev().find(|item| item.name == name)
+    }
+
     fn block(&mut self, block: &mut Block) -> ExprType {
         let mut dependencies: Option<ExprType> = None;
 
@@ -181,11 +202,6 @@ impl Function {
                     None => ExprType::Opaque(Dependencies::new())
                 };
                 let scope = self.scopes.last_mut().unwrap();
-                // for ident in pat_lhs_idents(&local.pat).into_iter() {
-                //     let mut var = Var::new(ident);
-                //     var.dependencies = init_dependencies.clone();
-                //     scope.vars.push(var);
-                // }
                 let ident_pack = IdentPack::from_pat(&local.pat, &init_dependencies);
                 let vars = ident_pack.to_vars(init_dependencies);
                 scope.vars.extend(vars);
@@ -233,10 +249,12 @@ impl Function {
                                 abort!(dependency_ident.span(), "cannot find identifier `{}` in this scope", dependency_name);
                             }
 
+                            println!("dependent: {:#?}", dependent);
+
                             let dependent_dependencies = dependent.dependencies.unify();
 
-                            if let None = dependent_dependencies.get(dependency_name.as_str()) {
-                                let dependencies: Vec<_> = dependent_dependencies.iter().map(|(name, _)| name.as_str()).collect();
+                            if let None = dependent_dependencies.get(dependency_ident) {
+                                let dependencies: Vec<_> = dependent_dependencies.iter().map(|(ident, _)| ident.to_string()).collect();
                                 let dependencies_string: String = dependencies.join(", ");
 
                                 abort!{
@@ -255,28 +273,63 @@ impl Function {
             }
             _ => {
                 if name.chars().next().unwrap().is_ascii_uppercase() {
-                    if let Ok(mut init) = mac.parse_body::<ComponentInit>() {
-                        for field in init.fields.iter_mut() {
-                            //TODO: store dependencies
-                            self.expr(&mut field.expr);
-                        }
-                        let type_path = &mac.path;
-                        let (field, init_expr): (Vec<_>, Vec<_>) = init.fields.iter().map(|f| {
-                            let field = match &f.member {
-                                syn::Member::Named(ident) => ident,
-                                syn::Member::Unnamed(u) => abort!(u, "expected named field")
-                            };
-                            (field, &f.expr)
-                        }).unzip();
-                        //TODO: encode dependencies for expr
-                        *syntax = parse_quote! {
-                            avalanche::__internal_identity! {
-                                <<#type_path as ::avalanche::Component>::Builder>::new()
-                                #(.#field(#init_expr, true))*
-                                .build()
-                                .into()
+                    match mac.parse_body::<ComponentInit>() {
+                        Ok(mut init) => {
+                            let mut field_ident = Vec::with_capacity(init.fields.len());
+                            let mut init_expr = Vec::with_capacity(init.fields.len());
+                            let mut is_field_updated = Vec::with_capacity(init.fields.len());
+                            for field in init.fields.iter_mut() {
+                                let ident = match &field.member {
+                                    syn::Member::Named(ident) => ident,
+                                    syn::Member::Unnamed(u) => abort!(u, "expected named field")
+                                };
+                                field_ident.push(ident);
+                                let dependencies = self.expr(&mut field.expr).unify();
+                                init_expr.push(&field.expr);
+                                let mut dependency_update = Vec::with_capacity(dependencies.len());
+                                for (name, dependency_info) in dependencies.iter() {
+                                    match dependency_info {
+                                        DependencyInfo::Hook(HookInfo {sub, hook_update_ident}) => {
+                                            println!("name: {} sub: {:#?}", name, sub);
+                                            dependency_update.push(
+                                                quote! {#hook_update_ident.index( &[ #( #sub ),* ] )}
+                                            );
+                                        }
+                                        DependencyInfo::Prop(prop) => {
+                                            dependency_update.push(
+                                                quote!{self.__internal_updates & #prop}
+                                            );
+                                        }
+                                    } 
+                                };
+                                is_field_updated.push(
+                                    quote!{ false #(|| #dependency_update)* }
+                                );
                             }
-                        };
+                            let type_path = &mac.path;
+                            
+                            println!("{}", quote! {
+                                avalanche::__internal_identity! {
+                                    <<#type_path as ::avalanche::Component>::Builder>::new()
+                                    #(.#field_ident(#init_expr, #is_field_updated))*
+                                    .build()
+                                    .into()
+                                }
+                            });
+                            println!("{} {} {}", field_ident.len(), init_expr.len(), is_field_updated.len());
+
+                            *syntax = parse_quote! {
+                                avalanche::__internal_identity! {
+                                    <<#type_path as ::avalanche::Component>::Builder>::new()
+                                    #(.#field_ident(#init_expr, #is_field_updated))*
+                                    .build()
+                                    .into()
+                                }
+                            };
+                        }
+                        Err(err) => {
+                            abort!(mac, err.to_string());
+                        }
                     }
                 }
             }
@@ -358,20 +411,13 @@ impl Function {
                 }
             }
             Expr::Call(call) => {
-                let mut deps: Option<ExprType> = None;
+                let mut deps = self.expr(&mut call.func);
                 for arg in call.args.iter_mut() {
                     let arg_dep = self.expr(arg);
-                    match &mut deps {
-                        Some(deps) => {
-                            deps.extend(arg_dep);
-                        }
-                        None => {
-                            deps = Some(arg_dep);
-                        }
-                    }
+                    deps.extend(arg_dep);
                 }
 
-                dependencies = deps;
+                dependencies = Some(deps);
             }
             Expr::Cast(cast) => {
                 dependencies = Some(self.expr(&mut cast.expr));
@@ -781,7 +827,7 @@ impl IdentPack {
                 //invalid lhs?
             }
             Pat::Ident(ident) => {
-                let sub = rhs.get_sub().cloned();
+                let sub = rhs.get_hook_sub().cloned();
                 return IdentPack::Atom(
                     Atom {
                         name: ident.ident.to_string(),
@@ -796,7 +842,7 @@ impl IdentPack {
                 let segments = &path.path.segments;
                 if segments.len() == 1 {
                     let ident_name = segments.first().unwrap().ident.to_string();
-                    let sub = rhs.get_sub().cloned();
+                    let sub = rhs.get_hook_sub().cloned();
                     return IdentPack::Atom(
                         Atom {
                             name: ident_name,
@@ -1056,10 +1102,28 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
     let mut hook_updates_name = Vec::with_capacity(hooks.len());
 
     for (i, hook) in hooks.iter().enumerate() {
+        println!("Within hook loop");
         hook_name.push(&hook.name);
         hook_type.push(&hook.ty);
         hook_get_fn_name.push(format_ident!("get_{}_{}", hook.name, i));
-        hook_updates_name.push(format_ident!("__avalanche_internal_{}_update", i));
+        let hook_update_ident = format_ident!("__avalanche_internal_{}_update", i);
+        hook_updates_name.push(hook_update_ident.clone());
+
+        let var = Var {
+            name: hook.name.to_string(),
+            dependencies: {
+                let mut deps = Dependencies::new();
+                deps.insert(
+                    hook.name.to_owned(),
+                    DependencyInfo::Hook(HookInfo {
+                        sub: Vec::new(),
+                        hook_update_ident
+                    }),
+                );
+                ExprType::Opaque(deps)
+            }
+        };
+        param_scope.vars.push(var);
     };
 
     let mut param_ident = Vec::with_capacity(hooks.len());
@@ -1068,27 +1132,34 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
     let mut flag = Vec::with_capacity(hooks.len());
 
     //process render code
-    for param in item_fn.sig.inputs.iter() {
+    for (i, param) in item_fn.sig.inputs.iter().enumerate() {
+        let update_bit_pattern = 2u64.pow(i as u32);
         match param {
-            syn::FnArg::Receiver(_) => {},
+            syn::FnArg::Receiver(rec) => {
+                abort!(rec, "receiver not allowed");
+            },
             syn::FnArg::Typed(param) => {
-                let rhs = ExprType::Opaque(Dependencies::new());
-                let ident_pack = IdentPack::from_pat(&param.pat, &rhs);
-                let mut vars = ident_pack.to_vars(rhs);
-                for var in vars.iter_mut() {
-                    match &mut var.dependencies {
-                        ExprType::Opaque(deps) => {
-                            //this acts as a sort of base case
-                            //parameters depend on themselves
-                            //as such other vars will depend on them too
-                            deps.insert(var.name.clone().into(), DependencyInfo::default());
-                        },
-                        _ => {
-                            unreachable!()
-                        }
-                    }
+                let ident = if let Pat::Ident(ident) = &*param.pat {
+                    let mut dependencies = Dependencies::default();
+                    dependencies.insert(
+                        ident.ident.to_owned(), 
+                        DependencyInfo::Prop(update_bit_pattern)
+                    );
+                    let dependencies = ExprType::Opaque(dependencies);
+                    param_scope.vars.push(Var {
+                        name: ident.ident.to_string(),
+                        dependencies
+                    });
+                    ident
                 }
-                param_scope.vars.extend(vars);
+                else {
+                    abort!(param.pat, "expected identifier");
+                };
+
+                param_ident.push(ident);
+                param_type.push(&param.ty);
+                param_attributes.push(&ident.attrs);
+                flag.push(update_bit_pattern);
             }
         }
     }
@@ -1100,25 +1171,6 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
     let name = &item_fn.sig.ident;
     let builder_name = format_ident!("{}Builder", name);
     let state_name = format_ident!("{}State", name);
-
-    for (i, input) in item_fn.sig.inputs.iter().enumerate() {
-        let input = match input {
-            syn::FnArg::Receiver(rec) => {
-                abort!(rec, "receiver not allowed");
-            }
-            syn::FnArg::Typed(typed) => typed
-        };
-        let ident = match &*input.pat {
-            Pat::Ident(ident) => ident,
-            _ => {
-                abort!(input.pat, "expected identifier");
-            }
-        };
-        param_ident.push(ident);
-        param_type.push(&input.ty);
-        param_attributes.push(&ident.attrs);
-        flag.push(2u64.pow(i as u32));
-    };
 
     let render_body = &item_fn.block;
     let visibility = &item_fn.vis;
@@ -1179,7 +1231,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                     };
                 )*
                 let state = std::option::Option::unwrap(std::any::Any::downcast_mut::<#state_name>(&mut **context.state));
-                #( let (#hook_name, _) = state.#hook_name.hook(context.vnode.clone(), #hook_get_fn_name); );*
+                #( let (#hook_name, #hook_updates_name) = state.#hook_name.hook(context.vnode.clone(), #hook_get_fn_name); );*
 
                 let _ = state;
                 let _ = context;
