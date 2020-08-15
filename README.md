@@ -13,7 +13,7 @@ property will be marked as updated, while unmarked properties will be ignored (e
 - generate Builder structs that statically ensure mandatory properties are supplied, as in [typed-builder](https://github.com/idanarye/rust-typed-builder)
 - allow writing custom hooks with `#[hook]`
 #### avalanche
-- allow hooks (currently only `UseState`) to provide update info
+- ~~allow hooks (currently only `UseState`) to provide update info~~
 - introduce keys to increase children performance, and automatically add them for static child layout
 - support batch state updates more performantly
 - reduce memory stored and copied in components
