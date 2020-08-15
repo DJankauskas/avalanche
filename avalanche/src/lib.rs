@@ -201,6 +201,7 @@ impl<T: 'static> UseStateSetter<T> {
         self.vnode.exec_mut(move |vnode| {
             let mut_ref_to_state = get_mut(vnode.state.as_mut().unwrap());
             f(mut_ref_to_state.state.as_mut().unwrap());
+            mut_ref_to_state.updated = true;
 
             vnode.vdom.exec_mut(|vdom| {
                 vdom.renderer.schedule_on_ui_thread(
