@@ -3,7 +3,7 @@
 members = [
     "avalanche-macro",
     "avalanche",
-    "avalanche_macro_test",
+    "avalanche-macro-test",
     "avalanche-web",
     "avalanche-web/examples/counter",
 ]

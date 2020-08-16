@@ -19,6 +19,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "avalanche-macro-test"
+version = "0.1.0"
+dependencies = [
+ "avalanche",
+]
+
+[[package]]
 name = "avalanche-web"
 version = "0.0.0"
 dependencies = [
@@ -26,13 +33,6 @@ dependencies = [
  "gloo",
  "wasm-bindgen",
  "web-sys",
-]
-
-[[package]]
-name = "avalanche_macro_test"
-version = "0.1.0"
-dependencies = [
- "avalanche",
 ]
 
 [[package]]

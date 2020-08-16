@@ -1,5 +1,5 @@
 [package]
-name = "avalanche_macro_test"
+name = "avalanche-macro-test"
 version = "0.1.0"
 authors = ["Darius Jankauskas <d5926j@gmail.com>"]
 edition = "2018"
