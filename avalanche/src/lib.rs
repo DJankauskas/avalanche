@@ -193,9 +193,9 @@ impl<T: 'static> UseStateSetter<T> {
     ///Takes a function that modifies its attached state and triggers a rerender of its component.
     ///The update is not performed immediately; its effect will only be accessible 
     ///on its component's rerender.
-    pub fn call<F: FnOnce(&mut T)>(&mut self, f: F) {
-        let mut vnode_clone = self.vnode.clone();
-        let mut vdom_clone = self.vnode.exec(|vnode| vnode.vdom.clone());
+    pub fn call<F: FnOnce(&mut T)>(&self, f: F) {
+        let vnode_clone = self.vnode.clone();
+        let vdom_clone = self.vnode.exec(|vnode| vnode.vdom.clone());
         let get_mut = self.get_mut;
 
         self.vnode.exec_mut(move |vnode| {

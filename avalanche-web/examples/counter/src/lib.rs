@@ -12,7 +12,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[component(count = UseState<i64>)]
 fn App() {
-    let (count, mut set_count) = count(0);
+    let (count, set_count) = count(0);
     Element! {
         tag: "div",
         children: [

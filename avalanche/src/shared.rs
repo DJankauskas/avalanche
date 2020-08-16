@@ -51,11 +51,11 @@ impl<T: ?Sized> Shared<T> {
     /// 
     /// ```
     /// # use avalanche::shared::Shared;
-    /// let mut sequence = Shared::new([1u8, 2, 3]);
+    /// let sequence = Shared::new([1u8, 2, 3]);
     /// sequence.exec_mut(|nums| nums.iter_mut().for_each(|num| *num *= *num));
     /// sequence.exec(|nums| assert_eq!(nums, &[1, 4, 9]));
     /// ```
-    pub fn exec_mut<Ret, F: FnOnce(&mut T) -> Ret>(&mut self, f: F) -> Ret {
+    pub fn exec_mut<Ret, F: FnOnce(&mut T) -> Ret>(&self, f: F) -> Ret {
         f(&mut self.rc.borrow_mut())
     }
 }

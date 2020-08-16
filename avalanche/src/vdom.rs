@@ -24,7 +24,7 @@ pub fn generate_vdom(component: View, renderer: Box<dyn Renderer>) -> Shared<VDo
         root: None,
         renderer
     };
-    let mut vdom = Shared::new(vdom);
+    let vdom = Shared::new(vdom);
     let vdom_clone = vdom.clone();
     vdom.exec_mut(|vdom| {
         let vnode = generate_vnode(component, vdom_clone, &mut vdom.renderer);
@@ -75,7 +75,7 @@ pub fn generate_vnode(component: View, vdom: Shared<VDom>, renderer: &mut Box<dy
         state: None,
         dirty: false
     };
-    let mut vnode = Shared::new(vnode);
+    let vnode = Shared::new(vnode);
     let vnode_clone = vnode.clone();
 
     vnode.exec_mut(move |vnode| {
@@ -106,7 +106,7 @@ pub fn generate_vnode(component: View, vdom: Shared<VDom>, renderer: &mut Box<dy
     vnode
 }
 
-pub fn update_vnode(mut vnode: Shared<VNode>, mut new_component: Option<View>, renderer: &mut Box<dyn Renderer>) {
+pub fn update_vnode(vnode: Shared<VNode>, mut new_component: Option<View>, renderer: &mut Box<dyn Renderer>) {
     let props_updated = match new_component {
         Some(ref other) => other.updates() != 0,
         None => false
@@ -195,7 +195,7 @@ pub fn update_vnode(mut vnode: Shared<VNode>, mut new_component: Option<View>, r
     });
 }
 
-pub fn destroy_vnode(mut vnode: Shared<VNode>, renderer: &mut Box<dyn Renderer>) {
+pub fn destroy_vnode(vnode: Shared<VNode>, renderer: &mut Box<dyn Renderer>) {
     vnode.exec_mut(|vnode| {
         //TODO: remove check for is_some()?
         if vnode.native_handle.is_some() {

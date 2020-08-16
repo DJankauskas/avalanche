@@ -13,13 +13,14 @@ use avalanche::vdom::{VNode, node_with_native_handle};
 use avalanche::{InternalContext, shared::Shared};
 
 use std::collections::{HashMap, VecDeque};
+use std::rc::Rc;
 
 use wasm_bindgen::JsCast;
 use gloo::events::EventListener;
 
 pub struct Element {
     tag: &'static str,
-    on_click: Option<Shared<dyn FnMut()>>,
+    on_click: Option<Rc<dyn Fn()>>,
     children: Vec<View>,
     updates: u64
 }
@@ -27,7 +28,7 @@ pub struct Element {
 #[derive(Default)]
 pub struct ElementBuilder {
     tag: Option<&'static str>,
-    on_click: Option<Shared<dyn FnMut()>>,
+    on_click: Option<Rc<dyn Fn()>>,
     children: Option<Vec<View>>,
     updates: u64
 }
@@ -45,11 +46,8 @@ impl ElementBuilder {
         self
     }
 
-    pub fn on_click<F: FnMut() + 'static>(mut self, on_click: F, updated: bool) -> Self {
-        use std::cell::RefCell;
-
-        //TODO: really convoluted, try replacing FnMut() with Fn(), allowing simple Rc usage
-        let on_click: Box<RefCell<dyn FnMut()>> = Box::new(RefCell::new(on_click));
+    pub fn on_click<F: Fn() + 'static>(mut self, on_click: F, updated: bool) -> Self {
+        let on_click: Rc<dyn Fn()> = Rc::new(on_click);
         self.on_click = Some(on_click.into());
         if updated {
             self.updates |= 2;
@@ -151,7 +149,7 @@ impl WebRenderer {
     fn new() -> Self {
         let window = web_sys::window().unwrap();
         let queued_fns = Shared::default();
-        let mut queued_fns_clone = queued_fns.clone();
+        let queued_fns_clone = queued_fns.clone();
 
         //sets up fast execution of 0ms timeouts
         //uses approach in https://dbaron.org/log/20100309-faster-timeouts
@@ -352,12 +350,12 @@ impl Renderer for WebRenderer {
 fn add_listener(
     element: &web_sys::Element,
     name: &'static str,
-    mut callback: Shared<dyn FnMut()>,
+    callback: Rc<dyn Fn()>,
     listeners: &mut HashMap<&'static str, EventListener>
 ) {
     let listener = EventListener::new(
         &element, name, 
-        move |_event| callback.exec_mut(|f| f())
+        move |_event| callback()
     );
     listeners.insert(name, listener);
 }
