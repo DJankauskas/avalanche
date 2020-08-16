@@ -78,14 +78,3 @@ impl<T> From<T> for Shared<T> {
         Self::new(val)
     }
 }
-
-//Hack to allow creation of unsized Shared content
-//as CoerceUnsized is nightly-only
-//remove if it becomes unneeded
-impl<T: ?Sized> From<Box<RefCell<T>>> for Shared<T> {
-    fn from(b: Box<RefCell<T>>) -> Self {
-        Self {
-            rc: b.into()
-        }
-    }
-}
