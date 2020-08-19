@@ -1241,8 +1241,8 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                 #render_body
             }
 
-            fn updates(&self) -> u64 {
-                self.__internal_updates
+            fn updated(&self) -> bool {
+                self.__internal_updates != 0
             }
 
         }

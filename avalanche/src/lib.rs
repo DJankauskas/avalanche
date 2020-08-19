@@ -69,7 +69,7 @@ pub trait Component: 'static {
 
     fn render(&self, context: InternalContext) -> View;
 
-    fn updates(&self) -> u64;
+    fn updated(&self) -> bool;
     
     fn native_type(&self) -> Option<NativeType> {
         None
@@ -83,8 +83,8 @@ impl Component for () {
     fn render(&self, _: InternalContext) -> View {
         unreachable!()
     }
-    fn updates(&self) -> u64 {
-        0
+    fn updated(&self) -> bool {
+        false
     } 
 }
 
@@ -101,7 +101,7 @@ pub trait DynComponent: Downcast + 'static {
     fn native_type(&self) -> Option<NativeType>;
 
     #[doc(hidden)]
-    fn updates(&self) -> u64;
+    fn updated(&self) -> bool;
 }
 
 impl_downcast!(DynComponent);
@@ -119,8 +119,8 @@ impl<T: Component> DynComponent for T {
         Component::native_type(self)
     }
 
-    fn updates(&self) -> u64 {
-        Component::updates(self)
+    fn updated(&self) -> bool {
+        Component::updated(self)
     }
 }
 

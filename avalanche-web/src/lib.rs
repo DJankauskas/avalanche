@@ -83,8 +83,8 @@ impl Component for Element {
         }.into()
     }
 
-    fn updates(&self) -> u64 {
-        self.updates
+    fn updated(&self) -> bool {
+        self.updates != 0
     }
 
     fn native_type(&self) -> Option<NativeType> {
@@ -312,7 +312,7 @@ impl Renderer for WebRenderer {
             },
             "oak_web_text" => {
                 let new_text = new_comp.downcast_ref::<Text>().expect("Text component");
-                if new_text.updates & 1 != 0 {
+                if new_text.updated() {
                     //TODO: compare with old text?
                     web_handle.node.set_text_content(Some(&new_text.text));
                 }
@@ -364,12 +364,12 @@ fn add_listener(
 #[derive(Clone, PartialEq)]
 pub struct Text {
     text: String,
-    updates: u64
+    updated: bool
 }
 #[derive(Default)]
 pub struct TextBuilder {
     text: Option<String>,
-    updates: u64
+    updated: bool
 }
 
 impl TextBuilder {
@@ -379,16 +379,14 @@ impl TextBuilder {
 
     pub fn text<T: ToString>(mut self, text: T, updated: bool) -> Self {
         self.text = Some(text.to_string());
-        if updated {
-            self.updates |= 1;
-        };
+        self.updated = updated;
         self
     }
 
     pub fn build(self) -> Text {
         Text {
             text: self.text.unwrap(),
-            updates: self.updates
+            updated: self.updated
         }
     }
 }
@@ -408,7 +406,7 @@ impl Component for Text {
         Some(action)
     }
 
-    fn updates(&self) -> u64 {
-        self.updates
+    fn updated(&self) -> bool {
+        self.updated
     }
 }

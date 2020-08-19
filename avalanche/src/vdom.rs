@@ -108,7 +108,7 @@ pub fn generate_vnode(component: View, vdom: Shared<VDom>, renderer: &mut Box<dy
 
 pub fn update_vnode(vnode: Shared<VNode>, mut new_component: Option<View>, renderer: &mut Box<dyn Renderer>) {
     let props_updated = match new_component {
-        Some(ref other) => other.updates() != 0,
+        Some(ref other) => other.updated(),
         None => false
     };
     let state_updated = vnode.exec(|vnode| vnode.dirty);
