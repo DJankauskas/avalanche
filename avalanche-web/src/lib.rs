@@ -18,6 +18,182 @@ use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use gloo::events::EventListener;
 
+enum Attr {
+    Prop(String),
+    Handler(Rc<dyn Fn()>)
+}
+#[derive(Default)]
+struct RawElement {
+    ///bool represents whether the attr was updated
+    attrs: HashMap<&'static str, (Option<Attr>, bool)>,
+    attrs_updated: bool,
+    children: Vec<View>,
+    children_updated: bool
+}
+
+impl RawElement {
+    fn attr(&mut self, name: &'static str, attr: Option<Attr>, updated: bool) {
+        self.attrs.insert(name, (attr, updated));
+        self.attrs_updated |= updated;
+    }
+
+    fn children(&mut self, children: Vec<View>, updated: bool) {
+        self.children = children;
+        self.children_updated = updated;
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum Dir {
+    Ltr,
+    Rtl,
+    Auto
+}
+
+impl std::fmt::Display for Dir {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Dir::Ltr => "ltr",
+            Dir::Rtl => "rtl",
+            Dir::Auto => "auto"
+        })
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+#[non_exhaustive]
+pub enum Translate {
+    Yes,
+    No
+}
+
+impl std::fmt::Display for Translate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Translate::Yes => "yes",
+            Translate::No => "no",
+        })
+    }
+}
+
+macro_rules! def_component {
+    (
+        $tag:ident;
+        $tag_builder:ident;
+        props: $($propident:ident: $proptype:ty),+;
+        listeners: $($listenident:ident),+;
+    ) => {
+        pub struct $tag {
+            raw: RawElement,
+        }
+
+        impl ::avalanche::Component for $tag {
+            type Builder = $tag_builder;
+
+            fn render(&self, _: InternalContext) -> View {
+                HasChildrenMarker {
+                    //TODO: take children by Rc?
+                    children: self.raw.children.clone()
+                }.into()
+            }
+
+            fn updated(&self) -> bool {
+                self.raw.attrs_updated || self.raw.children_updated
+            }
+
+            fn native_type(&self) -> Option<NativeType> {
+                Some(NativeType {
+                    handler: "oak_web",
+                    name: stringify!($tag)
+                })
+            }
+        }
+
+        pub struct $tag_builder {
+            raw: RawElement
+        }
+
+        impl $tag_builder {
+            pub fn new() -> Self {
+                Self {
+                    raw: std::default::Default::default()
+                }
+            }
+
+            pub fn build(self) -> $tag {
+                $tag {
+                    raw: self.raw
+                }
+            }
+
+            pub fn hidden(mut self, val: Option<bool>, updated: bool) -> Self {
+                if let Some(hidden) = &val {
+                    if *hidden {
+                        self.raw.attr(
+                            "hidden", 
+                            Some(Attr::Prop(String::new())), 
+                            updated
+                        );
+                    }
+                };
+                self
+            }
+
+            pub fn children<T: Into<Vec<View>>>(mut self, children: T, updated: bool) -> Self {
+                self.raw.children(children.into(), updated);
+                self
+            }
+
+            $(
+                pub fn $propident(mut self, val: Option<$proptype>, updated: bool) -> Self {
+                    self.raw.attr(
+                        stringify!($propident), 
+                        val.map(|k| Attr::Prop(k.to_string())), 
+                        updated
+                    );
+                    self
+                }
+            )+
+
+            $(
+                pub fn $listenident<F: Fn() + 'static>(mut self, val: Option<F>, updated: bool) -> Self {
+                    self.raw.attr(
+                        stringify!($listenident),
+                        val.map(|f| Attr::Handler(std::rc::Rc::new(f))), 
+                        updated
+                    );
+                    self
+                }
+            )+
+        }
+    };
+}
+
+def_component!{
+    P;
+    PBuilder;
+    props:
+        access_key: String,
+        class:  String,
+        //TODO: this is enumerable
+        //for forwards-compatability, make enum?
+        content_editable: bool,
+        dir: Dir,
+        draggable: bool,
+        id: String,
+        lang: String,
+        placeholder: String,
+        slot: String,
+        spell_check: bool,
+        style: String,
+        tab_index: i16,
+        title: String,
+        translate: Translate;
+    listeners:
+        on_click;
+}
+
+
 pub struct Element {
     tag: &'static str,
     on_click: Option<Rc<dyn Fn()>>,
@@ -38,7 +214,7 @@ impl ElementBuilder {
         Default::default()
     }
 
-    pub fn tag(mut self, tag: &'static str, updated: bool) -> Self {
+    pub fn tag(&mut self, tag: &'static str, updated: bool) -> &mut Self {
         self.tag = Some(tag);
         if updated {
             self.updates |= 1;
@@ -46,7 +222,7 @@ impl ElementBuilder {
         self
     }
 
-    pub fn on_click<F: Fn() + 'static>(mut self, on_click: F, updated: bool) -> Self {
+    pub fn on_click<F: Fn() + 'static>(&mut self, on_click: F, updated: bool) -> &mut Self {
         let on_click: Rc<dyn Fn()> = Rc::new(on_click);
         self.on_click = Some(on_click.into());
         if updated {
@@ -55,7 +231,7 @@ impl ElementBuilder {
         self
     }
 
-    pub fn children<T: Into<Vec<View>>>(mut self, children: T, updated: bool) -> Self {
+    pub fn children<T: Into<Vec<View>>>(&mut self, children: T, updated: bool) -> &mut Self {
         self.children = Some(children.into());
         if updated {
             self.updates |= 4;
@@ -377,7 +553,7 @@ impl TextBuilder {
         Default::default()
     }
 
-    pub fn text<T: ToString>(mut self, text: T, updated: bool) -> Self {
+    pub fn text<T: ToString>(&mut self, text: T, updated: bool) -> &mut Self {
         self.text = Some(text.to_string());
         self.updated = updated;
         self
