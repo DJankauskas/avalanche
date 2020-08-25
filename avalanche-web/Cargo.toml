@@ -19,5 +19,7 @@ features = [
     "EventTarget",
     "Window",
     "Text",
+    "Event",
+    "MouseEvent",
     "MessageEvent"
 ]

@@ -313,12 +313,10 @@ impl Function {
 
                             *syntax = parse_quote! {
                                 avalanche::__internal_identity! {
-                                    {
-                                        let mut __avalanche_internal_builder = <<#type_path as ::avalanche::Component>::Builder>::new();
-                                        __avalanche_internal_builder#(.#field_ident(#init_expr, #is_field_updated))*;
-                                        __avalanche_internal_builder.build()
-                                        .into()
-                                    }
+                                    <<#type_path as ::avalanche::Component>::Builder>::new()
+                                    #(.#field_ident(#init_expr, #is_field_updated))*
+                                    .build()
+                                    .into()
                                 }
                             };
 
@@ -1203,7 +1201,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                         self.__internal_updates |= #flag;
                     }
                     self.#param_ident = std::option::Option::Some(val);
-                    &mut self
+                    self
                 }
             )*
         }
@@ -1249,6 +1247,8 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
 
         }
     };
+
+    println!("{}", component);
 
     component.into()
 }

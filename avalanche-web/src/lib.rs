@@ -16,11 +16,12 @@ use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 use wasm_bindgen::JsCast;
+use web_sys::Event;
 use gloo::events::EventListener;
 
 enum Attr {
     Prop(String),
-    Handler(Rc<dyn Fn()>)
+    Handler(Rc<dyn Fn(Event)>)
 }
 #[derive(Default)]
 struct RawElement {
@@ -40,6 +41,18 @@ impl RawElement {
     fn children(&mut self, children: Vec<View>, updated: bool) {
         self.children = children;
         self.children_updated = updated;
+    }
+
+    fn get<'a>(tag: &'static str, from: &'a View) -> &'a Self {
+        match tag {
+            "div" => {
+                &from.downcast_ref::<Div>().unwrap().raw
+            }
+            "button" => {
+                &from.downcast_ref::<Button>().unwrap().raw
+            }
+            _ => panic!(tag)
+        }
     }
 }
 
@@ -78,10 +91,11 @@ impl std::fmt::Display for Translate {
 
 macro_rules! def_component {
     (
+        $native_tag:expr;
         $tag:ident;
         $tag_builder:ident;
-        props: $($propident:ident: $proptype:ty),+;
-        listeners: $($listenident:ident),+;
+        props: $($propnative:expr => $propident:ident : $proptype:ty),+;
+        listeners: $($listennative:expr => $listenident:ident : $listentype:ty),+;
     ) => {
         pub struct $tag {
             raw: RawElement,
@@ -104,7 +118,7 @@ macro_rules! def_component {
             fn native_type(&self) -> Option<NativeType> {
                 Some(NativeType {
                     handler: "oak_web",
-                    name: stringify!($tag)
+                    name: $native_tag
                 })
             }
         }
@@ -147,7 +161,7 @@ macro_rules! def_component {
             $(
                 pub fn $propident(mut self, val: Option<$proptype>, updated: bool) -> Self {
                     self.raw.attr(
-                        stringify!($propident), 
+                        $propnative, 
                         val.map(|k| Attr::Prop(k.to_string())), 
                         updated
                     );
@@ -156,10 +170,10 @@ macro_rules! def_component {
             )+
 
             $(
-                pub fn $listenident<F: Fn() + 'static>(mut self, val: Option<F>, updated: bool) -> Self {
+                pub fn $listenident<F: Fn($listentype) + 'static>(mut self, val: Option<F>, updated: bool) -> Self {
                     self.raw.attr(
-                        stringify!($listenident),
-                        val.map(|f| Attr::Handler(std::rc::Rc::new(f))), 
+                        $listennative,
+                        val.map(|f| Attr::Handler(std::rc::Rc::new(move |e| f(e.dyn_into::<$listentype>().unwrap())))), 
                         updated
                     );
                     self
@@ -170,105 +184,53 @@ macro_rules! def_component {
 }
 
 def_component!{
-    P;
-    PBuilder;
+    "div";
+    Div;
+    DivBuilder;
     props:
-        access_key: String,
-        class:  String,
+        "accesskey" => access_key: String,
+        "class" => class:  String,
         //TODO: this is enumerable
         //for forwards-compatability, make enum?
-        content_editable: bool,
-        dir: Dir,
-        draggable: bool,
-        id: String,
-        lang: String,
-        placeholder: String,
-        slot: String,
-        spell_check: bool,
-        style: String,
-        tab_index: i16,
-        title: String,
-        translate: Translate;
+        "contenteditable" => content_editable: bool,
+        "dir" => dir: Dir,
+        "draggable" => draggable: bool,
+        "id" => id: String,
+        "lang" => lang: String,
+        "placeholder" => placeholder: String,
+        "slot" => slot: String,
+        "spellcheck" => spell_check: bool,
+        "style" => style: String,
+        "tabindex" => tab_index: i16,
+        "title" => title: String,
+        "translate" => translate: Translate;
     listeners:
-        on_click;
+        "click" => on_click: web_sys::MouseEvent;
 }
 
-
-pub struct Element {
-    tag: &'static str,
-    on_click: Option<Rc<dyn Fn()>>,
-    children: Vec<View>,
-    updates: u64
-}
-
-#[derive(Default)]
-pub struct ElementBuilder {
-    tag: Option<&'static str>,
-    on_click: Option<Rc<dyn Fn()>>,
-    children: Option<Vec<View>>,
-    updates: u64
-}
-
-impl ElementBuilder {
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    pub fn tag(&mut self, tag: &'static str, updated: bool) -> &mut Self {
-        self.tag = Some(tag);
-        if updated {
-            self.updates |= 1;
-        };
-        self
-    }
-
-    pub fn on_click<F: Fn() + 'static>(&mut self, on_click: F, updated: bool) -> &mut Self {
-        let on_click: Rc<dyn Fn()> = Rc::new(on_click);
-        self.on_click = Some(on_click.into());
-        if updated {
-            self.updates |= 2;
-        };
-        self
-    }
-
-    pub fn children<T: Into<Vec<View>>>(&mut self, children: T, updated: bool) -> &mut Self {
-        self.children = Some(children.into());
-        if updated {
-            self.updates |= 4;
-        };
-        self
-    }
-
-    pub fn build(self) -> Element {
-        Element {
-            tag: self.tag.unwrap(),
-            on_click: self.on_click,
-            children: self.children.unwrap_or_default(),
-            updates: self.updates
-        }
-    }
-}
-
-impl Component for Element {
-    type Builder = ElementBuilder;
-
-    fn render(&self, _: InternalContext) -> View {
-        HasChildrenMarker {
-            //TODO: take children by Rc?
-            children: self.children.clone()
-        }.into()
-    }
-
-    fn updated(&self) -> bool {
-        self.updates != 0
-    }
-
-    fn native_type(&self) -> Option<NativeType> {
-        Some(NativeType {
-            handler: "oak_web",
-            name: self.tag
-        })
-    }
+def_component!{
+    "button";
+    Button;
+    ButtonBuilder;
+    props:
+        "accesskey" => access_key: String,
+        "class" => class:  String,
+        //TODO: this is enumerable
+        //for forwards-compatability, make enum?
+        "contenteditable" => content_editable: bool,
+        "dir" => dir: Dir,
+        "draggable" => draggable: bool,
+        "id" => id: String,
+        "lang" => lang: String,
+        "placeholder" => placeholder: String,
+        "slot" => slot: String,
+        "spellcheck" => spell_check: bool,
+        "style" => style: String,
+        "tabindex" => tab_index: i16,
+        "title" => title: String,
+        "translate" => translate: Translate;
+    listeners:
+        "click" => on_click: web_sys::MouseEvent;
 }
 
 static TIMEOUT_MSG_NAME: &str = "oak_web_message_name";
@@ -378,12 +340,7 @@ impl Renderer for WebRenderer {
             },
             "oak_web" => {
                 assert_ne!(action.name, "", "WebRenderer: expected tag name to not be empty.");
-                let comp = match vnode.component.downcast_ref::<Element>() {
-                    Some(element) => element,
-                    None => panic!(
-                        "WebRenderer: expected WebNativeData data for oak_web handled NativeAction."
-                    ),
-                };
+                let raw_element = RawElement::get(action.name, &vnode.component);
 
                 let element = self.document.create_element(&action.name).expect(
                     "WebRenderer: element creation failed from syntax error."
@@ -391,14 +348,17 @@ impl Renderer for WebRenderer {
 
                 let mut listeners = HashMap::new();
 
-                //TODO: attributes
-                // for (prop_name, value) in comp.attrs.iter() {
-                //     element.set_attribute(prop_name, value).unwrap();
-                // }
-
-                // add_listeners(&element, &comp.listeners, &mut listeners);
-                if let Some(handler) = &comp.on_click {
-                    add_listener(&element, "click", handler.clone(), &mut listeners);
+                for (name, attr) in raw_element.attrs.iter() {
+                    if let Some(attr) = &attr.0 {
+                        match attr {
+                            Attr::Prop(prop) => {
+                                element.set_attribute(name, &prop).unwrap();
+                            }
+                            Attr::Handler(handler) => {
+                                add_listener(&element, name, handler.clone(), &mut listeners);
+                            }
+                        }
+                    }
                 }
 
                 for with_handle in vnode.children.iter().filter_map(|child| node_with_native_handle(child.clone())) {
@@ -433,57 +393,40 @@ impl Renderer for WebRenderer {
             "oak_web" => {
                 let node = web_handle.node.clone();
                 let element = node.dyn_into::<web_sys::Element>().unwrap();
-                let new_comp = new_comp.downcast_ref::<Element>().unwrap();
-
-                //old diff code from oak
-                //currently not relevant due to HashMap approach
-                // for (key, old_value) in old_comp.attrs.iter() {
-                //     match new_comp.attrs.get(key) {
-                //         Some(new_value) => {
-                //             //if new value is different from old, update DOM
-                //             if old_value != new_value {
-                //                 element.set_attribute(key, &new_value).unwrap();
-                //             }
-                //         },
-                //         None => {
-                //             //new props don't have attribute `key`
-                //             //thus remove it from element
-                //             element.remove_attribute(key).unwrap();
-                //         }
-                //     }
-                // }
-
-                // //check new props for attrs not present in old props
-                // //add those new props to the element
-                // for (key, value) in new_comp.attrs.iter() {
-                //     if old_comp.attrs.get(key).is_none() {
-                //         element.set_attribute(key, value).unwrap();
-                //     }
-                // }
-
-                // //TODO: properly diff listeners
-                // //currently, they are all removed
-                // //and new ones from new_props are added
-                // web_handle.listeners.clear();
-                // add_listeners(&element, &new_comp.listeners, &mut web_handle.listeners);
-
-                //on_click
-                if new_comp.updates & 2 != 0 {
-                    web_handle.listeners.remove("click");
-                    if let Some(handler) = &new_comp.on_click {
-                        add_listener(&element, "click", handler.clone(), &mut web_handle.listeners);
+                let raw_element = RawElement::get(native_type.name, new_comp);
+                
+                if raw_element.attrs_updated {
+                    for (name, (attr, updated)) in raw_element.attrs.iter() {
+                        if *updated {
+                            match attr {
+                                Some(attr) => {
+                                    match attr {
+                                        Attr::Prop(prop) => {
+                                            element.set_attribute(name, &prop).unwrap();
+                                        }
+                                        Attr::Handler(handler) => {
+                                            update_listener(&element, name, handler.clone(), &mut web_handle.listeners);
+                                        }
+                                    }
+                                }
+                                None => {
+                                    remove_listener(name, &mut web_handle.listeners);
+                                }
+                            }
+                        }
                     }
                 }
 
-
-                //TODO: diffing algo
-                element.set_inner_html("");
-                //copy-pasted from create code: factor out or replace with diffing
-                for with_handle in children.iter().filter_map(|child| node_with_native_handle(child.clone())) {
-                    with_handle.exec(|with_handle| {
-                        let handle = with_handle.native_handle.as_ref().unwrap();
-                        element.append_child(&handle.downcast_ref::<WebNativeHandle>().expect("WebNativeHandle").node).unwrap();
-                    })
+                if raw_element.children_updated {
+                    //TODO: diffing algo
+                    element.set_inner_html("");
+                    //copy-pasted from create code: factor out or replace with diffing
+                    for with_handle in children.iter().filter_map(|child| node_with_native_handle(child.clone())) {
+                        with_handle.exec(|with_handle| {
+                            let handle = with_handle.native_handle.as_ref().unwrap();
+                            element.append_child(&handle.downcast_ref::<WebNativeHandle>().expect("WebNativeHandle").node).unwrap();
+                        })
+                    }
                 }
             },
             "oak_web_text" => {
@@ -526,14 +469,35 @@ impl Renderer for WebRenderer {
 fn add_listener(
     element: &web_sys::Element,
     name: &'static str,
-    callback: Rc<dyn Fn()>,
+    callback: Rc<dyn Fn(Event)>,
     listeners: &mut HashMap<&'static str, EventListener>
 ) {
     let listener = EventListener::new(
         &element, name, 
-        move |_event| callback()
+        move |event| callback(event.clone())
     );
     listeners.insert(name, listener);
+}
+
+fn update_listener(
+    element: &web_sys::Element,
+    name: &'static str,
+    callback: Rc<dyn Fn(Event)>,
+    listeners: &mut HashMap<&'static str, EventListener>
+) {
+    let _ = listeners.remove(name);
+    let listener = EventListener::new(
+        &element, name, 
+        move |event| callback(event.clone())
+    );
+    listeners.insert(name, listener);
+}
+
+fn remove_listener(
+    name: &'static str,
+    listeners: &mut HashMap<&'static str, EventListener>
+) {
+    let _ = listeners.remove(name);
 }
 
 ///Represents a text node.
@@ -553,7 +517,7 @@ impl TextBuilder {
         Default::default()
     }
 
-    pub fn text<T: ToString>(&mut self, text: T, updated: bool) -> &mut Self {
+    pub fn text<T: ToString>(mut self, text: T, updated: bool) -> Self {
         self.text = Some(text.to_string());
         self.updated = updated;
         self

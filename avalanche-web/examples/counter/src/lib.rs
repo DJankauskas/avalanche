@@ -1,6 +1,6 @@
 use wasm_bindgen::prelude::*;
 use avalanche::{component, UseState};
-use avalanche_web::{Text, Element};
+use avalanche_web::{Text, Div, Button};
 
 // When the `wee_alloc` feature is enabled, this uses `wee_alloc` as the global
 // allocator.
@@ -13,12 +13,10 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 #[component(count = UseState<i64>)]
 fn App() {
     let (count, set_count) = count(0);
-    Element! {
-        tag: "div",
+    Div! {
         children: [
-            Element!{
-                tag: "button",
-                on_click: move || set_count.call(|count| *count += 1),
+            Button!{
+                on_click: Some(move |_| set_count.call(|count| *count += 1)),
                 children: [
                     Text!{text: "+"}
                 ]
