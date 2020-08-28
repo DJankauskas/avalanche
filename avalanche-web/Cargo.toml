@@ -20,6 +20,16 @@ features = [
     "Window",
     "Text",
     "Event",
+    "AnimationEvent",
+    "CompositionEvent",
+    "DragEvent",
+    "FocusEvent",
+    "KeyboardEvent",
     "MouseEvent",
-    "MessageEvent"
+    "MessageEvent",
+    "ProgressEvent",
+    "PointerEvent",
+    "TransitionEvent",
+    "TouchEvent",
+    "WheelEvent"
 ]
