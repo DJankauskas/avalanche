@@ -16,8 +16,10 @@ use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 use wasm_bindgen::JsCast;
-use web_sys::Event;
+use crate::events::*;
 use gloo::events::EventListener;
+
+pub mod events;
 
 enum Attr {
     Prop(String),
@@ -94,8 +96,6 @@ macro_rules! def_component {
         $native_tag:expr;
         $tag:ident;
         $tag_builder:ident;
-        props: $($propnative:expr => $propident:ident : $proptype:ty),+;
-        listeners: $($listennative:expr => $listenident:ident : $listentype:ty),+;
     ) => {
         pub struct $tag {
             raw: RawElement,
@@ -157,61 +157,96 @@ macro_rules! def_component {
                 self.raw.children(children.into(), updated);
                 self
             }
-
-            $(
-                pub fn $propident(mut self, val: Option<$proptype>, updated: bool) -> Self {
-                    self.raw.attr(
-                        $propnative, 
-                        val.map(|k| Attr::Prop(k.to_string())), 
-                        updated
-                    );
-                    self
-                }
-            )+
-
-            $(
-                pub fn $listenident<F: Fn($listentype) + 'static>(mut self, val: Option<F>, updated: bool) -> Self {
-                    self.raw.attr(
-                        $listennative,
-                        val.map(|f| Attr::Handler(std::rc::Rc::new(move |e| f(e.dyn_into::<$listentype>().unwrap())))), 
-                        updated
-                    );
-                    self
-                }
-            )+
         }
     };
+}
+
+macro_rules! def_component_attrs {
+    ( 
+        $mac:ident;
+        props: $($propnative:expr => $propident:ident : $proptype:ty),*;
+        listeners: $($listennative:expr => $listenident:ident : $listentype:ty),*;  
+    ) => {
+        macro_rules! $mac {
+            ($builder:ty) => {
+                impl $builder {
+                    $(
+                        pub fn $propident(mut self, val: Option<$proptype>, updated: bool) -> Self {
+                            self.raw.attr(
+                                $propnative, 
+                                val.map(|k| Attr::Prop(k.to_string())), 
+                                updated
+                            );
+                            self
+                        }
+                    )*
+        
+                    $(
+                        pub fn $listenident<F: Fn($listentype) + 'static>(mut self, val: Option<F>, updated: bool) -> Self {
+                            self.raw.attr(
+                                $listennative,
+                                val.map(|f| Attr::Handler(std::rc::Rc::new(move |e| f(e.dyn_into::<$listentype>().unwrap())))), 
+                                updated
+                            );
+                            self
+                        }
+                    )*
+                }
+            }
+        }
+    }
 }
 
 def_component!{
     "div";
     Div;
     DivBuilder;
-    props:
-        "accesskey" => access_key: String,
-        "class" => class:  String,
-        //TODO: this is enumerable
-        //for forwards-compatability, make enum?
-        "contenteditable" => content_editable: bool,
-        "dir" => dir: Dir,
-        "draggable" => draggable: bool,
-        "id" => id: String,
-        "lang" => lang: String,
-        "placeholder" => placeholder: String,
-        "slot" => slot: String,
-        "spellcheck" => spell_check: bool,
-        "style" => style: String,
-        "tabindex" => tab_index: i16,
-        "title" => title: String,
-        "translate" => translate: Translate;
-    listeners:
-        "click" => on_click: web_sys::MouseEvent;
 }
 
 def_component!{
     "button";
     Button;
     ButtonBuilder;
+}
+
+def_component!{
+    "h1";
+    H1;
+    H1Builder;
+}
+
+def_component!{
+    "h2";
+    H2;
+    H2Builder;
+}
+
+def_component!{
+    "h3";
+    H3;
+    H3Builder;
+}
+
+def_component!{
+    "h4";
+    H4;
+    H4Builder;
+}
+
+def_component!{
+    "h5";
+    H5;
+    H5Builder;
+}
+
+def_component!{
+    "h6";
+    H6;
+    H6Builder;
+}
+
+def_component_attrs!{
+    add_global_attrs;
     props:
         "accesskey" => access_key: String,
         "class" => class:  String,
@@ -230,8 +265,125 @@ def_component!{
         "title" => title: String,
         "translate" => translate: Translate;
     listeners:
-        "click" => on_click: web_sys::MouseEvent;
+        //Focus events
+        "blur" => on_blur: FocusEvent,
+        "focus" => on_focus: FocusEvent,
+        //focusin, focusout?
+
+        //Clipboard events
+        //TODO: these are unstable web_sys apis
+        //cut, copy, and paste
+
+        //Composition events
+        "compositionstart" => on_composition_start: CompositionEvent,
+        "compositionupdate" => on_composition_update: CompositionEvent,
+        "compositionend" => on_composition_end: CompositionEvent,
+
+        //Form events
+        "change" => on_change: Event,
+        "input" => on_input: Event,
+        //TODO: for form only?
+        "reset" => on_reset: Event,
+        "submit" => on_submit: Event,
+        "invalid" => on_invalid: Event,
+
+        //Image events
+        "load" => on_load: Event,
+        "error" => on_error: Event,
+
+        //Keyboard events
+        "keydown" => on_key_down: KeyboardEvent,
+        "keyup" => on_key_up: KeyboardEvent,
+
+        //Media events
+        "canplay" => on_can_play: Event,
+        "canplaythrough" => on_can_play_through: Event,
+        "durationchange" => on_duration_change: Event,
+        "emptied" => on_emptied: Event,
+        "ended" => on_ended: Event,
+        "loadeddata" => on_loaded_data: Event,
+        "loadedmetadata" => on_loaded_metadata: Event,
+        "pause" => on_pause: Event,
+        "play" => on_play: Event,
+        "playing" => on_playing: Event,
+        "ratechange" => on_rate_change: Event,
+        "seeked" => on_seeked: Event,
+        "seeking" => on_seeking: Event,
+        "stalled" => on_stalled: Event,
+        "suspend" => on_suspend: Event,
+        "timeupdate" => on_time_update: Event, 
+        "volumechange" => on_volume_change: Event,
+        "waiting" => on_waiting: Event,
+
+        //Mouse events
+        "auxclick" => on_aux_click: MouseEvent,
+        "click" => on_click: MouseEvent,
+        "contextmenu" => on_context_menu: MouseEvent,
+        "dblclick" => on_double_click: MouseEvent,
+        "mousedown" => on_mouse_down: MouseEvent,
+        "mouseenter" => on_mouse_enter: MouseEvent,
+        "mouseleave" => on_mouse_leave: MouseEvent,
+        "mousemove" => on_mouse_move: MouseEvent,
+        "mouseover" => on_mouse_over: MouseEvent,
+        "mouseout" => on_mouse_out: MouseEvent,
+        "mouseup" => on_mouse_up: MouseEvent,
+        "pointerlockchange" => on_pointer_lock_change: Event,
+        "pointerlockerror" => on_pointer_lock_error: Event,
+        "select" => on_select: Event,
+
+        //Wheel event
+        "wheel" => on_wheel: WheelEvent,
+
+        //Drag and drop events
+        "drag" => on_drag: DragEvent,
+        "dragend" => on_drag_end: DragEvent,
+        "dragenter" => on_drag_enter: DragEvent,
+        "dragstart" => on_drag_start: DragEvent,
+        "dragleave" => on_drag_leave: DragEvent,
+        "dragover" => on_drag_over: DragEvent,
+        "drop" => on_drop: DragEvent,
+
+        //Touch events
+        "touchcancel" => on_touch_cancel: TouchEvent,
+        "touchend" => on_touch_end: TouchEvent,
+        "touchmove" => on_touch_move: TouchEvent,
+        "touchstart" => on_touch_start: TouchEvent,
+
+        //Pointer events
+        "pointerover" => on_pointer_over: PointerEvent,
+        "pointerenter" => on_pointer_enter: PointerEvent,
+        "pointerdown" => on_pointer_down: PointerEvent,
+        "pointermove" => on_pointer_move: PointerEvent,
+        "pointerup" => on_pointer_up: PointerEvent,
+        "pointercancel" => on_pointer_cancel: PointerEvent,
+        "pointerout" => on_pointer_out: PointerEvent,
+        "pointerleave" => on_pointer_leave: PointerEvent,
+        "gotpointercapture" => on_got_pointer_capture: PointerEvent,
+        "lostpointercapture" => on_lost_pointer_capture: PointerEvent,
+
+        //Scroll event
+        "scroll" => on_scroll: Event,
+
+        //Animation events
+        "animationstart" => on_animation_start: AnimationEvent,
+        "animationcancel" => on_animation_cancel: AnimationEvent,
+        "animationend" => on_animation_end: AnimationEvent,
+        "animationinteraction" => on_animation_interaction: AnimationEvent,
+
+        //Transition events
+        "transitionstart" => on_transition_start: TransitionEvent,
+        "transitioncancel" => on_transition_cancel: TransitionEvent,
+        "transitionend" => on_transition_end: TransitionEvent,
+        "transitionrun" => on_transition_run: TransitionEvent,
+
+        //Progress events
+        "abort" => on_abort: Event,
+        "loadstart" => on_load_start: ProgressEvent,
+        "progress" => on_progress: ProgressEvent;
 }
+
+add_global_attrs!{ButtonBuilder}
+add_global_attrs!{DivBuilder}
 
 static TIMEOUT_MSG_NAME: &str = "oak_web_message_name";
 
