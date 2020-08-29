@@ -44,18 +44,34 @@ impl RawElement {
         self.children = children;
         self.children_updated = updated;
     }
+}
 
-    fn get<'a>(tag: &'static str, from: &'a View) -> &'a Self {
-        match tag {
-            "div" => {
-                &from.downcast_ref::<Div>().unwrap().raw
+macro_rules! raw_element_get {
+    ( $($tag_str:expr => $tag_type:ty),* ) => {
+        impl RawElement {
+            fn get<'a>(tag: &'static str, from: &'a View) -> &'a Self {
+                match tag {
+                    $(
+                        $tag_str => {
+                            &from.downcast_ref::<$tag_type>().unwrap().raw
+                        }
+                    )*
+                    _ => panic!(tag)
+                }
             }
-            "button" => {
-                &from.downcast_ref::<Button>().unwrap().raw
-            }
-            _ => panic!(tag)
         }
     }
+}
+
+raw_element_get!{
+    "div" => Div,
+    "button" => Button,
+    "h1" => H1,
+    "h2" => H2,
+    "h3" => H3,
+    "h4" => H4,
+    "h5" => H5,
+    "h6" => H6
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -153,6 +169,11 @@ macro_rules! def_component {
                 self
             }
 
+            pub fn child(mut self, child: View, updated: bool) -> Self {
+                self.raw.children(vec![child], updated);
+                self
+            }
+
             pub fn children<T: Into<Vec<View>>>(mut self, children: T, updated: bool) -> Self {
                 self.raw.children(children.into(), updated);
                 self
@@ -182,10 +203,10 @@ macro_rules! def_component_attrs {
                     )*
         
                     $(
-                        pub fn $listenident<F: Fn($listentype) + 'static>(mut self, val: Option<F>, updated: bool) -> Self {
+                        pub fn $listenident(mut self, f: impl Fn($listentype) + 'static, updated: bool) -> Self {
                             self.raw.attr(
                                 $listennative,
-                                val.map(|f| Attr::Handler(std::rc::Rc::new(move |e| f(e.dyn_into::<$listentype>().unwrap())))), 
+                                Some(Attr::Handler(std::rc::Rc::new(move |e| f(e.dyn_into::<$listentype>().unwrap())))), 
                                 updated
                             );
                             self
@@ -195,54 +216,6 @@ macro_rules! def_component_attrs {
             }
         }
     }
-}
-
-def_component!{
-    "div";
-    Div;
-    DivBuilder;
-}
-
-def_component!{
-    "button";
-    Button;
-    ButtonBuilder;
-}
-
-def_component!{
-    "h1";
-    H1;
-    H1Builder;
-}
-
-def_component!{
-    "h2";
-    H2;
-    H2Builder;
-}
-
-def_component!{
-    "h3";
-    H3;
-    H3Builder;
-}
-
-def_component!{
-    "h4";
-    H4;
-    H4Builder;
-}
-
-def_component!{
-    "h5";
-    H5;
-    H5Builder;
-}
-
-def_component!{
-    "h6";
-    H6;
-    H6Builder;
 }
 
 def_component_attrs!{
@@ -382,8 +355,69 @@ def_component_attrs!{
         "progress" => on_progress: ProgressEvent;
 }
 
-add_global_attrs!{ButtonBuilder}
+def_component!{
+    "div";
+    Div;
+    DivBuilder;
+}
+
 add_global_attrs!{DivBuilder}
+
+def_component!{
+    "button";
+    Button;
+    ButtonBuilder;
+}
+
+add_global_attrs!{ButtonBuilder}
+
+def_component!{
+    "h1";
+    H1;
+    H1Builder;
+}
+
+add_global_attrs!{H1Builder}
+
+def_component!{
+    "h2";
+    H2;
+    H2Builder;
+}
+
+add_global_attrs!{H2Builder}
+
+def_component!{
+    "h3";
+    H3;
+    H3Builder;
+}
+
+add_global_attrs!{H3Builder}
+
+def_component!{
+    "h4";
+    H4;
+    H4Builder;
+}
+
+add_global_attrs!{H4Builder}
+
+def_component!{
+    "h5";
+    H5;
+    H5Builder;
+}
+
+add_global_attrs!{H5Builder}
+
+def_component!{
+    "h6";
+    H6;
+    H6Builder;
+}
+
+add_global_attrs!{H6Builder}
 
 static TIMEOUT_MSG_NAME: &str = "oak_web_message_name";
 
