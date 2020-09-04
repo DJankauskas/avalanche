@@ -46,6 +46,10 @@ impl RawElement {
     }
 }
 
+//TODO: rewrite in 1.47
+//currently, string comparisons are used, which are slow
+//however, stabilized TypeId::of will allow matching on type ids instead
+//turning the match into an efficient jump table
 macro_rules! raw_element_get {
     ( $($tag_str:expr => $tag_type:ty),* ) => {
         impl RawElement {
