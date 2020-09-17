@@ -315,7 +315,7 @@ impl Function {
                                 avalanche::__internal_identity! {
                                     <<#type_path as ::avalanche::Component>::Builder>::new()
                                     #(.#field_ident(#init_expr, #is_field_updated))*
-                                    .build()
+                                    .build((std::line!(), std::column!()))
                                     .into()
                                 }
                             };
@@ -1179,6 +1179,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
         #[derive(std::default::Default)]
         #visibility struct #builder_name {
             __internal_updates: u64,
+            __key: std::option::Option<std::string::String>,
             #(#param_ident: std::option::Option<#param_type>),*
         }
 
@@ -1187,16 +1188,24 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                 std::default::Default::default()
             }
 
-            fn build(self) -> #name {
+            fn build(self, location: (u32, u32)) -> #name {
                 #name {
                     __internal_updates: self.__internal_updates,
+                    __key: self.__key,
+                    __location: location,
                     #(#param_ident: self.#param_ident.unwrap()),*
                 }
             }
 
+            fn key(mut self, key: std::string::String, _updated: bool) -> Self {
+                //TODO: should updated be used?
+                self.__key = std::option::Option::Some(key);
+                self
+            }
+
             #(
                 #(#param_attributes)*
-                fn #param_ident(&mut self, val: #param_type, updated: bool) -> &mut Self {
+                fn #param_ident(mut self, val: #param_type, updated: bool) -> Self {
                     if updated {
                         self.__internal_updates |= #flag;
                     }
@@ -1213,6 +1222,8 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
 
         #visibility struct #name {
             __internal_updates: u64,
+            __key: std::option::Option<std::string::String>,
+            __location: (u32, u32),
             #(#param_ident: #param_type),*
         }
 
@@ -1243,6 +1254,10 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
 
             fn updated(&self) -> bool {
                 self.__internal_updates != 0
+            }
+
+            fn key(&self) -> std::option::Option<&str> {
+                self.__key.as_deref()
             }
 
         }

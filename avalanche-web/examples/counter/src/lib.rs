@@ -1,6 +1,6 @@
-use wasm_bindgen::prelude::*;
 use avalanche::{component, UseState};
-use avalanche_web::{Text, Div, Button, H2};
+use avalanche_web::{Button, Div, Text, H2};
+use wasm_bindgen::prelude::*;
 
 // When the `wee_alloc` feature is enabled, this uses `wee_alloc` as the global
 // allocator.
@@ -16,7 +16,7 @@ fn App() {
     Div! {
         children: [
             H2!{
-                child: Text!{text: "Counter!"}
+                child: Text!{text: "Counter!"},
             },
             Button!{
                 on_click: move |_| set_count.call(|count| *count += 1),
@@ -27,7 +27,6 @@ fn App() {
     }
 }
 
-
 // This is like the `main` function, except for JavaScript.
 #[wasm_bindgen(start)]
 pub fn main_js() {
@@ -37,5 +36,9 @@ pub fn main_js() {
     console_error_panic_hook::set_once();
 
     //TODO: the App initialization is ugly, provide a Default impl for unit struct components?
-    avalanche_web::mount_to_body(<<App as avalanche::Component>::Builder>::new().build().into());
+    avalanche_web::mount_to_body(
+        <<App as avalanche::Component>::Builder>::new()
+            .build((line!(), column!()))
+            .into(),
+    );
 }

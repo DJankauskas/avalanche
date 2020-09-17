@@ -74,6 +74,14 @@ pub trait Component: 'static {
     fn native_type(&self) -> Option<NativeType> {
         None
     }
+
+    fn location(&self) -> Option<(u32, u32)> {
+        None
+    }
+
+    fn key(&self) -> Option<&str> {
+        None
+    }
 }
 
 impl Component for () {
@@ -102,6 +110,10 @@ pub trait DynComponent: Downcast + 'static {
 
     #[doc(hidden)]
     fn updated(&self) -> bool;
+
+    fn location(&self) -> Option<(u32, u32)>;
+
+    fn key(&self) -> Option<&str>;
 }
 
 impl_downcast!(DynComponent);
@@ -121,6 +133,14 @@ impl<T: Component> DynComponent for T {
 
     fn updated(&self) -> bool {
         Component::updated(self)
+    }
+
+    fn location(&self) -> Option<(u32, u32)> {
+        Component::location(self)
+    }
+
+    fn key(&self) -> Option<&str> {
+        Component::key(self)
     }
 }
 

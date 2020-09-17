@@ -106,6 +106,12 @@ pub fn generate_vnode(component: View, vdom: Shared<VDom>, renderer: &mut Box<dy
     vnode
 }
 
+#[derive(PartialEq, Hash)]
+struct ChildId<'a> {
+    key: Option<&'a str>,
+    location: Option<(u32, u32)>
+}
+
 pub fn update_vnode(vnode: Shared<VNode>, mut new_component: Option<View>, renderer: &mut Box<dyn Renderer>) {
     let props_updated = match new_component {
         Some(ref other) => other.updated(),

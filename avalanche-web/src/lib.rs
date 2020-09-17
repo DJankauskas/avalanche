@@ -119,6 +119,8 @@ macro_rules! def_component {
     ) => {
         pub struct $tag {
             raw: RawElement,
+            location: (u32, u32),
+            key: Option<String>
         }
 
         impl ::avalanche::Component for $tag {
@@ -141,23 +143,40 @@ macro_rules! def_component {
                     name: $native_tag
                 })
             }
+
+            fn location(&self) -> Option<(u32, u32)> {
+                Some(self.location)
+            }
+
+            fn key(&self) -> Option<&str> {
+                self.key.as_deref()
+            }
         }
 
         pub struct $tag_builder {
-            raw: RawElement
+            raw: RawElement,
+            key: Option<String>
         }
 
         impl $tag_builder {
             pub fn new() -> Self {
                 Self {
-                    raw: std::default::Default::default()
+                    raw: std::default::Default::default(),
+                    key: None
                 }
             }
 
-            pub fn build(self) -> $tag {
+            pub fn build(self, location: (u32, u32)) -> $tag {
                 $tag {
-                    raw: self.raw
+                    raw: self.raw,
+                    location,
+                    key: self.key
                 }
+            }
+
+            pub fn key(mut self, key: String, _updated: bool) -> Self {
+                self.key = Some(key);
+                self
             }
 
             pub fn hidden(mut self, val: Option<bool>, updated: bool) -> Self {
@@ -694,12 +713,15 @@ fn remove_listener(
 #[derive(Clone, PartialEq)]
 pub struct Text {
     text: String,
-    updated: bool
+    updated: bool,
+    location: (u32, u32),
+    key: Option<String>
 }
 #[derive(Default)]
 pub struct TextBuilder {
     text: Option<String>,
-    updated: bool
+    updated: bool,
+    key: Option<String>
 }
 
 impl TextBuilder {
@@ -713,10 +735,17 @@ impl TextBuilder {
         self
     }
 
-    pub fn build(self) -> Text {
+    pub fn key(mut self, key: String, _updated: bool) -> Self {
+        self.text = Some(key);
+        self
+    }
+
+    pub fn build(self, location: (u32, u32)) -> Text {
         Text {
             text: self.text.unwrap(),
-            updated: self.updated
+            updated: self.updated,
+            key: self.key,
+            location
         }
     }
 }
@@ -738,5 +767,13 @@ impl Component for Text {
 
     fn updated(&self) -> bool {
         self.updated
+    }
+
+    fn location(&self) -> Option<(u32, u32)> {
+        Some(self.location)
+    }
+
+    fn key(&self) -> Option<&str> {
+        self.key.as_deref()
     }
 }
