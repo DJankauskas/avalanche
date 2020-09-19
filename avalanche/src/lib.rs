@@ -5,6 +5,8 @@ pub mod vdom;
 ///A trait providing platform-specific rendering code.
 pub mod renderer;
 
+pub(crate) mod tree;
+
 use std::{any::Any, rc::Rc};
 use downcast_rs::{Downcast, impl_downcast};
 pub use avalanche_macro::component;
