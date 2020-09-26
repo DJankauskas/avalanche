@@ -13,11 +13,20 @@ pub struct Node<T> {
     data: T,
 }
 
-#[derive(Copy, Clone)]
 pub struct NodeId<T> {
     idx: usize,
     phantom: PhantomData<T>,
 }
+
+impl<T> Clone for NodeId<T> {
+    fn clone(&self) -> Self {
+        Self {
+            idx: self.idx,
+            phantom: self.phantom
+        }
+    }
+}
+impl<T> Copy for NodeId<T> {}
 
 impl<T> NodeId<T> {
     fn idx(idx: usize) -> Self {
