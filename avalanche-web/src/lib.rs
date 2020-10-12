@@ -6,9 +6,9 @@ mod tests {
     }
 }
 
-use avalanche::{View, Component};
+use avalanche::{Component, View, renderer::Child};
 use avalanche::renderer::{Renderer, NativeType, NativeHandle, HasChildrenMarker};
-use avalanche::vdom::{VNode, node_with_native_handle};
+use avalanche::vdom::{VNode};
 
 use avalanche::{InternalContext, shared::Shared};
 
@@ -448,36 +448,19 @@ static TIMEOUT_MSG_NAME: &str = "oak_web_message_name";
 pub fn mount_to_body(view: View) {
     let renderer = WebRenderer::new();
     
-    let vdom = avalanche::vdom::generate_vdom(view, Box::new(renderer));
-    // let native_handle = vdom.exec_mut(|vdom| renderer.create_component(vdom));
+    let root = avalanche::vdom::generate_root(view, Box::new(renderer));
 
-    // match native_handle {
-    //     Some(native_handle) => {
-    //         let body = web_sys::window().expect("window").document().expect("document").body().expect("body");
-    //         let ref_to_node = &native_handle.downcast_ref::<WebNativeHandle>().expect("WebNativeHandle").node;
-    //         body.append_child(&ref_to_node).expect("append node to body");
-    //     },
-    //     None => {},
-    // };
-
-    vdom.exec(|vdom| {
-        match node_with_native_handle(vdom.root.clone().unwrap()) {
-            Some(vnode) => {
-                vnode.exec(|vnode| {
-                    //if vnode is Some, it must have a native handle
-                    let native_handle = vnode.native_handle.as_ref().unwrap();
-                    let body = web_sys::window().expect("window").document().expect("document").body().expect("body");
-                        let ref_to_node = &native_handle.downcast_ref::<WebNativeHandle>().expect("WebNativeHandle").node;
-                        body.append_child(&ref_to_node).expect("append node to body");
-                })
-            },
-            None => {},
+    root.native_handle(|native_handle| {
+        if let Some(native_handle) = native_handle {
+            let body = web_sys::window().expect("window").document().expect("document").body().expect("body");
+            let ref_to_node = &native_handle.downcast_ref::<WebNativeHandle>().expect("WebNativeHandle").node;
+            body.append_child(&ref_to_node).expect("append node to body");
         }
     });
 
     //TODO: more elegant solution that leaks less memory?
     //TODO: create Shared leak method to avoid extra alloc of Box call?
-    Box::leak(Box::new(vdom));
+    Box::leak(Box::new(root));
 }
 
 struct WebNativeHandle {
@@ -528,15 +511,16 @@ impl WebRenderer {
 
 impl Renderer for WebRenderer {
     //TODO: add support for () rendering (important!)
-    fn create_component(&mut self, vnode: &VNode) -> Option<NativeHandle> {
-        let action = match &vnode.native_type {
-            Some(action) => action,
-            None => return None,
-        };
+    fn create_component(
+        &mut self, 
+        native_type: &NativeType,  
+        component: &View,
+        children: &mut dyn Iterator<Item=Child>
+    ) -> Option<NativeHandle> {
 
-        let elem = match action.handler.as_ref() {
+        let elem = match native_type.handler.as_ref() {
             "oak_web_text" => {
-                let text_node = match vnode.component.downcast_ref::<Text>() {
+                let text_node = match component.downcast_ref::<Text>() {
                     Some(text) => self.document.create_text_node(&text.text),
                     None => panic!(
                         "WebRenderer: expected Text component for oak_web_text."
@@ -548,10 +532,10 @@ impl Renderer for WebRenderer {
                 }
             },
             "oak_web" => {
-                assert_ne!(action.name, "", "WebRenderer: expected tag name to not be empty.");
-                let raw_element = RawElement::get(action.name, &vnode.component);
+                assert_ne!(native_type.name, "", "WebRenderer: expected tag name to not be empty.");
+                let raw_element = RawElement::get(native_type.name, &component);
 
-                let element = self.document.create_element(&action.name).expect(
+                let element = self.document.create_element(&native_type.name).expect(
                     "WebRenderer: element creation failed from syntax error."
                 );
 
@@ -570,11 +554,8 @@ impl Renderer for WebRenderer {
                     }
                 }
 
-                for with_handle in vnode.children.iter().filter_map(|child| node_with_native_handle(child.clone())) {
-                    with_handle.exec(|with_handle| {
-                        let handle = with_handle.native_handle.as_ref().unwrap();
-                        element.append_child(&handle.downcast_ref::<WebNativeHandle>().expect("WebNativeHandle").node).unwrap();
-                    })
+                for handle in children.filter_map(|Child { native_handle, .. }| native_handle) {   
+                    element.append_child(&handle.downcast_ref::<WebNativeHandle>().expect("WebNativeHandle").node).unwrap();
                 }
             
 
@@ -593,16 +574,15 @@ impl Renderer for WebRenderer {
         &mut self, 
         native_type: &NativeType, 
         native_handle: &mut NativeHandle, 
-        _old_comp: &View,
-        new_comp: &View,
-        children: &[Shared<VNode>]
+        component: &View,
+        children: &mut dyn Iterator<Item=Child>
     ) {
         let web_handle = native_handle.downcast_mut::<WebNativeHandle>().unwrap();
         match native_type.handler.as_ref() {
             "oak_web" => {
                 let node = web_handle.node.clone();
                 let element = node.dyn_into::<web_sys::Element>().unwrap();
-                let raw_element = RawElement::get(native_type.name, new_comp);
+                let raw_element = RawElement::get(native_type.name, component);
                 
                 if raw_element.attrs_updated {
                     for (name, (attr, updated)) in raw_element.attrs.iter() {
@@ -630,16 +610,13 @@ impl Renderer for WebRenderer {
                     //TODO: diffing algo
                     element.set_inner_html("");
                     //copy-pasted from create code: factor out or replace with diffing
-                    for with_handle in children.iter().filter_map(|child| node_with_native_handle(child.clone())) {
-                        with_handle.exec(|with_handle| {
-                            let handle = with_handle.native_handle.as_ref().unwrap();
-                            element.append_child(&handle.downcast_ref::<WebNativeHandle>().expect("WebNativeHandle").node).unwrap();
-                        })
+                    for native_handle in children.filter_map(|Child {native_handle, ..}| native_handle) {
+                        element.append_child(&native_handle.downcast_ref::<WebNativeHandle>().expect("WebNativeHandle").node).unwrap();
                     }
                 }
             },
             "oak_web_text" => {
-                let new_text = new_comp.downcast_ref::<Text>().expect("Text component");
+                let new_text = component.downcast_ref::<Text>().expect("Text component");
                 if new_text.updated() {
                     //TODO: compare with old text?
                     web_handle.node.set_text_content(Some(&new_text.text));
