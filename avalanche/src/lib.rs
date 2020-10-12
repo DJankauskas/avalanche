@@ -1,22 +1,23 @@
+///A trait providing platform-specific rendering code.
+pub mod renderer;
 ///A reference-counted interior-mutable type designed to reduce runtime borrow rule violations.
 pub mod shared;
 ///An in-memory representation of the current component tree.
 pub mod vdom;
-///A trait providing platform-specific rendering code.
-pub mod renderer;
 
-pub(crate) mod tree;
+pub mod tree;
 
-use std::{any::Any, rc::Rc};
-use downcast_rs::{Downcast, impl_downcast};
 pub use avalanche_macro::component;
+use downcast_rs::{impl_downcast, Downcast};
 use renderer::NativeType;
-use vdom::{VNode, update_vnode};
 use shared::Shared;
+use std::{any::Any, rc::Rc};
+use tree::NodeId;
+use vdom::{update_vnode, VDom, VNode};
 
 #[macro_export]
 macro_rules! reactive_assert {
-    ( $( $($dept:ident),+ => $rec:ident );* ) => {}
+    ( $( $($dept:ident),+ => $rec:ident );* ) => {};
 }
 
 ///For internal use only, does not obey semver and is unsupported
@@ -28,21 +29,21 @@ macro_rules! reactive_assert {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __internal_identity {
-    ($e:expr) => {$e}
+    ($e:expr) => {
+        $e
+    };
 }
 
 ///A reference-counted type that holds an instance of a component.
 ///Component functions must return a view.
 #[derive(Clone)]
 pub struct View {
-    rc: Rc<dyn DynComponent>
+    rc: Rc<dyn DynComponent>,
 }
 
 impl View {
     fn new<T: DynComponent>(val: T) -> Self {
-        Self {
-            rc: Rc::new(val)
-        }
+        Self { rc: Rc::new(val) }
     }
 }
 
@@ -72,7 +73,7 @@ pub trait Component: 'static {
     fn render(&self, context: InternalContext) -> View;
 
     fn updated(&self) -> bool;
-    
+
     fn native_type(&self) -> Option<NativeType> {
         None
     }
@@ -95,7 +96,7 @@ impl Component for () {
     }
     fn updated(&self) -> bool {
         false
-    } 
+    }
 }
 
 ///An internal trait implemented for all `Component`s. This should not be
@@ -147,25 +148,37 @@ impl<T: Component> DynComponent for T {
 }
 
 #[doc(hidden)]
+///Provided as an argument to the [`Component::render`] method
+///to provide hooks access to component state and other data.
 pub struct InternalContext<'a> {
     pub state: &'a mut Box<dyn Any>,
-    //Shared value ONLY for passing to UseState
-    //within the render function this value is mutably borrowed,
-    //so exec and exec_mut will panic 
-    pub vnode: Shared<VNode>
+    pub component_pos: ComponentPos,
+}
+
+#[doc(hidden)]
+#[derive(Clone)]
+///Internal data structure that stores what tree a component
+///belongs to, and its position within it
+pub struct ComponentPos {
+    ///Shared value ONLY for passing to UseState
+    ///within the render function this value is mutably borrowed,
+    ///so exec and exec_mut will panic
+    pub vnode: NodeId<VNode>,
+    ///shared container to the VDom of which
+    pub vdom: Shared<VDom>,
 }
 
 ///A hook that allows a component to keep persistent state across renders.
 pub struct UseState<T: 'static> {
     state: Option<T>,
-    updated: bool
+    updated: bool,
 }
 
 impl<T> Default for UseState<T> {
     fn default() -> Self {
         Self {
             state: None,
-            updated: false
+            updated: false,
         }
     }
 }
@@ -174,12 +187,15 @@ impl<T> UseState<T> {
     ///This function is called by the framework. Users gain access to a reference to the
     ///state type and a setter when they call it.
     pub fn hook<'a>(
-        &'a mut self, 
-        vnode: Shared<VNode>, 
-        get_self: fn(&mut Box<dyn Any>) -> &mut UseState<T>
-    ) -> (impl FnOnce(T) -> (&'a T, UseStateSetter<T>), UseStateUpdates) {
+        &'a mut self,
+        component_pos: ComponentPos,
+        get_self: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
+    ) -> (
+        impl FnOnce(T) -> (&'a T, UseStateSetter<T>),
+        UseStateUpdates,
+    ) {
         let updates = UseStateUpdates {
-            update: self.updated
+            update: self.updated,
         };
         let closure = move |val| {
             if self.updated {
@@ -190,7 +206,7 @@ impl<T> UseState<T> {
                 self.updated = true;
             };
             let state_ref = self.state.as_ref().unwrap();
-            let setter = UseStateSetter::new(vnode, get_self);
+            let setter = UseStateSetter::new(component_pos, get_self);
             (state_ref, setter)
         };
         (closure, updates)
@@ -200,55 +216,82 @@ impl<T> UseState<T> {
 ///Provides a setter for a piece of state managed by `UseState<T>`.
 #[derive(Clone)]
 pub struct UseStateSetter<T: 'static> {
-    vnode: Shared<VNode>,
+    component_pos: ComponentPos,
     get_mut: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
 }
 
 impl<T: 'static> UseStateSetter<T> {
-    fn new(vnode: Shared<VNode>, get_mut: fn(&mut Box<dyn Any>) -> &mut UseState<T>) -> Self {
+    fn new(
+        component_pos: ComponentPos,
+        get_mut: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
+    ) -> Self {
         Self {
-            vnode,
-            get_mut
+            component_pos,
+            get_mut,
         }
     }
 
     ///Takes a function that modifies its attached state and triggers a rerender of its component.
-    ///The update is not performed immediately; its effect will only be accessible 
+    ///The update is not performed immediately; its effect will only be accessible
     ///on its component's rerender.
     pub fn call<F: FnOnce(&mut T)>(&self, f: F) {
-        let vnode_clone = self.vnode.clone();
-        let vdom_clone = self.vnode.exec(|vnode| vnode.vdom.clone());
         let get_mut = self.get_mut;
+        let vdom_clone = self.component_pos.vdom.clone();
+        let vdom_clone_2 = vdom_clone.clone();
+        let vnode_copy = self.component_pos.vnode;
 
-        self.vnode.exec_mut(move |vnode| {
+        self.component_pos.vdom.exec_mut(move |vdom| {
+            let vnode = vnode_copy.get_mut(&mut vdom.tree);
             let mut_ref_to_state = get_mut(vnode.state.as_mut().unwrap());
             f(mut_ref_to_state.state.as_mut().unwrap());
             mut_ref_to_state.updated = true;
 
-            vnode.vdom.exec_mut(|vdom| {
-                vdom.renderer.schedule_on_ui_thread(
-                    Box::new(move || {
-                        vnode_clone.exec_mut(|vnode| vnode.dirty = true);
-                        vdom_clone.exec_mut(|vdom| {
-                            update_vnode(vnode_clone, None, &mut vdom.renderer);
-                        });
-                    })
-                )
-            });
+            vdom.renderer.schedule_on_ui_thread(Box::new(move || {
+                vdom_clone.exec_mut(|vdom| {
+                    vnode_copy.get_mut(&mut vdom.tree).dirty = true;
+                    update_vnode(
+                        None, 
+                        vnode_copy, 
+                        &mut vdom.tree, 
+                        &mut vdom.renderer, 
+                        vdom_clone_2
+                    );
+                })
+            }));
         });
+        // let vnode_clone = self.vnode.clone();
+        // let vdom_clone = self.vnode.exec(|vnode| vnode.vdom.clone());
+        // let get_mut = self.get_mut;
+
+        // self.vnode.exec_mut(move |vnode| {
+        //     let mut_ref_to_state = get_mut(vnode.state.as_mut().unwrap());
+        //     f(mut_ref_to_state.state.as_mut().unwrap());
+        //     mut_ref_to_state.updated = true;
+
+        //     vnode.vdom.exec_mut(|vdom| {
+        //         vdom.renderer.schedule_on_ui_thread(
+        //             Box::new(move || {
+        //                 vnode_clone.exec_mut(|vnode| vnode.dirty = true);
+        //                 vdom_clone.exec_mut(|vdom| {
+        //                     update_vnode(vnode_clone, None, &mut vdom.renderer);
+        //                 });
+        //             })
+        //         )
+        //     });
+        // });
     }
 }
 
 #[doc(hidden)]
 pub struct UseStateUpdates {
-    update: bool
+    update: bool,
 }
 
 impl UseStateUpdates {
     #[doc(hidden)]
     ///Used to get the status of a portion of returned state
     ///Usage: if the return type is an array or tuple, passing a &[num] will
-    ///yield whether that element has been updated. If that element is also 
+    ///yield whether that element has been updated. If that element is also
     //a tuple or array, this logic applies recursively.
     pub fn index(&self, idx: &[usize]) -> bool {
         match idx {
@@ -260,7 +303,4 @@ impl UseStateUpdates {
             _ => self.update,
         }
     }
-    
 }
-
-
