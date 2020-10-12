@@ -1242,7 +1242,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                     };
                 )*
                 let state = std::option::Option::unwrap(std::any::Any::downcast_mut::<#state_name>(&mut **context.state));
-                #( let (#hook_name, #hook_updates_name) = state.#hook_name.hook(context.vnode.clone(), #hook_get_fn_name); );*
+                #( let (#hook_name, #hook_updates_name) = state.#hook_name.hook(context.component_pos.clone(), #hook_get_fn_name); );*
 
                 let _ = state;
                 let _ = context;
