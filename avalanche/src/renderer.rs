@@ -15,7 +15,6 @@ pub trait Renderer {
         children: &mut dyn Iterator<Item=Child>
     ) -> Option<NativeHandle>;
     
-    //TODO: make native_handle take &mut?
     fn update_component(
         &mut self, 
         native_type: &NativeType, 
