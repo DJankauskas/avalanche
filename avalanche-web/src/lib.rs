@@ -26,12 +26,17 @@ enum Attr {
     Handler(Rc<dyn Fn(Event)>)
 }
 #[derive(Default)]
-struct RawElement {
+#[doc(hidden)]
+#[non_exhaustive]
+pub struct RawElement {
     ///bool represents whether the attr was updated
     attrs: HashMap<&'static str, (Option<Attr>, bool)>,
     attrs_updated: bool,
     children: Vec<View>,
-    children_updated: bool
+    children_updated: bool,
+    key: Option<String>,
+    location: (u32, u32),
+    tag: &'static str
 }
 
 impl RawElement {
@@ -46,36 +51,39 @@ impl RawElement {
     }
 }
 
-//TODO: rewrite in 1.47
-//currently, string comparisons are used, which are slow
-//however, stabilized TypeId::of will allow matching on type ids instead
-//turning the match into an efficient jump table
-macro_rules! raw_element_get {
-    ( $($tag_str:expr => $tag_type:ty),* ) => {
-        impl RawElement {
-            fn get<'a>(tag: &'static str, from: &'a View) -> &'a Self {
-                match tag {
-                    $(
-                        $tag_str => {
-                            &from.downcast_ref::<$tag_type>().unwrap().raw
-                        }
-                    )*
-                    _ => panic!(tag)
-                }
-            }
-        }
-    }
-}
+impl Component for RawElement {
+    type Builder = ();
 
-raw_element_get!{
-    "div" => Div,
-    "button" => Button,
-    "h1" => H1,
-    "h2" => H2,
-    "h3" => H3,
-    "h4" => H4,
-    "h5" => H5,
-    "h6" => H6
+    fn render(&self, _context: InternalContext) -> View {
+        HasChildrenMarker {
+            children: self.children.clone()
+        }.into()
+    }
+
+    fn updated(&self) -> bool {
+        self.attrs_updated || self.children_updated
+    }
+
+    fn init_state(&self) -> Box<dyn std::any::Any> {
+        Box::new(())
+    }
+
+    fn native_type(&self) -> Option<NativeType> {
+        Some(
+            NativeType {
+                handler: "oak_web",
+                name: self.tag,
+            }
+        )
+    }
+
+    fn location(&self) -> Option<(u32, u32)> {
+        Some(self.location)
+    }
+
+    fn key(&self) -> Option<&str> {
+        self.key.as_deref()
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -117,65 +125,41 @@ macro_rules! def_component {
         $tag:ident;
         $tag_builder:ident;
     ) => {
-        pub struct $tag {
-            raw: RawElement,
-            location: (u32, u32),
-            key: Option<String>
-        }
+        pub struct $tag;
 
+        // Dummy implenentation of Component for $tag
+        // Used only for Builder; all tags create RawElements
         impl ::avalanche::Component for $tag {
             type Builder = $tag_builder;
 
             fn render(&self, _: InternalContext) -> View {
-                HasChildrenMarker {
-                    //TODO: take children by Rc?
-                    children: self.raw.children.clone()
-                }.into()
+                unreachable!()
             }
 
             fn updated(&self) -> bool {
-                self.raw.attrs_updated || self.raw.children_updated
-            }
-
-            fn native_type(&self) -> Option<NativeType> {
-                Some(NativeType {
-                    handler: "oak_web",
-                    name: $native_tag
-                })
-            }
-
-            fn location(&self) -> Option<(u32, u32)> {
-                Some(self.location)
-            }
-
-            fn key(&self) -> Option<&str> {
-                self.key.as_deref()
+                unreachable!()
             }
         }
 
         pub struct $tag_builder {
-            raw: RawElement,
-            key: Option<String>
+            raw: RawElement
         }
 
         impl $tag_builder {
             pub fn new() -> Self {
                 Self {
-                    raw: std::default::Default::default(),
-                    key: None
+                    raw: std::default::Default::default()
                 }
             }
 
-            pub fn build(self, location: (u32, u32)) -> $tag {
-                $tag {
-                    raw: self.raw,
-                    location,
-                    key: self.key
-                }
+            pub fn build(mut self, location: (u32, u32)) -> RawElement {
+                self.raw.location = location;
+                self.raw.tag = $native_tag;
+                self.raw
             }
 
             pub fn key(mut self, key: String, _updated: bool) -> Self {
-                self.key = Some(key);
+                self.raw.key = Some(key);
                 self
             }
 
@@ -533,7 +517,7 @@ impl Renderer for WebRenderer {
             },
             "oak_web" => {
                 assert_ne!(native_type.name, "", "WebRenderer: expected tag name to not be empty.");
-                let raw_element = RawElement::get(native_type.name, &component);
+                let raw_element = component.downcast_ref::<RawElement>().expect("component of type RawElement");
 
                 let element = self.document.create_element(&native_type.name).expect(
                     "WebRenderer: element creation failed from syntax error."
@@ -582,7 +566,7 @@ impl Renderer for WebRenderer {
             "oak_web" => {
                 let node = web_handle.node.clone();
                 let element = node.dyn_into::<web_sys::Element>().unwrap();
-                let raw_element = RawElement::get(native_type.name, component);
+                let raw_element = component.downcast_ref::<RawElement>().expect("component of type RawElement");
                 
                 if raw_element.attrs_updated {
                     for (name, (attr, updated)) in raw_element.attrs.iter() {
