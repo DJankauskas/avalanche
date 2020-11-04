@@ -59,7 +59,7 @@ impl<T> NodeId<T> {
     /// # Panics
     /// Panics if `self` is not present in the given `tree`, due to it being
     /// removed or from another tree.
-    fn parent(self, tree: &Tree<T>) -> Option<NodeId<T>> {
+    pub fn parent(self, tree: &Tree<T>) -> Option<NodeId<T>> {
         let node_ref = tree.nodes[self.idx].as_ref().expect("valid self");
         if node_ref.parent != 0 {
             Some(NodeId::idx(node_ref.parent))
