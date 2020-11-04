@@ -51,7 +51,21 @@ impl<T> NodeId<T> {
     /// Panics if `self` is not present in the given `tree`, due to it being
     /// removed or from another tree.
     pub fn len(self, tree: &Tree<T>) -> usize {
-        tree.nodes[self.idx].as_ref().unwrap().children.len()
+        tree.nodes[self.idx].as_ref().expect("valid self").children.len()
+    }
+
+    /// If the node has a parent, returns `Some(id)` where `id` is the parent [`NodeId`].
+    /// Otherwise, returns `None`.
+    /// # Panics
+    /// Panics if `self` is not present in the given `tree`, due to it being
+    /// removed or from another tree.
+    fn parent(self, tree: &Tree<T>) -> Option<NodeId<T>> {
+        let node_ref = tree.nodes[self.idx].as_ref().expect("valid self");
+        if node_ref.parent != 0 {
+            Some(NodeId::idx(node_ref.parent))
+        } else {
+            None
+        }
     }
 
     /// Get the [`NodeId`] with index `child_idx`
@@ -259,5 +273,21 @@ impl<T> Tree<T> {
         //if we didn't find anything, we say there are no open sites
         self.last_open = 0;
         None
+    }
+
+    pub fn get_mut_pair(&mut self, a: NodeId<T>, b: NodeId<T>) -> (&mut T, &mut T) {
+        if a.idx < b.idx {
+            let (left, right) = self.nodes.split_at_mut(b.idx);
+            (
+                &mut left[a.idx].as_mut().expect("valid NodeId a").data,
+                &mut right[0].as_mut().expect("valid NodeId b").data,
+            )
+        } else {
+            let (left, right) = self.nodes.split_at_mut(a.idx);
+            (
+                &mut right[0].as_mut().expect("valid NodeId a").data,
+                &mut left[b.idx].as_mut().expect("valid NodeId b").data,
+            )
+        }
     }
 }
