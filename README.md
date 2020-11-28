@@ -14,7 +14,7 @@ property will be marked as updated, while unmarked properties will be ignored (e
 - allow writing custom hooks with `#[hook]`
 #### avalanche
 - ~~allow hooks (currently only `UseState`) to provide update info~~
-- introduce keys to increase children performance, and automatically add them for static child layout
+- ~~introduce keys to increase children performance, and automatically add them for static child layout~~
 - support batch state updates more performantly
 - reduce memory stored and copied in components
 #### avalanche-web
