@@ -38,10 +38,12 @@ impl<T> NodeId<T> {
         }
     }
 
+    #[must_use]
     pub fn get(self, tree: &Tree<T>) -> &T {
         &tree.nodes[self.idx].as_ref().expect("valid NodeId").data
     }
 
+    #[must_use]
     pub fn get_mut(self, tree: &mut Tree<T>) -> &mut T {
         &mut tree.nodes[self.idx].as_mut().expect("valid NodeId").data
     }
@@ -51,7 +53,11 @@ impl<T> NodeId<T> {
     /// Panics if `self` is not present in the given `tree`, due to it being
     /// removed or from another tree.
     pub fn len(self, tree: &Tree<T>) -> usize {
-        tree.nodes[self.idx].as_ref().expect("valid self").children.len()
+        tree.nodes[self.idx]
+            .as_ref()
+            .expect("valid self")
+            .children
+            .len()
     }
 
     /// If the node has a parent, returns `Some(id)` where `id` is the parent [`NodeId`].
@@ -122,9 +128,24 @@ impl<T> NodeId<T> {
         gen_id
     }
 
+    /// Moves the child at index `old` to the index `new`.
+    /// # Panics
+    /// Panics if `old` or `new` are out of bounds.
+    pub fn move_child(self, old: usize, new: usize, tree: &mut Tree<T>) {
+        let children = &mut tree.nodes[self.idx]
+            .as_mut()
+            .expect("valid NodeId")
+            .children;
+        let id = children.remove(old);
+        children.insert(new, id);
+    }
+
     /// Removes the specified node from its parent.
     /// Panics if `self` is invalid or is the root node.
     pub fn remove(self, tree: &mut Tree<T>) -> T {
+        // this impl is currently incorrect!
+        // fix
+        todo!();
         NodeId::idx(tree.nodes[self.idx].as_ref().unwrap().parent).remove_child(self.idx, tree)
     }
 
@@ -275,6 +296,7 @@ impl<T> Tree<T> {
         None
     }
 
+    #[must_use]
     pub fn get_mut_pair(&mut self, a: NodeId<T>, b: NodeId<T>) -> (&mut T, &mut T) {
         if a.idx < b.idx {
             let (left, right) = self.nodes.split_at_mut(b.idx);
