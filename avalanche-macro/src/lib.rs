@@ -13,6 +13,11 @@ use syn::{Item, Block, Stmt, Expr, Pat, Lit, Ident, parse_macro_input, parse_quo
 use quote::{quote, format_ident};
 use proc_macro_error::{proc_macro_error, abort, emit_error};
 
+// Span line and column information with proc macros is not available on stable
+// To emulate unique identities for given component instantiations,
+// we currently instead generate random line and column numbers
+use rand::{random, Rng};
+
 use macro_expr::{ReactiveAssert, ComponentInit, Hooks};
 
 #[derive(Debug, Clone)]
@@ -311,11 +316,17 @@ impl Function {
                             assert_eq!(field_ident.len(), init_expr.len(), "quote repetition args matched");
                             assert_eq!(init_expr.len(), is_field_updated.len(), "quote repetition args matched");
 
+
+                            // emulating Span information on stable
+                            // TODO: utilize actual Span info on nightly
+                            let line: u32 = random();
+                            let column: u32 = random();
+
                             *syntax = parse_quote! {
                                 avalanche::__internal_identity! {
                                     <<#type_path as ::avalanche::Component>::Builder>::new()
                                     #(.#field_ident(#init_expr, #is_field_updated))*
-                                    .build((std::line!(), std::column!()))
+                                    .build((#line, #column))
                                     .into()
                                 }
                             };
