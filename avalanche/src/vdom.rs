@@ -532,26 +532,3 @@ fn native_update_vnode(
         (None, None) => {}
     }
 }
-
-fn destroy_vnode(
-    native_pos: &mut usize,
-    vnode: NodeId<VNode>,
-    tree: &mut Tree<VNode>,
-    renderer: &mut Box<dyn Renderer>,
-) {
-    if vnode.get(tree).native_handle.is_some() {
-        if let Some(native_parent) = parent_with_native_handle(vnode, tree) {
-            let native_parent_mut = native_parent.get_mut(tree);
-            renderer.remove_child(
-                native_parent_mut.native_type.as_ref().unwrap(),
-                native_parent_mut.native_handle.as_mut().unwrap(),
-                *native_pos,
-            );
-            *native_pos -= 1;
-        }
-    }
-    vnode.remove(tree);
-    //TODO: call native remove method recursively on children?
-    //perhaps a new component method revealing whether recursive detruction needed
-    //currently not needed for web platform
-}

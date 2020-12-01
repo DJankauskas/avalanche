@@ -16,7 +16,7 @@ use proc_macro_error::{proc_macro_error, abort, emit_error};
 // Span line and column information with proc macros is not available on stable
 // To emulate unique identities for given component instantiations,
 // we currently instead generate random line and column numbers
-use rand::{random, Rng};
+use rand::random;
 
 use macro_expr::{ReactiveAssert, ComponentInit, Hooks};
 

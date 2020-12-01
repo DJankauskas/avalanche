@@ -140,15 +140,6 @@ impl<T> NodeId<T> {
         children.insert(new, id);
     }
 
-    /// Removes the specified node from its parent.
-    /// Panics if `self` is invalid or is the root node.
-    pub fn remove(self, tree: &mut Tree<T>) -> T {
-        // this impl is currently incorrect!
-        // fix
-        todo!();
-        NodeId::idx(tree.nodes[self.idx].as_ref().unwrap().parent).remove_child(self.idx, tree)
-    }
-
     /// Removes the specified child by index
     pub fn remove_child(self, child: usize, tree: &mut Tree<T>) -> T {
         let idx = *tree.nodes[self.idx]
