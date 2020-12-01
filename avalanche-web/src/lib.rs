@@ -514,7 +514,6 @@ impl WebRenderer {
         parent
             .child_nodes()
             .item(child_idx as u32)
-            .map(|c| c.dyn_into::<web_sys::Node>().unwrap())
     }
 
     fn assert_handler_oak_web(native_type: &NativeType) {
@@ -724,6 +723,8 @@ impl Renderer for WebRenderer {
         a: usize,
         b: usize
     ) {
+        Self::assert_handler_oak_web(parent_type);
+        let parent_element = Self::handle_to_element(parent_handle);
         todo!()
     }
 
