@@ -511,9 +511,7 @@ impl WebRenderer {
     }
 
     fn try_get_child(parent: &web_sys::Element, child_idx: usize) -> Option<web_sys::Node> {
-        parent
-            .child_nodes()
-            .item(child_idx as u32)
+        parent.child_nodes().item(child_idx as u32)
     }
 
     fn assert_handler_oak_web(native_type: &NativeType) {
@@ -532,8 +530,7 @@ impl WebRenderer {
 
     fn handle_to_element(native_handle: &NativeHandle) -> web_sys::Element {
         let node = Self::handle_to_node(native_handle);
-        node
-            .dyn_into::<web_sys::Element>()
+        node.dyn_into::<web_sys::Element>()
             .expect("Element (not Text node)")
     }
 }
@@ -580,12 +577,6 @@ impl Renderer for WebRenderer {
                         }
                     }
                 }
-
-                // TODO: remove
-                // children handling
-                // for handle in children.filter_map(|Child { native_handle, .. }| native_handle) {
-                //     element.append_child(&handle.downcast_ref::<WebNativeHandle>().expect("WebNativeHandle").node).unwrap();
-                // }
 
                 WebNativeHandle {
                     node: web_sys::Node::from(element),
@@ -637,16 +628,6 @@ impl Renderer for WebRenderer {
                         }
                     }
                 }
-
-                // TODO: remove children handling
-                // if raw_element.children_updated {
-                //     //TODO: diffing algo
-                //     element.set_inner_html("");
-                //     //copy-pasted from create code: factor out or replace with diffing
-                //     for native_handle in children.filter_map(|Child {native_handle, ..}| native_handle) {
-                //         element.append_child(&native_handle.downcast_ref::<WebNativeHandle>().expect("WebNativeHandle").node).unwrap();
-                //     }
-                // }
             }
             "oak_web_text" => {
                 let new_text = component.downcast_ref::<Text>().expect("Text component");
@@ -713,7 +694,9 @@ impl Renderer for WebRenderer {
         let parent_element = Self::handle_to_element(parent_handle);
         let child_node = Self::handle_to_node(child_handle);
         let component_after = Self::try_get_child(&parent_element, index);
-        parent_element.insert_before(&child_node, component_after.as_ref()).expect("insert success");
+        parent_element
+            .insert_before(&child_node, component_after.as_ref())
+            .expect("insert success");
     }
 
     fn swap_children(
@@ -721,7 +704,7 @@ impl Renderer for WebRenderer {
         parent_type: &NativeType,
         parent_handle: &mut NativeHandle,
         a: usize,
-        b: usize
+        b: usize,
     ) {
         Self::assert_handler_oak_web(parent_type);
         let parent_element = Self::handle_to_element(parent_handle);
@@ -741,7 +724,9 @@ impl Renderer for WebRenderer {
         let curr_child_node = Self::get_child(&parent_element, index);
         let replace_child_node = Self::handle_to_node(child_handle);
         if curr_child_node != replace_child_node {
-            parent_element.replace_child(&curr_child_node, &replace_child_node).expect("successful replace");
+            parent_element
+                .replace_child(&curr_child_node, &replace_child_node)
+                .expect("successful replace");
         }
     }
 
@@ -755,9 +740,13 @@ impl Renderer for WebRenderer {
         Self::assert_handler_oak_web(parent_type);
         let parent_element = Self::handle_to_element(parent_handle);
         let curr_child_node = Self::get_child(&parent_element, old);
-        let removed = parent_element.remove_child(&curr_child_node).expect("successful remove");
+        let removed = parent_element
+            .remove_child(&curr_child_node)
+            .expect("successful remove");
         let component_after_insert = Self::try_get_child(&parent_element, new);
-        parent_element.insert_before(&removed, component_after_insert.as_ref()).expect("insert success");
+        parent_element
+            .insert_before(&removed, component_after_insert.as_ref())
+            .expect("insert success");
     }
 
     fn remove_child(
@@ -769,7 +758,9 @@ impl Renderer for WebRenderer {
         Self::assert_handler_oak_web(parent_type);
         let parent_element = Self::handle_to_element(parent_handle);
         let child_node = Self::get_child(&parent_element, index);
-        parent_element.remove_child(&child_node).expect("successful remove");
+        parent_element
+            .remove_child(&child_node)
+            .expect("successful remove");
     }
 
     fn log(&self, string: &str) {
