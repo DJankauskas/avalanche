@@ -717,6 +717,16 @@ impl Renderer for WebRenderer {
         parent_element.insert_before(&child_node, component_after.as_ref()).expect("insert success");
     }
 
+    fn swap_children(
+        &mut self,
+        parent_type: &NativeType,
+        parent_handle: &mut NativeHandle,
+        a: usize,
+        b: usize
+    ) {
+        todo!()
+    }
+
     fn replace_child(
         &mut self,
         parent_type: &NativeType,

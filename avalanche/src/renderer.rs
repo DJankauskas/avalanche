@@ -40,6 +40,7 @@ pub trait Renderer {
 
     /// Replaces the component at position `index` with the native component
     /// with handle `child_handle`.
+    /// The implementation should implement replacing a component with itself as a noop.
     /// # Panics
     /// Panics if `index > len - 1`, where `len` is the number of children the parent has.
     fn replace_child(
@@ -49,6 +50,17 @@ pub trait Renderer {
         index: usize, 
         child_type: &NativeType,
         child_handle: &NativeHandle
+    );
+
+    /// Swaps the children at indices `a` and `b`.
+    /// # Panics
+    /// Panics if `a` or `b` are less than `len`, where `len` is the number of children the parent has.
+    fn swap_children(
+        &mut self,
+        parent_type: &NativeType,
+        parent_handle: &mut NativeHandle,
+        a: usize,
+        b: usize
     );
 
     /// Moves the child at position `old` to the position `new`.

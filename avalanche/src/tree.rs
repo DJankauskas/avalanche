@@ -161,6 +161,10 @@ impl<T> NodeId<T> {
         tree.remove(NodeId::idx(idx))
     }
 
+    pub fn swap_children(self, a: usize, b: usize, tree: &mut Tree<T>) {
+        tree.nodes[self.idx].as_mut().expect("valid NodeId").children.swap(a, b);
+    }
+
     /// Removes all children from the node
     pub fn clear(self, tree: &mut Tree<T>) {
         let len = tree.nodes[self.idx].as_ref().unwrap().children.len();
