@@ -8,7 +8,7 @@ mod tests {
 
 use avalanche::renderer::{HasChildrenMarker, NativeHandle, NativeType, Renderer};
 use avalanche::vdom::VNode;
-use avalanche::{renderer::Child, Component, View};
+use avalanche::{Component, View};
 
 use avalanche::{shared::Shared, InternalContext};
 
@@ -708,7 +708,15 @@ impl Renderer for WebRenderer {
     ) {
         Self::assert_handler_oak_web(parent_type);
         let parent_element = Self::handle_to_element(parent_handle);
-        todo!()
+        let lesser = std::cmp::min(a, b);
+        let greater = std::cmp::max(a, b);
+
+        let lesser_child = Self::get_child(&parent_element, lesser);
+        let greater_child = Self::get_child(&parent_element, greater);
+        parent_element.insert_before(&greater_child, Some(&lesser_child)).expect("insert succeeded");
+
+        let lesser_child = Self::get_child(&parent_element, lesser);
+        parent_element.insert_before(&lesser_child, Some(&greater_child)).expect("insert succeeded");
     }
 
     fn replace_child(
