@@ -21,6 +21,7 @@ features = [
     "EventTarget",
     "Window",
     "Text",
+    "HtmlInputElement",
     "Event",
     "AnimationEvent",
     "CompositionEvent",

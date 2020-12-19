@@ -16,7 +16,7 @@ use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 use crate::events::*;
-use gloo::events::EventListener;
+use gloo::events::{EventListener, EventListenerOptions};
 use wasm_bindgen::JsCast;
 
 pub mod events;
@@ -34,6 +34,7 @@ pub struct RawElement {
     attrs_updated: bool,
     children: Vec<View>,
     children_updated: bool,
+    is_controlled: bool,
     key: Option<String>,
     location: (u32, u32),
     tag: &'static str,
@@ -430,6 +431,36 @@ def_component! {
 
 add_global_attrs! {H6Builder}
 
+// TODO: boolean attributes autofocus, disabled, readonly, required
+def_component_attrs! {
+    add_form_attrs;
+    props:
+        "autocomplete" => auto_complete: String,
+        "form" => form: String,
+        "maxlength" => max_length: u32,
+        "minlength" => min_length: u32,
+        "name" => name: String;
+    listeners:
+        ;
+}
+
+def_component! {
+    "input";
+    Input;
+    InputBuilder;
+}
+
+add_global_attrs! {InputBuilder}
+add_form_attrs! {InputBuilder}
+
+impl InputBuilder {
+    pub fn value(mut self, val: String, updated: bool) -> Self {
+        self.raw.is_controlled = true;
+        self.raw.attr("value", Some(Attr::Prop(val)), updated);
+        self
+    }
+}
+
 static TIMEOUT_MSG_NAME: &str = "oak_web_message_name";
 
 ///Renders the given view in the current document's body.
@@ -565,14 +596,57 @@ impl Renderer for WebRenderer {
 
                 let mut listeners = HashMap::new();
 
-                for (name, attr) in raw_element.attrs.iter() {
-                    if let Some(attr) = &attr.0 {
-                        match attr {
-                            Attr::Prop(prop) => {
-                                element.set_attribute(name, &prop).unwrap();
+                match raw_element.tag {
+                    "input" => {
+                        let input_element = element
+                            .clone()
+                            .dyn_into::<web_sys::HtmlInputElement>()
+                            .expect("HTMLInputElement");
+                        for (name, attr) in raw_element.attrs.iter() {
+                            if let Some(attr) = &attr.0 {
+                                match attr {
+                                    Attr::Prop(prop) => match *name {
+                                        "value" => input_element.set_value(prop),
+                                        _ => input_element.set_attribute(name, &prop).unwrap(),
+                                    },
+                                    Attr::Handler(handler) => match *name {
+                                        "input" if raw_element.is_controlled => {
+                                            add_listener_prevent_default(
+                                                &element,
+                                                name,
+                                                handler.clone(),
+                                                &mut listeners,
+                                            );
+                                        }
+                                        _ => {
+                                            add_listener(
+                                                &element,
+                                                name,
+                                                handler.clone(),
+                                                &mut listeners,
+                                            );
+                                        }
+                                    },
+                                }
                             }
-                            Attr::Handler(handler) => {
-                                add_listener(&element, name, handler.clone(), &mut listeners);
+                        }
+                    }
+                    _ => {
+                        for (name, attr) in raw_element.attrs.iter() {
+                            if let Some(attr) = &attr.0 {
+                                match attr {
+                                    Attr::Prop(prop) => {
+                                        element.set_attribute(name, &prop).unwrap();
+                                    }
+                                    Attr::Handler(handler) => {
+                                        add_listener(
+                                            &element,
+                                            name,
+                                            handler.clone(),
+                                            &mut listeners,
+                                        );
+                                    }
+                                }
                             }
                         }
                     }
@@ -605,24 +679,71 @@ impl Renderer for WebRenderer {
                     .expect("component of type RawElement");
 
                 if raw_element.attrs_updated {
-                    for (name, (attr, updated)) in raw_element.attrs.iter() {
-                        if *updated {
-                            match attr {
-                                Some(attr) => match attr {
-                                    Attr::Prop(prop) => {
-                                        element.set_attribute(name, &prop).unwrap();
+                    match raw_element.tag {
+                        "input" => {
+                            let input_element = element
+                                .clone()
+                                .dyn_into::<web_sys::HtmlInputElement>()
+                                .expect("HTMLInputElement");
+                            for (name, (attr, updated)) in raw_element.attrs.iter() {
+                                if *updated {
+                                    match attr {
+                                        Some(attr) => match attr {
+                                            Attr::Prop(prop) => {
+                                                if *name == "value" {
+                                                    input_element.set_value(&prop);
+                                                } else {
+                                                    input_element
+                                                        .set_attribute(name, &prop)
+                                                        .unwrap();
+                                                }
+                                            }
+                                            Attr::Handler(handler) => {
+                                                if raw_element.is_controlled && *name == "input" {
+                                                    update_listener_prevent_default(
+                                                        &element,
+                                                        name,
+                                                        handler.clone(),
+                                                        &mut web_handle.listeners,
+                                                    );
+                                                } else {
+                                                    update_listener(
+                                                        &element,
+                                                        name,
+                                                        handler.clone(),
+                                                        &mut web_handle.listeners,
+                                                    );
+                                                }
+                                            }
+                                        },
+                                        None => {
+                                            remove_listener(name, &mut web_handle.listeners);
+                                        }
                                     }
-                                    Attr::Handler(handler) => {
-                                        update_listener(
-                                            &element,
-                                            name,
-                                            handler.clone(),
-                                            &mut web_handle.listeners,
-                                        );
+                                }
+                            }
+                        }
+                        _ => {
+                            for (name, (attr, updated)) in raw_element.attrs.iter() {
+                                if *updated {
+                                    match attr {
+                                        Some(attr) => match attr {
+                                            Attr::Prop(prop) => {
+                                                element.set_attribute(name, &prop).unwrap();
+                                            }
+                                            Attr::Handler(handler) => {
+                                                update_listener(
+                                                    &element,
+                                                    name,
+                                                    handler.clone(),
+                                                    &mut web_handle.listeners,
+                                                );
+                                            }
+                                        },
+                                        None => {
+                                            remove_listener(name, &mut web_handle.listeners);
+                                        }
                                     }
-                                },
-                                None => {
-                                    remove_listener(name, &mut web_handle.listeners);
                                 }
                             }
                         }
@@ -690,6 +811,7 @@ impl Renderer for WebRenderer {
         _child_type: &NativeType,
         child_handle: &NativeHandle,
     ) {
+        self.log("inserting child");
         Self::assert_handler_oak_web(parent_type);
         let parent_element = Self::handle_to_element(parent_handle);
         let child_node = Self::handle_to_node(child_handle);
@@ -713,10 +835,14 @@ impl Renderer for WebRenderer {
 
         let lesser_child = Self::get_child(&parent_element, lesser);
         let greater_child = Self::get_child(&parent_element, greater);
-        parent_element.insert_before(&greater_child, Some(&lesser_child)).expect("insert succeeded");
+        parent_element
+            .insert_before(&greater_child, Some(&lesser_child))
+            .expect("insert succeeded");
 
         let lesser_child = Self::get_child(&parent_element, lesser);
-        parent_element.insert_before(&lesser_child, Some(&greater_child)).expect("insert succeeded");
+        parent_element
+            .insert_before(&lesser_child, Some(&greater_child))
+            .expect("insert succeeded");
     }
 
     fn replace_child(
@@ -787,6 +913,21 @@ fn add_listener(
     listeners.insert(name, listener);
 }
 
+fn add_listener_prevent_default(
+    element: &web_sys::Element,
+    name: &'static str,
+    callback: Rc<dyn Fn(Event)>,
+    listeners: &mut HashMap<&'static str, EventListener>,
+) {
+    let mut options = EventListenerOptions::default();
+    options.passive = false;
+    let listener = EventListener::new_with_options(&element, name, options, move |event| {
+        event.prevent_default();
+        callback(event.clone())
+    });
+    listeners.insert(name, listener);
+}
+
 fn update_listener(
     element: &web_sys::Element,
     name: &'static str,
@@ -795,6 +936,20 @@ fn update_listener(
 ) {
     let _ = listeners.remove(name);
     let listener = EventListener::new(&element, name, move |event| callback(event.clone()));
+    listeners.insert(name, listener);
+}
+
+fn update_listener_prevent_default(
+    element: &web_sys::Element,
+    name: &'static str,
+    callback: Rc<dyn Fn(Event)>,
+    listeners: &mut HashMap<&'static str, EventListener>,
+) {
+    let _ = listeners.remove(name);
+    let listener = EventListener::new(&element, name, move |event| {
+        event.prevent_default();
+        callback(event.clone());
+    });
     listeners.insert(name, listener);
 }
 
@@ -829,7 +984,7 @@ impl TextBuilder {
     }
 
     pub fn key(mut self, key: String, _updated: bool) -> Self {
-        self.text = Some(key);
+        self.key = Some(key);
         self
     }
 
