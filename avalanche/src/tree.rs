@@ -78,7 +78,17 @@ impl<T> NodeId<T> {
     /// # Panics
     /// Panics if `child_idx` is out of bounds
     pub fn child(self, child_idx: usize, tree: &Tree<T>) -> Self {
-        NodeId::idx(tree.nodes[self.idx].as_ref().expect("valid self").children[child_idx])
+        NodeId::idx(
+            tree.nodes
+                .get(self.idx)
+                .expect("valid self")
+                .as_ref()
+                .expect("valid self")
+                .children
+                .get(child_idx)
+                .copied()
+                .expect("in bounds child_idx"),
+        )
     }
 
     /// Helper function for [`push`] and [`insert`].
@@ -92,6 +102,7 @@ impl<T> NodeId<T> {
 
         match tree.next_open_site() {
             Some(idx) => {
+                debug_assert!(tree.nodes[idx].is_none(), "overwriting occupied cell");
                 tree.nodes[idx] = Some(node);
                 NodeId::idx(idx)
             }
@@ -153,7 +164,11 @@ impl<T> NodeId<T> {
     }
 
     pub fn swap_children(self, a: usize, b: usize, tree: &mut Tree<T>) {
-        tree.nodes[self.idx].as_mut().expect("valid NodeId").children.swap(a, b);
+        tree.nodes[self.idx]
+            .as_mut()
+            .expect("valid NodeId")
+            .children
+            .swap(a, b);
     }
 
     /// Removes all children from the node
