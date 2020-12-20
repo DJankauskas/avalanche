@@ -109,17 +109,23 @@ fn Cast(a: u8) {
     ().into()
 }
 
-//TODO: fix closure handling
-// #[component]
-// fn Closure(a: u8, b: u8) {
-//     let closure = || {
-//         a;
-//     };
+// TODO: fix closure handling
+#[component]
+fn Closure(a: u8, b: u8) {
+    let closure1 = || {
+        let (mut a, b) = (*a, *b);
+        a += b;
+    };
 
-//     reactive_assert!(a => closure);
+    reactive_assert!(a, b => closure1);
 
-//     ().into()
-// }
+    let closure2 = || {
+        a;
+    };
+    reactive_assert!(a => closure2);
+
+    ().into()
+}
 
 #[component]
 fn Field(a: (u8, u8), b: u8) -> u8 {

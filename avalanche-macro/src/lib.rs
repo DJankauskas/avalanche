@@ -51,7 +51,6 @@ struct Var {
 enum ExprType {
     //represents tuples and arrays with known fields
     NumberedFields(Vec<ExprType>),
-    Closure(Closure),
     Opaque(Dependencies)
 }
 
@@ -66,9 +65,6 @@ impl ExprType {
 
                 dependencies
             }
-            ExprType::Closure(closure) => {
-                closure.value_dependencies.clone()
-            }
             ExprType::Opaque(opaque) => {
                 opaque.clone()
             }
@@ -81,11 +77,6 @@ impl ExprType {
                 for field in fields.iter_mut() {
                     field.extend(other.clone());
                 }
-            }
-            ExprType::Closure(_) => {
-                //todo: should anything be done?
-                //no valid way of modifying a closure except by callig it
-                //should a closure be extended by its parameters?
             }
             ExprType::Opaque(opaque) => {
                 opaque.extend(other.unify());
@@ -139,6 +130,30 @@ impl Scope {
     }
 }
 
+#[derive(Clone)]
+struct UnitDeps {
+    /// The dependencies of a unit's value
+    value_deps: ExprType,
+    /// the dependencies of all values present within a statement, block, or expression
+    /// useful when dependencies of side effects are also needed
+    effect_deps: Dependencies
+}
+
+impl UnitDeps {
+    fn extend(&mut self, other: UnitDeps) {
+        self.value_deps.extend(other.value_deps);
+        self.effect_deps.extend(other.effect_deps)
+    }
+
+    fn duplicated(expr: ExprType) -> Self {
+        UnitDeps {
+            value_deps: expr.clone(),
+            effect_deps: expr.unify(),
+            
+        }
+    }
+}
+
 #[derive(Default, Debug)]
 struct Function {
     scopes: Vec<Scope>
@@ -171,69 +186,67 @@ impl Function {
         None
     }
 
-    ///Find a prop or hook value, if it exists.
+    /// Find a prop or hook value, if it exists.
     // fn get_input_var(&self, name: &str) -> Option<&Var> {
     //     let scope = &self.scopes[0];
     //     scope.vars.iter().rev().find(|item| item.name == name)
     // }
 
-    fn block(&mut self, block: &mut Block) -> ExprType {
-        let mut dependencies: Option<ExprType> = None;
+    fn block(&mut self, block: &mut Block) -> UnitDeps {
+       let mut deps = UnitDeps::duplicated(ExprType::Opaque(Dependencies::new()));
 
         self.scopes.push(Scope::new());
         for stmt in &mut block.stmts {
-            if let Some(stmt_dependencies) = self.stmt(stmt) {
-                match &mut dependencies {
-                    Some(deps) => {
-                        deps.extend(stmt_dependencies);
-                    }
-                    None => {
-                        dependencies = Some(stmt_dependencies);
-                    }
-                }
-            }
+            deps.extend(self.stmt(stmt));
         }
         self.scopes.pop();
 
 
-        //todo: add dependencies of last statement
-        dependencies.unwrap_or_else(|| ExprType::Opaque(Dependencies::new()))
+        deps
     }
 
-    fn stmt(&mut self, stmt: &mut Stmt) -> Option<ExprType> {
+    fn stmt(&mut self, stmt: &mut Stmt) -> UnitDeps {
         match stmt {
             Stmt::Local(local) => {
                 let init_dependencies = match &mut local.init {
                     Some(expr) => self.expr(&mut expr.1),
-                    None => ExprType::Opaque(Dependencies::new())
+                    None => UnitDeps::duplicated(ExprType::Opaque(Dependencies::new()))
                 };
                 let scope = self.scopes.last_mut().unwrap();
-                let vars = from_pat(&local.pat, init_dependencies);
+                let vars = from_pat(&local.pat, init_dependencies.value_deps.clone());
                 scope.vars.extend(vars);
+
+                return init_dependencies;
             },
             Stmt::Item(item) => {
                 match item {
                     syn::Item::Macro(macro_item) => {
-                        return Some(self.mac(macro_item.mac.clone(), macro_item));
+                        return self.mac(macro_item.mac.clone(), macro_item);
                     }
                     _ => {}
                 }
             },
             Stmt::Expr(expr) => {
-                return Some(self.expr(expr));
+                return self.expr(expr);
             },
             Stmt::Semi(expr, _) => {
                 let escape_expr = self.escape_expr(expr);
                 if escape_expr.escape {
-                    return Some(escape_expr.dependencies);
+                    return escape_expr.dependencies;
+                }
+                else {
+                    return UnitDeps {
+                        value_deps: ExprType::Opaque(Default::default()),
+                        effect_deps: escape_expr.dependencies.effect_deps
+                    }
                 }
             }
         };
 
-        None
+        UnitDeps::duplicated(ExprType::Opaque(Default::default()))
     }
 
-    fn mac<P: Parse>(&mut self, mac: syn::Macro, syntax: &mut P) -> ExprType {
+    fn mac<P: Parse>(&mut self, mac: syn::Macro, syntax: &mut P) -> UnitDeps {
         let name = mac.path.segments.last().unwrap().ident.to_string();
         match &*name {
             "reactive_assert" => {
@@ -278,7 +291,7 @@ impl Function {
                 if name.chars().next().unwrap().is_ascii_uppercase() {
                     match mac.parse_body::<ComponentInit>() {
                         Ok(mut init) => {
-                            let mut macro_dependencies = ExprType::Opaque(Dependencies::new());
+                            let mut macro_dependencies = UnitDeps::duplicated(ExprType::Opaque(Dependencies::new()));
                             let mut field_ident = Vec::with_capacity(init.fields.len());
                             let mut init_expr = Vec::with_capacity(init.fields.len());
                             let mut is_field_updated = Vec::with_capacity(init.fields.len());
@@ -290,7 +303,8 @@ impl Function {
                                 field_ident.push(ident);
                                 let dependencies = self.expr(&mut field.expr);
                                 macro_dependencies.extend(dependencies.clone());
-                                let dependencies = dependencies.unify();
+                                // TODO: unify value_deps or use effect_deps?
+                                let dependencies = dependencies.effect_deps;
                                 init_expr.push(&field.expr);
                                 let mut dependency_update = Vec::with_capacity(dependencies.len());
                                 for dependency_info in dependencies.values() {
@@ -342,15 +356,15 @@ impl Function {
                 };
             }
         };
-        ExprType::Opaque(Dependencies::new())
+        UnitDeps::duplicated(ExprType::Opaque(Dependencies::new()))
     }
 
-    fn expr(&mut self, expr: &mut Expr) -> ExprType {
+    fn expr(&mut self, expr: &mut Expr) -> UnitDeps {
         self.escape_expr(expr).dependencies
     }
 
     fn escape_expr(&mut self, expr: &mut Expr) -> EscapeExprRet {
-        let mut dependencies: Option<ExprType> = None;
+        let mut dependencies: Option<UnitDeps> = None;
         let mut escape = false;
 
         match expr {
@@ -358,14 +372,15 @@ impl Function {
                 let mut fields = Vec::with_capacity(array.elems.len());
                 for expr in array.elems.iter_mut() {
                     let expr_deps = self.expr(expr);
-                    fields.push(expr_deps);
+                    fields.push(expr_deps.value_deps);
                 }
 
-                dependencies = Some(ExprType::NumberedFields(fields));
+                let field_deps = ExprType::NumberedFields(fields);
+                dependencies = Some(UnitDeps::duplicated(field_deps));
             }
             Expr::Assign(assign) => {
                 let rhs = self.expr(&mut assign.right);
-                let vars = from_expr(&assign.left, rhs);
+                let vars = from_expr(&assign.left, rhs.value_deps);
 
                 for var in vars.into_iter() {
                     if let Some(old) = self.get_var_mut(&var.name) {
@@ -373,20 +388,30 @@ impl Function {
                     }
                 }
 
-                //note: no dependencies need be set
-                //assignment returns ()
+                let mut lhs = self.expr(&mut assign.left);
+                lhs.effect_deps.extend(rhs.effect_deps);
+
+                dependencies = Some(UnitDeps {
+                    value_deps: ExprType::Opaque(Dependencies::new()),
+                    effect_deps: lhs.effect_deps
+                })
             }
             Expr::AssignOp(assign_op) => {
                 let rhs = self.expr(&mut assign_op.right);
-                let lhs_vars = from_expr(&assign_op.left, rhs);
+                let lhs_vars = from_expr(&assign_op.left, rhs.value_deps);
                 for lhs_var in lhs_vars.into_iter() {
                     if let Some(var) = self.get_var_mut(&lhs_var.name) {
                         var.dependencies.extend(lhs_var.dependencies);
                     }
                 }
 
-                //note: no dependencies need be set
-                //assignment returns ()
+                let mut lhs = self.expr(&mut assign_op.left);
+                lhs.effect_deps.extend(rhs.effect_deps);
+
+                dependencies = Some(UnitDeps {
+                    value_deps: ExprType::Opaque(Dependencies::new()),
+                    effect_deps: lhs.effect_deps
+                })
             }
             Expr::Async(_) => {
                 abort!(expr, "async blocks unsupported")
@@ -440,14 +465,10 @@ impl Function {
 
                 self.scopes.push(closure_scope);
 
-                let closure = Closure {
-                    call_dependencies: self.expr(&mut closure.body).clone().unify(),
-                    //TODO: read below
-                    //this is currently incorrect
-                    value_dependencies: self.expr(&mut closure.body).unify(), 
-                };
+                let mut deps = self.expr(&mut closure.body);
+                deps.value_deps = ExprType::Opaque(deps.effect_deps.clone());
                 
-                dependencies = Some(ExprType::Closure(closure));
+                dependencies = Some(deps);
 
                 self.scopes.pop();
 
@@ -467,17 +488,17 @@ impl Function {
                     //if we do not affect sub, we must not return, as if we did,
                     //a render function's return might depend on what index is used,
                     //but we do not add that to dependencies here.
-                    if deps.append_to_sub(unnamed.index as usize) {
+                    if deps.value_deps.append_to_sub(unnamed.index as usize) {
                         return EscapeExprRet {
                             dependencies: deps,
                             escape: false
                         };
                     };
-                    match &deps {
+                    match &deps.value_deps {
                         ExprType::NumberedFields(fields) => {
                             if let Some(field_deps) = fields.get(unnamed.index as usize) {
                                 return EscapeExprRet{
-                                    dependencies: field_deps.clone(),
+                                    dependencies: UnitDeps::duplicated(field_deps.clone()),
                                     escape: false
                                 };
                             }
@@ -494,7 +515,7 @@ impl Function {
 
                 let expr = self.expr(&mut for_expr.expr);
 
-                let vars = from_pat(&for_expr.pat, expr);
+                let vars = from_pat(&for_expr.pat, expr.value_deps);
                 scope.vars = vars;
                 self.scopes.push(scope);
 
@@ -503,6 +524,8 @@ impl Function {
 
                 //variables created by pat no longer present
                 self.scopes.pop();
+
+                // TODO: effect deps
             }
             Expr::Group(group) => {
                 dependencies = Some(self.expr(&mut group.expr));
@@ -521,7 +544,7 @@ impl Function {
                 match &mut *if_expr.cond {
                     Expr::Let(let_expr) => {
                         let let_dependencies = self.expr(&mut let_expr.expr);
-                        if_scope.vars = from_pat(&let_expr.pat, let_dependencies);
+                        if_scope.vars = from_pat(&let_expr.pat, let_dependencies.value_deps);
                     },
                     _ => {}
                 }
@@ -551,17 +574,17 @@ impl Function {
                             //if we do not affect sub, we must not return, as if we did,
                             //a render function's return might depend on what index is used,
                             //but we do not add that to dependencies here.
-                            if deps.append_to_sub(index) {
+                            if deps.value_deps.append_to_sub(index) {
                                 return EscapeExprRet {
                                     dependencies: deps,
                                     escape: false
                                 };
                             };
-                            match &deps {
+                            match &deps.value_deps {
                                 ExprType::NumberedFields(fields) => {
                                     if let Some(field_deps) = fields.get(index) {
                                         return EscapeExprRet{
-                                            dependencies: field_deps.clone(),
+                                            dependencies: UnitDeps::duplicated(field_deps.clone()),
                                             escape: false
                                         };
                                     }
@@ -618,7 +641,7 @@ impl Function {
                     let ident_name = segments.first().unwrap().ident.to_string();
                     match self.get_var(&ident_name) {
                         Some(var) => {
-                            dependencies = Some(var.dependencies.clone());
+                            dependencies = Some(UnitDeps::duplicated(var.dependencies.clone()));
                         }
                         None => {}
                     }
@@ -657,7 +680,7 @@ impl Function {
                 }
             }
             Expr::Struct(struct_expr) => {
-                let mut deps: Option<ExprType> = None;
+                let mut deps: Option<UnitDeps> = None;
                 for field in struct_expr.fields.iter_mut() {
                     match &mut deps {
                         Some(deps) => {
@@ -680,10 +703,10 @@ impl Function {
                 let mut elems = Vec::with_capacity(tuple.elems.len());
                 for expr in tuple.elems.iter_mut() {
                     let expr_deps = self.expr(expr);
-                    elems.push(expr_deps);
+                    elems.push(expr_deps.value_deps);
                 }
 
-                dependencies = Some(ExprType::NumberedFields(elems));
+                dependencies = Some(UnitDeps::duplicated(ExprType::NumberedFields(elems)));
             }
             Expr::Type(_) => {}
             Expr::Unary(unary) => {
@@ -708,14 +731,14 @@ impl Function {
         }
 
         EscapeExprRet {
-            dependencies: dependencies.unwrap_or_else(|| ExprType::Opaque(Dependencies::new())),
+            dependencies: dependencies.unwrap_or_else(|| UnitDeps::duplicated(ExprType::Opaque(Dependencies::new()))),
             escape
         }
     }
 }
 
 struct EscapeExprRet {
-    dependencies: ExprType,
+    dependencies: UnitDeps,
     //whether this expression may result in a jump from its
     //enclosing block
     //examples: return, break, yield in generators (although unsupported)
