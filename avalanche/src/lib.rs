@@ -214,10 +214,18 @@ impl<T> UseState<T> {
 }
 
 ///Provides a setter for a piece of state managed by `UseState<T>`.
-#[derive(Clone)]
 pub struct UseStateSetter<T: 'static> {
     component_pos: ComponentPos,
     get_mut: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
+}
+
+impl<T: 'static> Clone for UseStateSetter<T> {
+    fn clone(&self) -> Self {
+        Self {
+            component_pos: self.component_pos.clone(),
+            get_mut: self.get_mut
+        }
+    }
 }
 
 impl<T: 'static> UseStateSetter<T> {
@@ -293,14 +301,23 @@ impl UseStateUpdates {
     ///Usage: if the return type is an array or tuple, passing a &[num] will
     ///yield whether that element has been updated. If that element is also
     //a tuple or array, this logic applies recursively.
+    /// TODO: actually use this model!
+    /// Or replace it with something else!
+    /// For now, each element corresponds to an index within
     pub fn index(&self, idx: &[usize]) -> bool {
-        match idx {
-            //corresponds to &'a T in hook()
-            [0, ..] => self.update,
-            //corresponds to UseStateSetter
-            //this never meaningfully changes
-            [1, ..] => false,
-            _ => self.update,
+        // match idx {
+        //     //corresponds to &'a T in hook()
+        //     [0, ..] => self.update,
+        //     //corresponds to UseStateSetter
+        //     //this never meaningfully changes
+        //     [1, ..] => false,
+        //     _ => self.update,
+        // }
+        for elem in idx {
+            if *elem == 0 && self.update {
+                return true;
+            }
         }
+        false
     }
 }

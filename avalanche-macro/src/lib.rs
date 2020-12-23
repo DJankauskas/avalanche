@@ -7,7 +7,7 @@ mod tests {
 mod macro_expr;
 
 use proc_macro::TokenStream;
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Deref, ops::DerefMut};
 
 use syn::{Item, Block, Stmt, Expr, Pat, Lit, Ident, parse_macro_input, parse_quote, parse::Parse, punctuated::Punctuated};
 use quote::{quote, format_ident};
@@ -38,7 +38,45 @@ struct HookInfo {
     hook_update_ident: Ident
 }
 
-type Dependencies = HashMap<Ident, DependencyInfo>;
+// type Dependencies = HashMap<Ident, DependencyInfo>;
+
+#[derive(Clone, Default, Debug)]
+struct Dependencies(HashMap<Ident, DependencyInfo>);
+
+impl Dependencies {
+    fn new() -> Self {
+        Default::default()
+    }
+
+    fn extend(&mut self, other: Dependencies) {
+        for (key, value) in other.0 {
+            if let DependencyInfo::Hook(new_hook_info) = &value {
+                if let Some(DependencyInfo::Hook(old_hook_info)) = self.0.get_mut(&key) {
+                    assert_eq!(old_hook_info.hook_update_ident, new_hook_info.hook_update_ident);
+                    if let DependencyInfo::Hook(new_hook_info) = value {
+                        old_hook_info.sub.extend(new_hook_info.sub);
+                    }
+                    continue;
+                }
+            }
+            self.0.insert(key, value);
+        }
+    }
+}
+
+impl Deref for Dependencies {
+    type Target = HashMap<Ident, DependencyInfo>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Dependencies {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 #[derive(Debug)]
 struct Var {
