@@ -8,6 +8,8 @@ use crate::{
 use crate::{shared::Shared, InternalContext};
 use std::{any::Any, collections::HashMap, hash::Hash, ops::Deref, ops::DerefMut};
 
+const DYNAMIC_CHILDREN_ERR: &'static str = "Dynamic components must be provided keys.";
+
 pub struct VDom {
     pub(crate) tree: Tree<VNode>,
     pub renderer: Box<dyn Renderer>,
@@ -289,13 +291,14 @@ pub(crate) fn update_vnode(
             "Inserting {:#?}",
             ChildId::from_view(&old_vnode.get(tree).component)
         ));
-        in_place_components.insert(ChildId::from_view(&old_vnode.get(tree).component), {
+        let old_value = in_place_components.insert(ChildId::from_view(&old_vnode.get(tree).component), {
             (old_vnode, idx)
         });
+        assert!(old_value.is_none(), DYNAMIC_CHILDREN_ERR);
     }
 
     if in_place_components.len() != vnode_children_len {
-        panic!("Dynamic components must be provided keys.");
+        panic!(DYNAMIC_CHILDREN_ERR);
     }
 
     let mut curr_native_idx = 0usize;
@@ -330,7 +333,8 @@ pub(crate) fn update_vnode(
                 let new_child = node.push(vnode, tree);
                 generate_vnode(new_child, tree, renderer, vdom.clone());
                 native_append_child(node, new_child, tree, renderer);
-                in_place_components.insert(id.clone(), (new_child, node.len(tree) - 1));
+                let old_value = in_place_components.insert(id.clone(), (new_child, node.len(tree) - 1));
+                assert!(old_value.is_none(), DYNAMIC_CHILDREN_ERR);
             }
         }
     }
