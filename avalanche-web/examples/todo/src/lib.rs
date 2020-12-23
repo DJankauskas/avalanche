@@ -27,12 +27,15 @@ fn Todo() {
 
     let text_clone = text.clone();
     let set_text_clone = set_text.clone();
+    let update_items_2 = update_items.clone();
 
     let children = items
         .iter()
         .map(|item| {
-            Text! {
-                text: "Item ".to_owned() + &item.text,
+            Div!{
+                child: Text! {
+                    text: "Item ".to_owned() + &item.text,
+                },
                 key: item.id.to_string()
             }
         })
@@ -64,6 +67,7 @@ fn Todo() {
                 ]
             },
             Div!{
+                style: Some("display: flex; flex-direction: column;".to_owned()),
                 children
             },
             Button!{
@@ -79,6 +83,14 @@ fn Todo() {
                     update_monotonic_id.call(|id| *id += 1);
                 }
             },
+            Button!{
+                child: Text!{text: "Sort alphabetically"},
+                on_click: move |_| {
+                    update_items_2.call(|items| {
+                        items.sort_by(|a, b| a.text.cmp(&b.text))
+                    })
+                }
+            }
         ]
     }
 }
