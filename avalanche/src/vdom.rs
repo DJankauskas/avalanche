@@ -282,18 +282,15 @@ pub(crate) fn update_vnode(
         None => vec![child],
     };
 
-    let vnode_children_iter = node.iter_mut(tree).enumerate();
+    let vnode_children_iter = node.iter(tree).enumerate();
     let vnode_children_len = vnode_children_iter.len();
     let mut in_place_components = HashMap::with_capacity(vnode_children_len);
 
     for (idx, old_vnode) in vnode_children_iter {
-        renderer.log(&format!(
-            "Inserting {:#?}",
-            ChildId::from_view(&old_vnode.get(tree).component)
-        ));
-        let old_value = in_place_components.insert(ChildId::from_view(&old_vnode.get(tree).component), {
-            (old_vnode, idx)
-        });
+        let old_value = in_place_components
+            .insert(ChildId::from_view(&old_vnode.get(tree).component), {
+                (old_vnode, idx)
+            });
         assert!(old_value.is_none(), DYNAMIC_CHILDREN_ERR);
     }
 
@@ -309,19 +306,11 @@ pub(crate) fn update_vnode(
         .map(|view| ChildId::from_view(view))
         .collect();
 
-    for (child, id) in children.into_iter().zip(children_ids.iter()) {
+    let mut children: Vec<_> = children.into_iter().map(|c| Some(c)).collect();
+
+    for (child, id) in children.iter_mut().zip(children_ids.iter()) {
         match in_place_components.get(id) {
             Some(child_node) => {
-                native_update_vnode(
-                    is_native,
-                    curr_native_idx,
-                    Some(child),
-                    node,
-                    child_node.0,
-                    tree,
-                    renderer,
-                    vdom.clone(),
-                );
                 native_indices.push(child_with_native_handle(child_node.0, tree).map(|_| {
                     let idx = curr_native_idx;
                     curr_native_idx += 1;
@@ -329,18 +318,18 @@ pub(crate) fn update_vnode(
                 }));
             }
             None => {
-                let vnode = VNode::component(child);
+                let vnode = VNode::component(child.take().unwrap());
                 let new_child = node.push(vnode, tree);
                 generate_vnode(new_child, tree, renderer, vdom.clone());
                 native_append_child(node, new_child, tree, renderer);
-                let old_value = in_place_components.insert(id.clone(), (new_child, node.len(tree) - 1));
+                let old_value =
+                    in_place_components.insert(id.clone(), (new_child, node.len(tree) - 1));
                 assert!(old_value.is_none(), DYNAMIC_CHILDREN_ERR);
             }
         }
     }
 
     for i in vnode_children_len..node.len(tree) {
-        renderer.log("Pushing native indices");
         native_indices.push(
             child_with_native_handle(node.child(i, tree), tree).map(|_| {
                 let idx = curr_native_idx;
@@ -354,31 +343,69 @@ pub(crate) fn update_vnode(
 
     for (i, id) in children_ids.iter().enumerate() {
         let old_node = node.child(i, tree).get(tree);
-        if ChildId::from_view(&old_node.component) != *id {
-            let swap_pos = &mut in_place_components.get_mut(id).unwrap().1;
-            node.swap_children(i, *swap_pos, tree);
-            native_indices.swap(i, *swap_pos);
-            *swap_pos = i;
+        let old_node_id = ChildId::from_view(&old_node.component);
+        if old_node_id != *id {
+            let swap_node_ref = in_place_components.get(id).unwrap();
+            let swap_node = swap_node_ref.0;
+            let swap_pos = swap_node_ref.1;
+            node.swap_children(i, swap_pos, tree);
+            native_indices.swap(i, swap_pos);
+            let old_node_mut = in_place_components.get_mut(&old_node_id).unwrap();
+            old_node_mut.0 = swap_node;
+            old_node_mut.1 = swap_pos;
         }
+        // TODO: remove used-up elements from in_place_components?
+        // or update .1 of the entry originally at swap_pos?
     }
 
-    // TODO: move native elements to new positions
+    // prevent use of some inconsistent state
+    std::mem::drop(in_place_components);
+
     if is_native {
-        let mut native_indices: Vec<_> = native_indices.into_iter().filter_map(|i| i).collect();
+        let native_indices: Vec<_> = native_indices.into_iter().filter_map(|i| i).collect();
+        let mut native_indices_map = vec![usize::MAX; native_indices.len()];
+        for (i, elem) in native_indices.iter().enumerate() {
+            native_indices_map[*elem] = i;
+        }
         renderer.log(&format!("{:#?}", native_indices));
         let node_mut = node.get_mut(tree);
         let node_type = node_mut.native_type.as_ref().unwrap();
         let node_handle = node_mut.native_handle.as_mut().unwrap();
         for i in 0..native_indices.len() {
-            while native_indices[i] != i {
-                let swap_pos = native_indices[i];
+            while i != native_indices_map[i] {
+                let swap_pos = native_indices_map[i];
                 renderer.swap_children(node_type, node_handle, i, swap_pos);
-                native_indices.swap(i, swap_pos);
+                native_indices_map.swap(i, swap_pos);
             }
         }
     }
 
     // TODO: remove obsolete native and vnode components at array ends
+
+    debug_assert_eq!(children.len(), node.len(tree));
+
+    curr_native_idx = curr_native_idx.saturating_sub(1);
+    for (child, child_vnode) in children.into_iter().zip(node.iter_mut(tree)).rev() {
+        match child {
+            Some(child) => {
+                native_update_vnode(
+                    is_native,
+                    &mut curr_native_idx,
+                    Some(child),
+                    node,
+                    child_vnode,
+                    tree,
+                    renderer,
+                    vdom.clone(),
+                );
+            }
+            None => {
+                if is_native && child_with_native_handle(child_vnode, tree).is_some() {
+                    curr_native_idx = curr_native_idx.saturating_sub(1);
+                }
+            }
+        }
+    }
 
     let vnode_mut = node.get_mut(tree);
     if let Some(old_component) = old_component {
@@ -407,7 +434,6 @@ fn native_insert_child(
     renderer: &mut Box<dyn Renderer>,
 ) {
     if let Some(native_child) = child_with_native_handle(child, tree) {
-        renderer.log("found child native_component");
         let (parent_mut, child_mut) = tree.get_mut_pair(parent, native_child);
         renderer.insert_child(
             parent_mut
@@ -427,7 +453,7 @@ fn native_insert_child(
 
 fn native_update_vnode(
     is_native: bool,
-    native_pos: usize,
+    native_pos: &mut usize,
     new_component: Option<View>,
     parent: NodeId<VNode>,
     child: NodeId<VNode>,
@@ -456,10 +482,11 @@ fn native_update_vnode(
             renderer.replace_child(
                 parent_mut.native_type.as_ref().unwrap(),
                 parent_mut.native_handle.as_mut().unwrap(),
-                native_pos,
+                *native_pos,
                 child_mut.native_type.as_ref().unwrap(),
                 child_mut.native_handle.as_ref().unwrap(),
             );
+            *native_pos = native_pos.saturating_sub(1);
         }
         // There was a native child, and now there isn't on rerender
         (Some(_), None) => {
@@ -470,12 +497,13 @@ fn native_update_vnode(
             renderer.remove_child(
                 parent_mut.native_type.as_ref().unwrap(),
                 parent_mut.native_handle.as_mut().unwrap(),
-                native_pos,
+                *native_pos,
             );
+            *native_pos = native_pos.saturating_sub(1);
         }
         // There was no native child, but now there is on rerender
         (None, Some(new)) => {
-            native_insert_child(parent, new, native_pos, tree, renderer);
+            native_insert_child(parent, new, *native_pos, tree, renderer);
         }
         // no native child before and on rerender
         (None, None) => {}
