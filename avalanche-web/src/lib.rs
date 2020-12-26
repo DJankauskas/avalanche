@@ -833,16 +833,19 @@ impl Renderer for WebRenderer {
         let lesser = std::cmp::min(a, b);
         let greater = std::cmp::max(a, b);
 
-        let lesser_child = Self::get_child(&parent_element, lesser);
-        let greater_child = Self::get_child(&parent_element, greater);
-        parent_element
-            .insert_before(&greater_child, Some(&lesser_child))
-            .expect("insert succeeded");
-
-        let lesser_child = Self::get_child(&parent_element, lesser);
-        parent_element
-            .insert_before(&lesser_child, Some(&greater_child))
-            .expect("insert succeeded");
+        // TODO: throw exception if a and b are equal but out of bounds?
+        if a != b {
+            let a = Self::get_child(&parent_element, lesser);
+            let b = Self::get_child(&parent_element, greater);
+            let after_b = b.next_sibling();
+            // note: idiosyncratic order, a is being replaced with b
+            parent_element
+                .replace_child(&b, &a)
+                .expect("replace succeeded");
+            parent_element
+                .insert_before(&a, after_b.as_ref())
+                .expect("insert succeeded");
+        }
     }
 
     fn replace_child(
