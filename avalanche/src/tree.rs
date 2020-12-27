@@ -153,14 +153,9 @@ impl<T> NodeId<T> {
 
     /// Removes the specified child by index
     pub fn remove_child(self, child: usize, tree: &mut Tree<T>) -> T {
-        let idx = *tree.nodes[self.idx]
-            .as_ref()
-            .expect("valid self")
-            .children
-            .get(child)
-            .expect("valid child index");
+        let id = self.child(child, tree);
 
-        tree.remove(NodeId::idx(idx))
+        tree.remove(id)
     }
 
     pub fn swap_children(self, a: usize, b: usize, tree: &mut Tree<T>) {
