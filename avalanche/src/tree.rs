@@ -8,8 +8,8 @@ pub struct Tree<T> {
 }
 
 pub struct Node<T> {
-    ///The index of the node's parent
-    ///Must only be used in methods taking a &mut Tree
+    /// The index of the node's parent.
+    /// Must only be used in methods taking a &mut Tree.
     parent: usize,
     children: Vec<usize>,
     data: T,
@@ -153,9 +153,19 @@ impl<T> NodeId<T> {
 
     /// Removes the specified child by index
     pub fn remove_child(self, child: usize, tree: &mut Tree<T>) -> T {
-        let id = self.child(child, tree);
+        // TODO: check for child idx validity
+        let child_node_idx = tree.nodes[self.idx].as_mut().expect("valid self id").children.remove(child);
+        let child_node = tree.nodes[child_node_idx].as_mut().unwrap();
+        //remove child nodes recursively
+        for child_idx in (0..child_node.children.len()).rev() {
+            NodeId::idx(child_node_idx).remove_child(child_idx, tree);
+        }
+        let child_node = tree.nodes[child_node_idx].take().unwrap();
+        if child_node_idx > tree.last_open {
+            tree.last_open = child_node_idx;
+        };
 
-        tree.remove(id)
+        child_node.data
     }
 
     pub fn swap_children(self, a: usize, b: usize, tree: &mut Tree<T>) {
@@ -255,21 +265,12 @@ impl<T> Tree<T> {
     }
 
     pub fn remove(&mut self, node_id: NodeId<T>) -> T {
-        let node = self.nodes[node_id.idx].take().expect("valid child NodeId");
-        if node_id.idx > self.last_open {
-            self.last_open = node_id.idx;
-        };
-        //remove child nodes recursively
-        for child_idx in node.children.iter() {
-            self.remove(NodeId::idx(*child_idx));
-        }
-        let parent_children = &mut self.nodes[node.parent]
-            .as_mut()
-            .expect("valid self NodeId")
-            .children;
+        assert_ne!(node_id.idx, 0, "cannot remove root node");
+        let parent_idx = self.nodes[node_id.idx].as_ref().expect("valid node_id").parent;
+        let parent_children = &mut self.nodes[parent_idx].as_mut().unwrap().children;
         let children_idx = *parent_children.iter().find(|&&x| x == node_id.idx).unwrap();
-        parent_children.remove(children_idx);
-        node.data
+
+        node_id.remove_child(children_idx, self)
     }
 
     ///find next open site, if available
