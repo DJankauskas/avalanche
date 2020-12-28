@@ -1,24 +1,24 @@
 #[cfg(test)]
-mod tests {
-    
-    
-}
+mod tests {}
 
 mod macro_expr;
 
 use proc_macro::TokenStream;
 use std::{collections::HashMap, ops::Deref, ops::DerefMut};
 
-use syn::{Item, Block, Stmt, Expr, Pat, Lit, Ident, parse_macro_input, parse_quote, parse::Parse, punctuated::Punctuated};
-use quote::{quote, format_ident};
-use proc_macro_error::{proc_macro_error, abort, emit_error};
+use proc_macro_error::{abort, emit_error, proc_macro_error};
+use quote::{format_ident, quote};
+use syn::{
+    parse::Parse, parse_macro_input, parse_quote, punctuated::Punctuated, Block, Expr, Ident, Item,
+    Lit, Pat, Stmt,
+};
 
 // Span line and column information with proc macros is not available on stable
 // To emulate unique identities for given component instantiations,
 // we currently instead generate random line and column numbers
 use rand::random;
 
-use macro_expr::{ReactiveAssert, ComponentInit, Hooks};
+use macro_expr::{ComponentInit, Hooks, ReactiveAssert};
 
 #[derive(Debug, Clone)]
 enum DependencyInfo {
@@ -26,16 +26,16 @@ enum DependencyInfo {
     ///e.g. if a is a value provided by UseState,
     ///a.0 would have sub `Some(vec![0])`
     Hook(HookInfo),
-    ///Prop update bit pattern: 
+    ///Prop update bit pattern:
     ///bitwise and of this value with `updates`
     ///determines whether the prop has been updated
-    Prop(u64)
+    Prop(u64),
 }
 
 #[derive(Debug, Clone)]
 struct HookInfo {
     sub: Vec<usize>,
-    hook_update_ident: Ident
+    hook_update_ident: Ident,
 }
 
 // type Dependencies = HashMap<Ident, DependencyInfo>;
@@ -52,7 +52,10 @@ impl Dependencies {
         for (key, value) in other.0 {
             if let DependencyInfo::Hook(new_hook_info) = &value {
                 if let Some(DependencyInfo::Hook(old_hook_info)) = self.0.get_mut(&key) {
-                    assert_eq!(old_hook_info.hook_update_ident, new_hook_info.hook_update_ident);
+                    assert_eq!(
+                        old_hook_info.hook_update_ident,
+                        new_hook_info.hook_update_ident
+                    );
                     if let DependencyInfo::Hook(new_hook_info) = value {
                         old_hook_info.sub.extend(new_hook_info.sub);
                     }
@@ -81,7 +84,7 @@ impl DerefMut for Dependencies {
 #[derive(Debug)]
 struct Var {
     name: String,
-    dependencies: ExprType
+    dependencies: ExprType,
 }
 
 #[must_use]
@@ -89,7 +92,7 @@ struct Var {
 enum ExprType {
     //represents tuples and arrays with known fields
     NumberedFields(Vec<ExprType>),
-    Opaque(Dependencies)
+    Opaque(Dependencies),
 }
 
 impl ExprType {
@@ -103,9 +106,7 @@ impl ExprType {
 
                 dependencies
             }
-            ExprType::Opaque(opaque) => {
-                opaque.clone()
-            }
+            ExprType::Opaque(opaque) => opaque.clone(),
         }
     }
 
@@ -154,12 +155,12 @@ impl ExprType {
 #[derive(Debug, Clone)]
 struct Closure {
     value_dependencies: Dependencies,
-    call_dependencies: Dependencies
+    call_dependencies: Dependencies,
 }
 
 #[derive(Default, Debug)]
 struct Scope {
-    vars: Vec<Var>
+    vars: Vec<Var>,
 }
 
 impl Scope {
@@ -174,7 +175,7 @@ struct UnitDeps {
     value_deps: ExprType,
     /// the dependencies of all values present within a statement, block, or expression
     /// useful when dependencies of side effects are also needed
-    effect_deps: Dependencies
+    effect_deps: Dependencies,
 }
 
 impl UnitDeps {
@@ -187,14 +188,13 @@ impl UnitDeps {
         UnitDeps {
             value_deps: expr.clone(),
             effect_deps: expr.unify(),
-            
         }
     }
 }
 
 #[derive(Default, Debug)]
 struct Function {
-    scopes: Vec<Scope>
+    scopes: Vec<Scope>,
 }
 
 impl Function {
@@ -208,7 +208,7 @@ impl Function {
                 Some(var) => return Some(var),
                 None => continue,
             }
-        };
+        }
 
         None
     }
@@ -219,7 +219,7 @@ impl Function {
                 Some(var) => return Some(var),
                 None => continue,
             }
-        };
+        }
 
         None
     }
@@ -231,14 +231,13 @@ impl Function {
     // }
 
     fn block(&mut self, block: &mut Block) -> UnitDeps {
-       let mut deps = UnitDeps::duplicated(ExprType::Opaque(Dependencies::new()));
+        let mut deps = UnitDeps::duplicated(ExprType::Opaque(Dependencies::new()));
 
         self.scopes.push(Scope::new());
         for stmt in &mut block.stmts {
             deps.extend(self.stmt(stmt));
         }
         self.scopes.pop();
-
 
         deps
     }
@@ -248,35 +247,32 @@ impl Function {
             Stmt::Local(local) => {
                 let init_dependencies = match &mut local.init {
                     Some(expr) => self.expr(&mut expr.1),
-                    None => UnitDeps::duplicated(ExprType::Opaque(Dependencies::new()))
+                    None => UnitDeps::duplicated(ExprType::Opaque(Dependencies::new())),
                 };
                 let scope = self.scopes.last_mut().unwrap();
                 let vars = from_pat(&local.pat, init_dependencies.value_deps.clone());
                 scope.vars.extend(vars);
 
                 return init_dependencies;
-            },
-            Stmt::Item(item) => {
-                match item {
-                    syn::Item::Macro(macro_item) => {
-                        return self.mac(macro_item.mac.clone(), macro_item);
-                    }
-                    _ => {}
+            }
+            Stmt::Item(item) => match item {
+                syn::Item::Macro(macro_item) => {
+                    return self.mac(macro_item.mac.clone(), macro_item);
                 }
+                _ => {}
             },
             Stmt::Expr(expr) => {
                 return self.expr(expr);
-            },
+            }
             Stmt::Semi(expr, _) => {
                 let escape_expr = self.escape_expr(expr);
                 if escape_expr.escape {
                     return escape_expr.dependencies;
-                }
-                else {
+                } else {
                     return UnitDeps {
                         value_deps: ExprType::Opaque(Default::default()),
-                        effect_deps: escape_expr.dependencies.effect_deps
-                    }
+                        effect_deps: escape_expr.dependencies.effect_deps,
+                    };
                 }
             }
         };
@@ -288,55 +284,69 @@ impl Function {
         let name = mac.path.segments.last().unwrap().ident.to_string();
         match &*name {
             "reactive_assert" => {
-                if let Ok(reactive_assert) = mac.parse_body::<ReactiveAssert>() { 
+                if let Ok(reactive_assert) = mac.parse_body::<ReactiveAssert>() {
                     for assert in reactive_assert.asserts {
-                        let dependency_names: Vec<_> = assert.dependencies.iter().map(|d| d.to_string()).collect();
+                        let dependency_names: Vec<_> =
+                            assert.dependencies.iter().map(|d| d.to_string()).collect();
                         let dependent_name = assert.dependent.to_string();
 
                         let dependent = match self.get_var(&dependent_name) {
                             Some(var) => var,
                             None => {
-                                abort!(assert.dependent.span(), "cannot find identifier `{}` in this scope", dependent_name);
+                                abort!(
+                                    assert.dependent.span(),
+                                    "cannot find identifier `{}` in this scope",
+                                    dependent_name
+                                );
                             }
                         };
 
-                        for (dependency_ident, dependency_name) in assert.dependencies.iter().zip(dependency_names.iter()) {
+                        for (dependency_ident, dependency_name) in
+                            assert.dependencies.iter().zip(dependency_names.iter())
+                        {
                             if let None = self.get_var(&dependency_name) {
-                                abort!(dependency_ident.span(), "cannot find identifier `{}` in this scope", dependency_name);
+                                abort!(
+                                    dependency_ident.span(),
+                                    "cannot find identifier `{}` in this scope",
+                                    dependency_name
+                                );
                             }
 
                             let dependent_dependencies = dependent.dependencies.unify();
 
                             if let None = dependent_dependencies.get(dependency_ident) {
-                                let dependencies: Vec<_> = dependent_dependencies.iter().map(|(ident, _)| ident.to_string()).collect();
+                                let dependencies: Vec<_> = dependent_dependencies
+                                    .iter()
+                                    .map(|(ident, _)| ident.to_string())
+                                    .collect();
                                 let dependencies_string: String = dependencies.join(", ");
 
-                                abort!{
+                                abort! {
                                     assert,
                                     "dependencies for `{}` not satisfied",
                                     dependent.name;
-                                        note = "`{}` has dependencies {}", 
-                                        dependent.name, 
+                                        note = "`{}` has dependencies {}",
+                                        dependent.name,
                                         dependencies_string;
                                 }
                             }
-
-                        };
-                    };
+                        }
+                    }
                 };
             }
             _ => {
                 if name.chars().next().unwrap().is_ascii_uppercase() {
                     match mac.parse_body::<ComponentInit>() {
                         Ok(mut init) => {
-                            let mut macro_dependencies = UnitDeps::duplicated(ExprType::Opaque(Dependencies::new()));
+                            let mut macro_dependencies =
+                                UnitDeps::duplicated(ExprType::Opaque(Dependencies::new()));
                             let mut field_ident = Vec::with_capacity(init.fields.len());
                             let mut init_expr = Vec::with_capacity(init.fields.len());
                             let mut is_field_updated = Vec::with_capacity(init.fields.len());
                             for field in init.fields.iter_mut() {
                                 let ident = match &field.member {
                                     syn::Member::Named(ident) => ident,
-                                    syn::Member::Unnamed(u) => abort!(u, "expected named field")
+                                    syn::Member::Unnamed(u) => abort!(u, "expected named field"),
                                 };
                                 field_ident.push(ident);
                                 let dependencies = self.expr(&mut field.expr);
@@ -347,27 +357,34 @@ impl Function {
                                 let mut dependency_update = Vec::with_capacity(dependencies.len());
                                 for dependency_info in dependencies.values() {
                                     match dependency_info {
-                                        DependencyInfo::Hook(HookInfo {sub, hook_update_ident}) => {
+                                        DependencyInfo::Hook(HookInfo {
+                                            sub,
+                                            hook_update_ident,
+                                        }) => {
                                             dependency_update.push(
                                                 quote! {#hook_update_ident.index( &[ #( #sub ),* ] )}
                                             );
                                         }
                                         DependencyInfo::Prop(prop) => {
-                                            dependency_update.push(
-                                                quote!{self.__internal_updates & #prop}
-                                            );
+                                            dependency_update
+                                                .push(quote! {self.__internal_updates & #prop});
                                         }
-                                    } 
-                                };
-                                is_field_updated.push(
-                                    quote!{ false #(|| #dependency_update)* }
-                                );
+                                    }
+                                }
+                                is_field_updated.push(quote! { false #(|| #dependency_update)* });
                             }
                             let type_path = &mac.path;
-                            
-                            assert_eq!(field_ident.len(), init_expr.len(), "quote repetition args matched");
-                            assert_eq!(init_expr.len(), is_field_updated.len(), "quote repetition args matched");
 
+                            assert_eq!(
+                                field_ident.len(),
+                                init_expr.len(),
+                                "quote repetition args matched"
+                            );
+                            assert_eq!(
+                                init_expr.len(),
+                                is_field_updated.len(),
+                                "quote repetition args matched"
+                            );
 
                             // emulating Span information on stable
                             // TODO: utilize actual Span info on nightly
@@ -383,18 +400,47 @@ impl Function {
                                 }
                             };
 
-                            return macro_dependencies
-                            
+                            return macro_dependencies;
                         }
                         Err(err) => {
                             abort!(mac, err.to_string());
                         }
                     };
-
                 };
             }
         };
         UnitDeps::duplicated(ExprType::Opaque(Dependencies::new()))
+    }
+
+    /// Allow providing dependencies to closures being indirectly executed by functions.
+    /// Note that its current usage in the codebase is insufficient: it does not account for 
+    /// closures assigned to values and then passed to functions, either once or multiple times
+    /// TODO: fix this limitation
+    fn closure(&mut self, closure: &mut syn::ExprClosure, args_deps: ExprType) -> UnitDeps {
+        let mut closure_scope = Scope::new();
+
+        for (i, input) in closure.inputs.iter().enumerate() {
+            let rhs = match &args_deps {
+                ExprType::NumberedFields(fields) => {
+                    match fields.get(i) {
+                        Some(field) => field.clone(),
+                        None => args_deps.clone()
+                    }
+                },
+                ExprType::Opaque(_) => args_deps.clone()
+            };
+            let vars = from_pat(&input, rhs);
+            closure_scope.vars.extend(vars);
+        }
+
+        self.scopes.push(closure_scope);
+
+        let mut deps = self.expr(&mut closure.body);
+        deps.value_deps = ExprType::Opaque(deps.effect_deps.clone());
+
+        self.scopes.pop();
+
+        deps
     }
 
     fn expr(&mut self, expr: &mut Expr) -> UnitDeps {
@@ -431,7 +477,7 @@ impl Function {
 
                 dependencies = Some(UnitDeps {
                     value_deps: ExprType::Opaque(Dependencies::new()),
-                    effect_deps: lhs.effect_deps
+                    effect_deps: lhs.effect_deps,
                 })
             }
             Expr::AssignOp(assign_op) => {
@@ -448,7 +494,7 @@ impl Function {
 
                 dependencies = Some(UnitDeps {
                     value_deps: ExprType::Opaque(Dependencies::new()),
-                    effect_deps: lhs.effect_deps
+                    effect_deps: lhs.effect_deps,
                 })
             }
             Expr::Async(_) => {
@@ -463,23 +509,18 @@ impl Function {
                 deps.extend(rhs);
 
                 dependencies = Some(deps);
-
             }
             Expr::Block(block) => {
                 dependencies = Some(self.block(&mut block.block));
             }
-            Expr::Box(expr_box) => {
-                dependencies = Some(self.expr(&mut expr_box.expr))
-            }
-            Expr::Break(break_expr) => {
-                match &mut break_expr.expr {
-                    Some(expr) => {
-                        dependencies = Some(self.expr(expr));
-                        escape = true;
-                    },
-                    None => {}
+            Expr::Box(expr_box) => dependencies = Some(self.expr(&mut expr_box.expr)),
+            Expr::Break(break_expr) => match &mut break_expr.expr {
+                Some(expr) => {
+                    dependencies = Some(self.expr(expr));
+                    escape = true;
                 }
-            }
+                None => {}
+            },
             Expr::Call(call) => {
                 let mut deps = self.expr(&mut call.func);
                 for arg in call.args.iter_mut() {
@@ -493,31 +534,7 @@ impl Function {
                 dependencies = Some(self.expr(&mut cast.expr));
             }
             Expr::Closure(closure) => {
-                let mut closure_scope = Scope::new();
-
-                for input in closure.inputs.iter() {
-                    let rhs = ExprType::Opaque(Dependencies::new());
-                    let vars = from_pat(&input, rhs);
-                    closure_scope.vars.extend(vars);
-                }
-
-                self.scopes.push(closure_scope);
-
-                let mut deps = self.expr(&mut closure.body);
-                deps.value_deps = ExprType::Opaque(deps.effect_deps.clone());
-                
-                dependencies = Some(deps);
-
-                self.scopes.pop();
-
-                //TODO: this is wildly incomplete
-                //there are two different types of dependencies a closure has:
-                //1. the returned value's
-                //2. the actions performed by the function
-                //currently, this accounts for only 1.
-                //however, the actions performed are extremely important for callbacks
-
-
+                dependencies = Some(self.closure(closure, ExprType::Opaque(Dependencies::new())))
             }
             Expr::Continue(_) => {}
             Expr::Field(field) => {
@@ -529,15 +546,15 @@ impl Function {
                     if deps.value_deps.append_to_sub(unnamed.index as usize) {
                         return EscapeExprRet {
                             dependencies: deps,
-                            escape: false
+                            escape: false,
                         };
                     };
                     match &deps.value_deps {
                         ExprType::NumberedFields(fields) => {
                             if let Some(field_deps) = fields.get(unnamed.index as usize) {
-                                return EscapeExprRet{
+                                return EscapeExprRet {
                                     dependencies: UnitDeps::duplicated(field_deps.clone()),
-                                    escape: false
+                                    escape: false,
                                 };
                             }
                         }
@@ -547,7 +564,7 @@ impl Function {
                 dependencies = Some(deps);
             }
             Expr::ForLoop(for_expr) => {
-                //create scope for the variables created by 
+                //create scope for the variables created by
                 //for pat in expr {}
                 let mut scope = Scope::new();
 
@@ -583,7 +600,7 @@ impl Function {
                     Expr::Let(let_expr) => {
                         let let_dependencies = self.expr(&mut let_expr.expr);
                         if_scope.vars = from_pat(&let_expr.pat, let_dependencies.value_deps);
-                    },
+                    }
                     _ => {}
                 }
 
@@ -593,9 +610,7 @@ impl Function {
                 let mut deps = self.block(&mut if_expr.then_branch);
                 deps.extend(cond_dependencies);
                 match &mut if_expr.else_branch {
-                    Some(else_branch) => {
-                        deps.extend(self.expr(&mut else_branch.1))
-                    }
+                    Some(else_branch) => deps.extend(self.expr(&mut else_branch.1)),
                     None => {}
                 }
 
@@ -615,15 +630,15 @@ impl Function {
                             if deps.value_deps.append_to_sub(index) {
                                 return EscapeExprRet {
                                     dependencies: deps,
-                                    escape: false
+                                    escape: false,
                                 };
                             };
                             match &deps.value_deps {
                                 ExprType::NumberedFields(fields) => {
                                     if let Some(field_deps) = fields.get(index) {
-                                        return EscapeExprRet{
+                                        return EscapeExprRet {
                                             dependencies: UnitDeps::duplicated(field_deps.clone()),
-                                            escape: false
+                                            escape: false,
                                         };
                                     }
                                 }
@@ -656,15 +671,21 @@ impl Function {
                 let mut deps = self.expr(&mut match_expr.expr);
                 for arm in match_expr.arms.iter_mut() {
                     //note: identifiers in match patterns are not processed
-                    //because those only contain dependencies already added 
+                    //because those only contain dependencies already added
                     deps.extend(self.expr(&mut arm.body));
                 }
                 dependencies = Some(deps);
             }
             Expr::MethodCall(method) => {
                 let mut deps = self.expr(&mut method.receiver);
-                for arg in method.args.iter_mut() { 
-                    deps.extend(self.expr(arg));
+                let receiver_deps = deps.clone();
+                for arg in method.args.iter_mut() {
+                    if let Expr::Closure(closure) = arg {
+                        deps.extend(self.closure(closure, receiver_deps.value_deps.clone()));
+                    }
+                    else {
+                        deps.extend(self.expr(arg));
+                    }
                 }
                 dependencies = Some(deps)
 
@@ -708,15 +729,13 @@ impl Function {
             Expr::Repeat(repeat) => {
                 dependencies = Some(self.expr(&mut repeat.expr));
             }
-            Expr::Return(ret) => {
-                match &mut ret.expr {
-                    Some(expr) => {
-                        dependencies = Some(self.expr(expr));
-                        escape = true;
-                    },
-                    None => {}
+            Expr::Return(ret) => match &mut ret.expr {
+                Some(expr) => {
+                    dependencies = Some(self.expr(expr));
+                    escape = true;
                 }
-            }
+                None => {}
+            },
             Expr::Struct(struct_expr) => {
                 let mut deps: Option<UnitDeps> = None;
                 for field in struct_expr.fields.iter_mut() {
@@ -753,8 +772,7 @@ impl Function {
             Expr::Unsafe(unsafe_block) => {
                 dependencies = Some(self.block(&mut unsafe_block.block));
             }
-            Expr::Verbatim(_) => {
-            }
+            Expr::Verbatim(_) => {}
             Expr::While(while_expr) => {
                 //while loops have value ()
                 //() has no dependencies, so none are returned here
@@ -769,8 +787,9 @@ impl Function {
         }
 
         EscapeExprRet {
-            dependencies: dependencies.unwrap_or_else(|| UnitDeps::duplicated(ExprType::Opaque(Dependencies::new()))),
-            escape
+            dependencies: dependencies
+                .unwrap_or_else(|| UnitDeps::duplicated(ExprType::Opaque(Dependencies::new()))),
+            escape,
         }
     }
 }
@@ -780,23 +799,22 @@ struct EscapeExprRet {
     //whether this expression may result in a jump from its
     //enclosing block
     //examples: return, break, yield in generators (although unsupported)
-    escape: bool
+    escape: bool,
 }
 
 #[derive(Debug, Clone)]
 struct Atom {
     name: String,
-    sub: Option<Vec<usize>>
+    sub: Option<Vec<usize>>,
 }
 
 impl From<String> for Atom {
     fn from(string: String) -> Self {
         Atom {
             name: string,
-            sub: None
+            sub: None,
         }
     }
-    
 }
 
 fn from_pat(lhs: &Pat, rhs: ExprType) -> Vec<Var> {
@@ -805,12 +823,10 @@ fn from_pat(lhs: &Pat, rhs: ExprType) -> Vec<Var> {
             //invalid lhs?
         }
         Pat::Ident(ident) => {
-            return vec![
-                Var {
-                    name: ident.ident.to_string(),
-                    dependencies: rhs
-                }
-            ]
+            return vec![Var {
+                name: ident.ident.to_string(),
+                dependencies: rhs,
+            }]
         }
         Pat::Lit(_) => {}
         Pat::Macro(_) => {}
@@ -819,12 +835,10 @@ fn from_pat(lhs: &Pat, rhs: ExprType) -> Vec<Var> {
             let segments = &path.path.segments;
             if segments.len() == 1 {
                 let ident_name = segments.first().unwrap().ident.to_string();
-                return vec![
-                    Var {
-                        name: ident_name,
-                        dependencies: rhs
-                    }
-            ]
+                return vec![Var {
+                    name: ident_name,
+                    dependencies: rhs,
+                }];
             }
         }
         Pat::Range(_) => {}
@@ -832,14 +846,12 @@ fn from_pat(lhs: &Pat, rhs: ExprType) -> Vec<Var> {
             //TODO: needs to be handled?
             todo!("reference")
         }
-        Pat::Rest(_) => {
-            return vec![]
-        }
+        Pat::Rest(_) => return vec![],
         Pat::Slice(slice) => {
             let mut fields = Vec::with_capacity(slice.elems.len());
             for elem in slice.elems.iter() {
                 fields.push(elem)
-            };
+            }
             return from_pat_numbered(&fields, rhs);
         }
         Pat::Struct(struct_pat) => {
@@ -848,7 +860,7 @@ fn from_pat(lhs: &Pat, rhs: ExprType) -> Vec<Var> {
             for field in struct_pat.fields.iter() {
                 fields.push(&*field.pat);
             }
-            
+
             return from_pat_numbered(&fields, rhs);
         }
         Pat::Tuple(tuple) => {
@@ -879,7 +891,7 @@ fn from_pat_tuple(lhs: &syn::PatTuple, rhs: ExprType) -> Vec<Var> {
         rhs.append_to_sub(i);
         vars.extend(from_pat(&elem, rhs));
     }
-    
+
     vars
 }
 
@@ -917,7 +929,7 @@ fn from_pat_numbered(lhs: &[&Pat], rhs: ExprType) -> Vec<Var> {
                                 let mut field = fields.remove(fields_index);
                                 field.append_to_sub(fields_index);
                                 field
-                            },
+                            }
                             //mismatch in lhs to rhs
                             //let compiler handle the error
                             None => {
@@ -937,12 +949,11 @@ fn from_pat_numbered(lhs: &[&Pat], rhs: ExprType) -> Vec<Var> {
                 let mut deps = dependencies.clone();
                 deps.append_to_sub(i);
                 vars.extend(from_pat(pat, deps));
-            };
+            }
             vars
         }
     }
 }
-
 
 fn from_expr(expr: &Expr, mut rhs: ExprType) -> Vec<Var> {
     //note: we allow the compiler to handle invalid lhs
@@ -1005,7 +1016,7 @@ fn from_expr(expr: &Expr, mut rhs: ExprType) -> Vec<Var> {
             //illegal in lhs pos
         }
         Expr::Index(index) => {
-            if let Expr::Lit(lit) =  &*index.index {
+            if let Expr::Lit(lit) = &*index.index {
                 if let Lit::Int(int) = &lit.lit {
                     if let Ok(ind) = int.base10_parse::<usize>() {
                         rhs.append_to_sub(ind);
@@ -1039,12 +1050,10 @@ fn from_expr(expr: &Expr, mut rhs: ExprType) -> Vec<Var> {
             let segments = &path.path.segments;
             if segments.len() == 1 {
                 let name = segments.first().unwrap().ident.to_string();
-                return vec![
-                    Var {
-                        name,
-                        dependencies: rhs
-                    }
-                ]
+                return vec![Var {
+                    name,
+                    dependencies: rhs,
+                }];
             }
         }
         Expr::Range(_) => {
@@ -1098,7 +1107,7 @@ fn from_expr(expr: &Expr, mut rhs: ExprType) -> Vec<Var> {
             eprintln!("Warn: unknown Expr type.");
         }
     }
-    
+
     Vec::new()
 }
 
@@ -1121,7 +1130,7 @@ fn from_expr_numbered(lhs: &[&Expr], rhs: ExprType) -> Vec<Var> {
                 let mut deps = dependencies.clone();
                 deps.append_to_sub(i);
                 vars.extend(from_expr(expr, deps));
-            };
+            }
             vars
         }
     }
@@ -1134,14 +1143,17 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
 
     let item_fn = match item {
         Item::Fn(ref mut fun) => fun,
-        _ => abort!(item, "component requires function input")
+        _ => abort!(item, "component requires function input"),
     };
 
     let mut function = Function::new();
     let mut param_scope = Scope::new();
 
     if item_fn.sig.inputs.len() > 64 {
-        emit_error!(item_fn.sig.inputs, "more than 64 properties are unsupported");
+        emit_error!(
+            item_fn.sig.inputs,
+            "more than 64 properties are unsupported"
+        );
     }
 
     if let Some(token) = &item_fn.sig.asyncness {
@@ -1151,7 +1163,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
     if let Some(token) = &item_fn.sig.unsafety {
         abort!(
             token,
-            "unsafe components unsupported"; 
+            "unsafe components unsupported";
             note = "to write unsafe code, use an unsafe block"
         );
     };
@@ -1163,8 +1175,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
     let hooks = if !metadata.is_empty() {
         let hooks = parse_macro_input!(metadata as Hooks);
         hooks.hooks
-    }
-    else {
+    } else {
         Punctuated::new()
     };
 
@@ -1188,14 +1199,14 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                     hook.name.to_owned(),
                     DependencyInfo::Hook(HookInfo {
                         sub: Vec::new(),
-                        hook_update_ident
+                        hook_update_ident,
                     }),
                 );
                 ExprType::Opaque(deps)
-            }
+            },
         };
         param_scope.vars.push(var);
-    };
+    }
 
     let mut param_ident = Vec::with_capacity(hooks.len());
     let mut param_type = Vec::with_capacity(hooks.len());
@@ -1208,22 +1219,21 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
         match param {
             syn::FnArg::Receiver(rec) => {
                 abort!(rec, "receiver not allowed");
-            },
+            }
             syn::FnArg::Typed(param) => {
                 let ident = if let Pat::Ident(ident) = &*param.pat {
                     let mut dependencies = Dependencies::default();
                     dependencies.insert(
-                        ident.ident.to_owned(), 
-                        DependencyInfo::Prop(update_bit_pattern)
+                        ident.ident.to_owned(),
+                        DependencyInfo::Prop(update_bit_pattern),
                     );
                     let dependencies = ExprType::Opaque(dependencies);
                     param_scope.vars.push(Var {
                         name: ident.ident.to_string(),
-                        dependencies
+                        dependencies,
                     });
                     ident
-                }
-                else {
+                } else {
                     abort!(param.pat, "expected identifier");
                 };
 
@@ -1247,7 +1257,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
     let render_body = &item_fn.block;
     let visibility = &item_fn.vis;
 
-    let component = quote!{
+    let component = quote! {
         #[derive(std::default::Default)]
         #visibility struct #builder_name {
             __internal_updates: u64,
@@ -1320,7 +1330,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                 let _ = context;
 
                 let #name { #(#param_ident,)* .. } = self;
-                
+
                 #render_body
             }
 
