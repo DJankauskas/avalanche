@@ -286,20 +286,25 @@ pub(crate) fn update_vnode(
     let vnode_children_len = vnode_children_iter.len();
     let mut in_place_components = HashMap::with_capacity(vnode_children_len);
 
+    let mut curr_native_idx = 0usize;
+    let mut native_indices = Vec::with_capacity(vnode_children_len);
+
     for (idx, old_vnode) in vnode_children_iter {
         let old_value = in_place_components
             .insert(ChildId::from_view(&old_vnode.get(tree).component), {
                 (old_vnode, idx)
             });
         assert!(old_value.is_none(), DYNAMIC_CHILDREN_ERR);
+        native_indices.push(child_with_native_handle(old_vnode, tree).map(|_| {
+            let idx = curr_native_idx;
+            curr_native_idx += 1;
+            idx
+        }));
     }
 
     if in_place_components.len() != vnode_children_len {
         panic!(DYNAMIC_CHILDREN_ERR);
     }
-
-    let mut curr_native_idx = 0usize;
-    let mut native_indices = Vec::with_capacity(vnode_children_len);
 
     let children_ids: Vec<_> = children
         .iter()
@@ -309,23 +314,13 @@ pub(crate) fn update_vnode(
     let mut children: Vec<_> = children.into_iter().map(|c| Some(c)).collect();
 
     for (child, id) in children.iter_mut().zip(children_ids.iter()) {
-        match in_place_components.get(id) {
-            Some(child_node) => {
-                native_indices.push(child_with_native_handle(child_node.0, tree).map(|_| {
-                    let idx = curr_native_idx;
-                    curr_native_idx += 1;
-                    idx
-                }));
-            }
-            None => {
-                let vnode = VNode::component(child.take().unwrap());
-                let new_child = node.push(vnode, tree);
-                generate_vnode(new_child, tree, renderer, vdom.clone());
-                native_append_child(node, new_child, tree, renderer);
-                let old_value =
-                    in_place_components.insert(id.clone(), (new_child, node.len(tree) - 1));
-                assert!(old_value.is_none(), DYNAMIC_CHILDREN_ERR);
-            }
+        if in_place_components.get(id).is_none() {
+            let vnode = VNode::component(child.take().unwrap());
+            let new_child = node.push(vnode, tree);
+            generate_vnode(new_child, tree, renderer, vdom.clone());
+            native_append_child(node, new_child, tree, renderer);
+            let old_value = in_place_components.insert(id.clone(), (new_child, node.len(tree) - 1));
+            assert!(old_value.is_none(), DYNAMIC_CHILDREN_ERR);
         }
     }
 
@@ -378,9 +373,26 @@ pub(crate) fn update_vnode(
                 native_indices_map.swap(i, swap_pos);
             }
         }
+
+        for i in (children_ids.len()..node.len(tree)).rev() {
+            if let Some(_) = child_with_native_handle(node.child(i, tree), tree) {
+                let node_mut = node.get_mut(tree);
+                let parent_type = node_mut.native_type.as_ref().unwrap();
+                let parent_handle = node_mut.native_handle.as_mut().unwrap();
+                renderer.remove_child(
+                    parent_type,
+                    parent_handle,
+                    native_indices_map.pop().unwrap(),
+                );
+                curr_native_idx = curr_native_idx.saturating_sub(1);
+            }
+        }
     }
 
-    // TODO: remove obsolete native and vnode components at array ends
+    
+    for i in (children_ids.len()..node.len(tree)).rev() {
+        node.remove_child(i, tree);
+    }
 
     debug_assert_eq!(children.len(), node.len(tree));
 
