@@ -6,7 +6,7 @@ use crate::{
 };
 
 use crate::{shared::Shared, InternalContext};
-use std::{any::Any, collections::HashMap, hash::Hash, ops::Deref, ops::DerefMut};
+use std::{any::Any, collections::HashMap, hash::Hash};
 
 const DYNAMIC_CHILDREN_ERR: &'static str = "Dynamic components must be provided keys.";
 
@@ -81,19 +81,6 @@ fn child_with_native_handle(mut vnode: NodeId<VNode>, tree: &Tree<VNode>) -> Opt
         } else {
             vnode.iter(tree).nth(0).unwrap()
         };
-    }
-}
-
-fn parent_with_native_handle(
-    mut vnode: NodeId<VNode>,
-    tree: &Tree<VNode>,
-) -> Option<NodeId<VNode>> {
-    loop {
-        vnode = vnode.parent(tree)?;
-        let vnode_ref = vnode.get(tree);
-        if vnode_ref.native_handle.is_some() {
-            return Some(vnode);
-        }
     }
 }
 
@@ -193,44 +180,6 @@ impl ChildId {
             key: view.key().map(ToOwned::to_owned),
             location: view.location(),
         }
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-enum NativePos {
-    /// The vnode's corresponding native component position
-    Pos(usize),
-    /// The vnode has no native component, so the index of the next
-    /// Note: it may be one past the upper bound
-    Next(usize),
-}
-
-impl Deref for NativePos {
-    type Target = usize;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            NativePos::Pos(pos) => pos,
-            NativePos::Next(next) => next,
-        }
-    }
-}
-
-impl DerefMut for NativePos {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        match self {
-            NativePos::Pos(pos) => pos,
-            NativePos::Next(next) => next,
-        }
-    }
-}
-
-impl NativePos {
-    fn increment(&mut self) {
-        **self += 1
-    }
-    fn decrement(&mut self) {
-        **self -= 1
     }
 }
 
