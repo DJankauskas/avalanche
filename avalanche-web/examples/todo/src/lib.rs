@@ -12,7 +12,7 @@ use web_sys::{console, HtmlInputElement};
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Item {
     text: String,
     id: u32,
@@ -33,7 +33,7 @@ fn Todo() {
         .iter()
         .enumerate()
         .map(|(i, item)| {
-            reactive_assert!(items => item);
+            reactive_assert!(items => i);
             Div!{
                 children: [
                     Text! {
