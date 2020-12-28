@@ -31,11 +31,28 @@ fn Todo() {
 
     let children = items
         .iter()
-        .map(|item| {
+        .enumerate()
+        .map(|(i, item)| {
+            reactive_assert!(items => item);
             Div!{
-                child: Text! {
-                    text: "Item ".to_owned() + &item.text,
-                },
+                children: [
+                    Text! {
+                        text: "Item ".to_owned() + &item.text,
+                    },
+                    Button!{
+                        child: Text!{
+                            text: "x"
+                        },
+                        on_click: {
+                            let update_items = update_items.clone();
+                            move |_| {
+                                update_items.call(|items| {
+                                    items.remove(i);
+                                });
+                            }
+                        }
+                    },
+                ],
                 key: item.id.to_string()
             }
         })
