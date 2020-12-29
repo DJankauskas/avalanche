@@ -18,7 +18,7 @@ use syn::{
 // we currently instead generate random line and column numbers
 use rand::random;
 
-use macro_expr::{ComponentInit, Hooks, ReactiveAssert};
+use macro_expr::{ComponentInit, Hooks, ReactiveAssert, Enclose};
 
 #[derive(Debug, Clone)]
 enum DependencyInfo {
@@ -333,6 +333,11 @@ impl Function {
                         }
                     }
                 };
+            }
+            "enclose" => {
+                if let Ok(mut enclose) = mac.parse_body::<Enclose>() {
+                    return self.expr(&mut enclose.expr);
+                }
             }
             _ => {
                 if name.chars().next().unwrap().is_ascii_uppercase() {
@@ -1345,7 +1350,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
-    println!("{}", component);
+    // println!("{}", component);
 
     component.into()
 }
