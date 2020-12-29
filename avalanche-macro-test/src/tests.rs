@@ -1,6 +1,6 @@
 //TODO: update functions to be valid component invocations, and allow its use in this crate
 
-use avalanche::{component, reactive_assert};
+use avalanche::{component, reactive_assert, enclose};
 #[derive(Default)]
 struct HasFields {
     field_one: u8,
@@ -231,5 +231,12 @@ fn While(a: u8, b: u8) {
     };
     reactive_assert!(b => x);
 
+    ().into()
+}
+
+#[component]
+fn Enclose(a: u8) {
+    let b = enclose!(a; a);
+    reactive_assert!(a => b);
     ().into()
 }
