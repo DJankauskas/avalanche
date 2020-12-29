@@ -1,8 +1,8 @@
-use avalanche::{component, reactive_assert, UseState};
+use avalanche::{component, reactive_assert, enclose, UseState};
 use avalanche_web::{Button, Div, Input, Text, H2};
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::{JsCast, JsValue};
-use web_sys::{console, HtmlInputElement};
+use wasm_bindgen::{JsCast};
+use web_sys::{HtmlInputElement};
 
 // When the `wee_alloc` feature is enabled, this uses `wee_alloc` as the global
 // allocator.
@@ -25,10 +25,6 @@ fn Todo() {
     let (monotonic_id, update_monotonic_id) = monotonic_id(0);
     let monotonic_id = *monotonic_id;
 
-    let text_clone = text.clone();
-    let set_text_clone = set_text.clone();
-    let update_items_2 = update_items.clone();
-
     let children = items
         .iter()
         .enumerate()
@@ -43,14 +39,11 @@ fn Todo() {
                         child: Text!{
                             text: "x"
                         },
-                        on_click: {
-                            let update_items = update_items.clone();
-                            move |_| {
-                                update_items.call(|items| {
-                                    items.remove(i);
-                                });
-                            }
-                        }
+                        on_click: enclose!(update_items; move |_| {
+                            update_items.call(|items| {
+                                items.remove(i);
+                            });
+                        })
                     },
                 ],
                 key: item.id.to_string()
@@ -60,9 +53,6 @@ fn Todo() {
 
     reactive_assert!(items => children);
 
-    let items_txt: wasm_bindgen::JsValue = format!("items: {:#?}", items).into();
-    console::log_1(&items_txt);
-
     Div! {
         children: [
             H2!{
@@ -70,10 +60,10 @@ fn Todo() {
             },
             Input!{
                 value: text.to_owned(),
-                on_input: move |e| {
+                on_input: enclose!(set_text; move |e| {
                     let input = e.current_target().unwrap().dyn_into::<HtmlInputElement>().unwrap();
                     set_text.call(|text| *text = input.value());
-                }
+                })
             },
             Div!{
                 children: [
@@ -90,20 +80,20 @@ fn Todo() {
             Button!{
                 // on_click: move |_| set_count.call(|count| *count += 1),
                 child: Text!{text: "Create"},
-                on_click: move |_| {
-                    let text_clone = text_clone.clone();
+                on_click: enclose!(text, update_items; move |_| {
+                    let text = text.clone();
                     update_items.call(|items| items.push(Item {
-                        text: text_clone,
+                        text,
                         id: monotonic_id
                     }));
-                    set_text_clone.call(|text| text.clear());
+                    set_text.call(|text| text.clear());
                     update_monotonic_id.call(|id| *id += 1);
-                }
+                })
             },
             Button!{
                 child: Text!{text: "Sort alphabetically"},
                 on_click: move |_| {
-                    update_items_2.call(|items| {
+                    update_items.call(|items| {
                         items.sort_by(|a, b| a.text.cmp(&b.text))
                     })
                 }
