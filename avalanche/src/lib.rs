@@ -121,19 +121,16 @@ impl Component for () {
     }
 }
 
-/// An internal trait implemented for all `Component`s. This should not be
+/// An internal trait implemented for all [`Component`]s. This should not be
 /// implemented manually.
+#[doc(hidden)]
 pub trait DynComponent: Downcast + 'static {
-    #[doc(hidden)]
     fn init_state(&self) -> Box<dyn Any>;
 
-    #[doc(hidden)]
     fn render(&self, context: InternalContext) -> View;
 
-    #[doc(hidden)]
     fn native_type(&self) -> Option<NativeType>;
 
-    #[doc(hidden)]
     fn updated(&self) -> bool;
 
     fn location(&self) -> Option<(u32, u32)>;
