@@ -97,11 +97,6 @@ pub trait Renderer {
     //TODO: remove or elaborate?
     fn log(&self, string: &str);
 }
-#[non_exhaustive]
-pub struct Child<'a> {
-    pub component: &'a View,
-    pub native_handle: Option<&'a NativeHandle> 
-}
 
 pub struct NativeType {
     pub handler: &'static str,
