@@ -20,7 +20,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
 
     let item_fn = match item {
         Item::Fn(ref mut fun) => fun,
-        _ => abort!(item, "component requires function input"),;
+        _ => abort!(item, "component requires function input"),
     };
 
     let mut function = Function::new();
