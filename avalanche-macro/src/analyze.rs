@@ -284,7 +284,7 @@ impl Function {
                             Some(var) => var,
                             None => {
                                 abort!(
-                                    assert.dependent.span(),
+                                    assert.dependent,
                                     "cannot find identifier `{}` in this scope",
                                     dependent_name
                                 );
@@ -296,7 +296,7 @@ impl Function {
                         {
                             if let None = self.get_var(&dependency_name) {
                                 abort!(
-                                    dependency_ident.span(),
+                                    dependency_ident,
                                     "cannot find identifier `{}` in this scope",
                                     dependency_name
                                 );
