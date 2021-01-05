@@ -1,5 +1,3 @@
-//TODO: update functions to be valid component invocations, and allow its use in this crate
-
 use avalanche::{component, reactive_assert, enclose};
 #[derive(Default)]
 struct HasFields {
@@ -238,5 +236,44 @@ fn While(a: u8, b: u8) {
 fn Enclose(a: u8) {
     let b = enclose!(a; a);
     reactive_assert!(a => b);
+    ().into()
+}
+
+#[component]
+#[allow(deprecated)]
+fn StdMacros(a: u8, b: u8, c: u8) {
+    // testing dbg!
+    let a_prime = dbg!(a);
+    reactive_assert!(a => a_prime);
+    let ab_prime = dbg!(a, b);
+    reactive_assert!(a, b => ab_prime);
+
+    // testing format!
+    let formatted = format!("{} {} {d}", a, b, d=c);
+    reactive_assert!(a, b, c => formatted);
+
+    // testing matches!
+    let matched = matches!(a, 1);
+    reactive_assert!(a => matched);
+    let matched = matches!(b, 1 | 2);
+    reactive_assert!(b => matched);
+    let matched = matches!(a, 3 | 4 if *b > 2,);
+    reactive_assert!(a, b => matched);
+
+    // testing vec!
+    let vec = vec![a];
+    reactive_assert!(a => vec);
+    let vec = vec![b, c];
+    reactive_assert!(b, c => vec);
+    let vec = vec![a; *c as usize];
+    reactive_assert!(a, c => vec);
+
+    // testing try!
+    let ret: Result<u8, ()> = (|| {
+        let a = Ok(*a);
+        Ok(r#try!(a))
+    })();
+    reactive_assert!(a => ret);
+    
     ().into()
 }

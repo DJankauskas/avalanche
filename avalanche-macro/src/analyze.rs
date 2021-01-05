@@ -8,17 +8,19 @@ use proc_macro_error::abort;
 use quote::quote;
 use rand::random;
 
-use crate::macro_expr::{ComponentInit, Enclose, ReactiveAssert};
+use crate::macro_expr::{
+    ComponentInit, EncloseBody, ExprList, MatchesBody, ReactiveAssert, Try, VecBody,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) enum DependencyInfo {
-    ///The path to the dependency's relevant subpart,
-    ///e.g. if a is a value provided by UseState,
-    ///a.0 would have sub `Some(vec![0])`
+    /// The path to the dependency's relevant subpart,
+    /// e.g. if a is a value provided by UseState,
+    /// a.0 would have sub `Some(vec![0])`
     Hook(HookInfo),
-    ///Prop update bit pattern:
-    ///bitwise and of this value with `updates`
-    ///determines whether the prop has been updated
+    /// Prop update bit pattern:
+    /// bitwise and of this value with `updates`
+    /// determines whether the prop has been updated
     Prop(u64),
 }
 
@@ -80,7 +82,7 @@ pub(crate) struct Var {
 #[must_use]
 #[derive(Debug, Clone)]
 pub(crate) enum ExprType {
-    //represents tuples and arrays with known fields
+    // represents tuples and arrays with known fields
     NumberedFields(Vec<ExprType>),
     Opaque(Dependencies),
 }
@@ -113,8 +115,8 @@ impl ExprType {
         }
     }
 
-    ///Gets the sub-dependency path for a Hook
-    ///Returns `None` if it is not opaque
+    /// Gets the sub-dependency path for a Hook
+    /// Returns `None` if it is not opaque
     // fn get_hook_sub(&self) -> Option<&Vec<usize>> {
     //     if let ExprType::Opaque(dependencies) = self {
     //         if dependencies.len() == 1 {
@@ -149,7 +151,7 @@ struct Closure {
 }
 
 #[derive(Default, Debug)]
-pub(crate)  struct Scope {
+pub(crate) struct Scope {
     pub(crate) vars: Vec<Var>,
 }
 
@@ -169,6 +171,13 @@ pub(crate) struct UnitDeps {
 }
 
 impl UnitDeps {
+    fn new() -> Self {
+        Self {
+            value_deps: ExprType::Opaque(Dependencies::new()),
+            effect_deps: Dependencies::new(),
+        }
+    }
+
     fn extend(&mut self, other: UnitDeps) {
         self.value_deps.extend(other.value_deps);
         self.effect_deps.extend(other.effect_deps)
@@ -325,8 +334,88 @@ impl Function {
                 };
             }
             "enclose" => {
-                if let Ok(mut enclose) = mac.parse_body::<Enclose>() {
+                if let Ok(mut enclose) = mac.parse_body::<EncloseBody>() {
                     return self.expr(&mut enclose.expr);
+                }
+            }
+            "dbg" => {
+                if let Ok(mut dbg) = mac.parse_body::<ExprList>() {
+                    if dbg.exprs.len() == 1 {
+                        return self.expr(&mut dbg.exprs[0]);
+                    } else if dbg.exprs.len() > 1 {
+                        let mut dependencies = Dependencies::new();
+                        let exprs = dbg
+                            .exprs
+                            .into_iter()
+                            .map(|mut expr| {
+                                let unit_deps = self.expr(&mut expr);
+                                dependencies.extend(unit_deps.effect_deps);
+                                unit_deps.value_deps
+                            })
+                            .collect();
+                        return UnitDeps::duplicated(ExprType::NumberedFields(exprs));
+                    }
+                }
+            }
+            "format" | "format_args" => {
+                if let Ok(mut format) = mac.parse_body::<ExprList>() {
+                    let mut unit_deps = UnitDeps::new();
+                    for expr in format.exprs.iter_mut().skip(1) {
+                        // interpret assignment as providing named parameter
+                        if let Expr::Assign(assign) = expr {
+                            unit_deps.extend(self.expr(&mut assign.right));
+                        } else {
+                            unit_deps.extend(self.expr(expr));
+                        }
+                    }
+                    return unit_deps;
+                }
+            }
+            "matches" => {
+                if let Ok(mut matches) = mac.parse_body::<MatchesBody>() {
+                    let mut unit_deps = self.expr(&mut matches.expr);
+                    if let Some(if_expr) = &mut matches.if_expr {
+                        unit_deps.extend(self.expr(if_expr));
+                    }
+                    return unit_deps;
+                }
+            }
+            "try" => {
+                if let Ok(mut try_) = mac.parse_body::<Try>() {
+                    return self.expr(&mut try_.expr);
+                }
+            }
+            "vec" => {
+                if let Ok(vec) = mac.parse_body::<VecBody>() {
+                    let unit_deps = match vec {
+                        VecBody::Repeat(mut repeat) => {
+                            let mut deps = self.expr(&mut repeat.expr);
+                            deps.extend(self.expr(&mut repeat.n_expr));
+                            deps
+                        }
+                        VecBody::Literal(mut literal) => {
+                            let mut unit_deps = UnitDeps::new();
+                            for expr in literal.iter_mut() {
+                                unit_deps.extend(self.expr(expr));
+                            }
+                            unit_deps
+                        }
+                    };
+                    return unit_deps;
+                }
+            }
+            "write" | "writeln" => {
+                // TODO: update dependencies of last write parameter
+                if let Ok(mut write) = mac.parse_body::<ExprList>() {
+                    let mut unit_deps = UnitDeps::new();
+                    for expr in write.exprs.iter_mut().skip(1) {
+                        if let Expr::Assign(assign) = expr {
+                            unit_deps.extend(self.expr(&mut assign.right));
+                        } else {
+                            unit_deps.extend(self.expr(expr));
+                        }
+                    }
+                    return unit_deps;
                 }
             }
             _ => {
@@ -690,11 +779,8 @@ impl Function {
                 let segments = &path.path.segments;
                 if segments.len() == 1 {
                     let ident_name = segments.first().unwrap().ident.to_string();
-                    match self.get_var(&ident_name) {
-                        Some(var) => {
-                            dependencies = Some(UnitDeps::duplicated(var.dependencies.clone()));
-                        }
-                        None => {}
+                    if let Some(var) = self.get_var(&ident_name) {
+                        dependencies = Some(UnitDeps::duplicated(var.dependencies.clone()));
                     }
                 }
             }
