@@ -2,8 +2,8 @@ use std::marker::PhantomData;
 
 pub struct Tree<T> {
     nodes: Vec<Option<Node<T>>>,
-    ///from the end, the first open site
-    ///if 0, signifies none open
+    /// from the end, the first open site
+    /// if 0, signifies none open
     last_open: usize,
 }
 
@@ -31,6 +31,7 @@ impl<T> Clone for NodeId<T> {
 impl<T> Copy for NodeId<T> {}
 
 impl<T> NodeId<T> {
+    /// Constructs a `NodeId` from a given `idx` to a node in the backing `Vec`.
     fn idx(idx: usize) -> Self {
         NodeId {
             idx,
@@ -38,11 +39,15 @@ impl<T> NodeId<T> {
         }
     }
 
+    /// Gets a reference to the node's corresponding element; `tree` cannot be
+    /// mutated during the lifetime of this borrow.
     #[must_use]
     pub fn get(self, tree: &Tree<T>) -> &T {
         &tree.nodes[self.idx].as_ref().expect("valid NodeId").data
     }
 
+    /// Gets a mutable reference to the node's corresponding element; `tree` 
+    /// is borrowed for the lifetime of this borrow.
     #[must_use]
     pub fn get_mut(self, tree: &mut Tree<T>) -> &mut T {
         &mut tree.nodes[self.idx].as_mut().expect("valid NodeId").data
@@ -115,6 +120,8 @@ impl<T> NodeId<T> {
     }
 
     /// Inserts a child at position `index`, shifting all subtrees after it to the right
+    /// # Panics
+    /// Panics if `index` is greater than the tree's `len`.
     pub fn insert(self, index: usize, data: T, tree: &mut Tree<T>) -> Self {
         let gen_id = self.gen_node(data, tree);
 
@@ -127,6 +134,7 @@ impl<T> NodeId<T> {
         gen_id
     }
 
+    /// Appends the given element to the back of the children of the given node.
     pub fn push(self, data: T, tree: &mut Tree<T>) -> Self {
         let gen_id = self.gen_node(data, tree);
 
@@ -152,6 +160,8 @@ impl<T> NodeId<T> {
     }
 
     /// Removes the specified child by index
+    /// # Panics
+    /// Panics if `index` is out of bounds.
     pub fn remove_child(self, child: usize, tree: &mut Tree<T>) -> T {
         // TODO: check for child idx validity
         let child_node_idx = tree.nodes[self.idx].as_mut().expect("valid self id").children.remove(child);
@@ -168,6 +178,9 @@ impl<T> NodeId<T> {
         child_node.data
     }
 
+    /// Swaps the children of the given node at positions `a` and `b`.
+    /// # Panics
+    /// Panics if `a` or `b` are out of bounds.
     pub fn swap_children(self, a: usize, b: usize, tree: &mut Tree<T>) {
         tree.nodes[self.idx]
             .as_mut()
@@ -184,6 +197,8 @@ impl<T> NodeId<T> {
         }
     }
 
+    /// Returns an iterator to the given node's children's ids.
+    /// The tree is borrowed immutably for the duration of the iterator's lifetime.
     pub fn iter<'a>(
         self,
         tree: &'a Tree<T>,
@@ -196,6 +211,9 @@ impl<T> NodeId<T> {
             .map(|&x| NodeId::idx(x))
     }
 
+    /// Returns an iterator to the given node's children's ids, without borrowing `tree`
+    /// for the duration of the iterator's lifetime. This method allocates memory proportional
+    /// to the number of children.
     pub fn iter_mut(
         self,
         tree: &Tree<T>,
@@ -208,47 +226,10 @@ impl<T> NodeId<T> {
             .into_iter()
             .map(|child| NodeId::idx(child))
     }
-
-    pub fn parent_children_iter<'a>(self, tree: &'a mut Tree<T>) -> ParentChildrenIter<T> {
-        ParentChildrenIter {
-            removed: tree.nodes[self.idx].take(),
-            removed_id: self,
-            tree,
-        }
-    }
-}
-
-pub struct ParentChildrenIter<'a, T> {
-    removed: Option<Node<T>>,
-    removed_id: NodeId<T>,
-    tree: &'a mut Tree<T>,
-}
-
-//TODO: optimize with use of ManuallyDropped (note: unsafe code)
-impl<'a, T> ParentChildrenIter<'a, T> {
-    pub fn get<'f>(
-        &'f mut self,
-    ) -> (
-        &'f mut T,
-        impl DoubleEndedIterator<Item = NodeId<T>> + ExactSizeIterator<Item = NodeId<T>> + 'f,
-        &'f Tree<T>,
-    ) {
-        let mut_removed = self.removed.as_mut().unwrap();
-        (
-            &mut mut_removed.data,
-            mut_removed.children.iter().map(|idx| NodeId::idx(*idx)),
-            &self.tree,
-        )
-    }
-}
-
-impl<'a, T> Drop for ParentChildrenIter<'a, T> {
-    fn drop(&mut self) {
-        self.tree.nodes[self.removed_id.idx] = Some(self.removed.take().unwrap())
-    }
 }
 
 impl<T> Tree<T> {
+    /// Constructs a new `Tree<T>`, with a root node containing the element `data`.
     pub fn new(data: T) -> Self {
         Self {
             nodes: vec![Some(Node {
@@ -260,10 +241,14 @@ impl<T> Tree<T> {
         }
     }
 
+    /// Returns the `NodeId` of the tree's root node. This will always succeed.
     pub fn root(&self) -> NodeId<T> {
         NodeId::idx(0)
     }
 
+    /// Removes the node corresponding to `node_id` from `tree`.
+    /// # Panics
+    /// Panics if `node_id` corresponds to the root node, which cannot be removed.
     pub fn remove(&mut self, node_id: NodeId<T>) -> T {
         assert_ne!(node_id.idx, 0, "cannot remove root node");
         let parent_idx = self.nodes[node_id.idx].as_ref().expect("valid node_id").parent;
@@ -273,14 +258,14 @@ impl<T> Tree<T> {
         node_id.remove_child(children_idx, self)
     }
 
-    ///find next open site, if available
+    /// Find next open site, if available
     fn next_open_site(&mut self) -> Option<usize> {
-        //0 is always full, so this indicates no open site
+        // 0 is always full, so this indicates no open site
         if self.last_open == 0 {
             return None;
         }
 
-        //construct an iterator that iterates from last_site to start of array
+        // construct an iterator that iterates from last_site to start of array
         let rev_iter = self
             .nodes
             .iter()
@@ -297,11 +282,14 @@ impl<T> Tree<T> {
             }
         }
 
-        //if we didn't find anything, we say there are no open sites
+        // if we didn't find anything, we say there are no open sites
         self.last_open = 0;
         None
     }
 
+    /// Given two `NodeId`s, returns mutable references to each of their respective elements.
+    /// # Panics
+    /// Panics if either `a` or `b` are invalid nodes within the given tree.
     #[must_use]
     pub fn get_mut_pair(&mut self, a: NodeId<T>, b: NodeId<T>) -> (&mut T, &mut T) {
         if a.idx < b.idx {
