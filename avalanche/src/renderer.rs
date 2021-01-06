@@ -4,7 +4,7 @@ use crate::{Component, View};
 use crate::vdom::{VNode};
 use crate::{InternalContext};
 
-///An opaque handle whose underlying type is determined by the current `Renderer`.
+/// An opaque handle whose underlying type is determined by the current `Renderer`.
 pub type NativeHandle = Box<dyn Any>;
 
 pub trait Renderer {
@@ -83,6 +83,8 @@ pub trait Renderer {
         index: usize
     );
     
+    /// Updates the `component`'s corresponding native handle so that the representation
+    /// and result match.
     fn update_component(
         &mut self, 
         native_type: &NativeType, 
@@ -92,10 +94,15 @@ pub trait Renderer {
 
     fn remove_component(&mut self, vnode: &mut VNode);
 
+    /// Schedule the given function to be run on the ui thread in the future.
     fn schedule_on_ui_thread(&mut self, f: Box<dyn FnOnce()>);
 
-    //TODO: remove or elaborate?
-    fn log(&self, string: &str);
+    // Logs the given string to a platform-appropriate destination.
+    // This method is a placeholder, and may either be elaborated or replaced with
+    // the `log` crate
+    fn log(&self, _string: &str) {
+
+    }
 }
 
 pub struct NativeType {

@@ -19,7 +19,10 @@ pub struct VDom {
     pub renderer: Box<dyn Renderer>,
 }
 
-//TODO: make pub(crate)
+// TODO: possibly make pub(crate)
+/// A "virtual node" in the UI hierarchy. Contains the node's component,
+/// native information, and associated state.
+#[doc(hidden)]
 pub struct VNode {
     pub component: View,
     pub native_handle: Option<NativeHandle>,
@@ -29,8 +32,8 @@ pub struct VNode {
 }
 
 impl VNode {
-    ///default VNode initialized with a component
-    ///this VNode should be filled in with [`generate_vnode`]
+    /// default VNode initialized with a component
+    /// this VNode should be filled in with [`generate_vnode`]
     fn component(component: View) -> Self {
         Self {
             component,
@@ -42,6 +45,13 @@ impl VNode {
     }
 }
 
+/// Contains the data structures necessary to support the avalanche vdom abstraction. This struct
+/// should only be used by renderer implementation libraries.
+///
+/// # Usage
+/// 
+/// In order to render an avalanche `View`, a renderer library should accept a `View` from the user, then 
+/// use the `generate_root` constructor to create a `Root` instance. 
 pub struct Root {
     vdom: Shared<VDom>,
 }
@@ -56,10 +66,10 @@ impl Root {
     }
 }
 
-pub fn generate_root(component: View, renderer: Box<dyn Renderer>) -> Root {
+pub fn generate_root<R: Renderer + 'static>(component: View, renderer: R) -> Root {
     let vdom = VDom {
         tree: Tree::new(VNode::component(component)),
-        renderer,
+        renderer: Box::new(renderer),
     };
     let root_node = vdom.tree.root();
     let vdom = Shared::new(vdom);
@@ -71,23 +81,28 @@ pub fn generate_root(component: View, renderer: Box<dyn Renderer>) -> Root {
     Root { vdom }
 }
 
-///Traverses hierarchy until node with NativeHandle is found.
-///Returns None if end of tree has no handle
-fn child_with_native_handle(mut vnode: NodeId<VNode>, tree: &Tree<VNode>) -> Option<NodeId<VNode>> {
+/// Traverses hierarchy until node with NativeHandle is found.
+/// Returns None if end of tree has no handle.
+/// # Panics
+/// Panics if `node` is invalid or a node violates the invariant that it may only have multiple
+/// children if it is a native component.
+fn child_with_native_handle(mut node: NodeId<VNode>, tree: &Tree<VNode>) -> Option<NodeId<VNode>> {
     loop {
-        if vnode.get(tree).native_handle.is_some() {
-            return Some(vnode);
-        } else if vnode.iter(tree).len() == 0 {
+        if node.get(tree).native_handle.is_some() {
+            return Some(node);
+        } else if node.iter(tree).len() == 0 {
             return None;
         }
-        vnode = if vnode.iter(tree).len() > 1 {
+        node = if node.iter(tree).len() > 1 {
             panic!("Expected non-native Oak component to have 1 child.");
         } else {
-            vnode.iter(tree).nth(0).unwrap()
+            node.iter(tree).nth(0).unwrap()
         };
     }
 }
 
+/// Given a `node` with a new component, generates a virtual tree for its children,
+/// and renders it.
 pub(crate) fn generate_vnode(
     node: NodeId<VNode>,
     tree: &mut Tree<VNode>,
@@ -172,6 +187,8 @@ fn native_append_child(
     }
 }
 
+/// Uniquely represents a component amongst its children.
+/// Components with the same location rendered multiple times must be given unique keys.
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 struct ChildId {
     key: Option<String>,
@@ -189,6 +206,8 @@ impl ChildId {
 
 // TODO: clarify: can new_component be a different type than the old component?
 // right now, assumption is no
+/// Updates the given `node` so that its children and corresponding native elements
+/// match the current properties and state of its component.
 pub(crate) fn update_vnode(
     mut new_component: Option<View>,
     node: NodeId<VNode>,
@@ -392,6 +411,10 @@ pub(crate) fn update_vnode(
     node.get_mut(tree).dirty = false;
 }
 
+/// Inserts `child`'s corresponding native element at position `pos`.
+/// # Panics
+/// Panics if `parent` does not have a native handle and native type, or if `pos` is greater than
+/// the length of `parent`'s current native children.
 fn native_insert_child(
     parent: NodeId<VNode>,
     child: NodeId<VNode>,
@@ -417,6 +440,14 @@ fn native_insert_child(
     }
 }
 
+/// Updates the given `child`, and if `is_native` is true, creates, updates, or removes its
+/// corresponding native element as needed. `native_pos` should be the index of the native element of `child`, 
+// if it possesses one.
+/// This function is intended to be called from the last child
+/// to the first, in reverse order, as `native_pos` is decremented when a child that contains a native element is processed.
+/// # Panics
+/// Panics if `is_native` is incorrect, `native_pos` is out of bounds, or `parent` and `child` are not 
+/// valid parents and children within `tree`.
 fn native_update_vnode(
     is_native: bool,
     native_pos: &mut usize,
