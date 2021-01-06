@@ -132,6 +132,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
     let state_name = format_ident!("{}State", name);
 
     let render_body = &item_fn.block;
+    let render_body_attributes = &item_fn.attrs;
     let visibility = &item_fn.vis;
 
     let component = quote! {
@@ -193,6 +194,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                 std::boxed::Box::new(<#state_name as std::default::Default>::default())
             }
 
+            #( #render_body_attributes )*
             fn render(&self, context: avalanche::InternalContext) -> avalanche::View {
                 #(
                     fn #hook_get_fn_name(state: &mut std::boxed::Box<std::any::Any>) -> &mut #hook_type {
