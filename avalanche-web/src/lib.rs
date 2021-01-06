@@ -27,7 +27,6 @@ enum Attr {
 }
 #[derive(Default)]
 #[doc(hidden)]
-#[non_exhaustive]
 pub struct RawElement {
     ///bool represents whether the attr was updated
     attrs: HashMap<&'static str, (Option<Attr>, bool)>,
@@ -463,11 +462,10 @@ impl InputBuilder {
 
 static TIMEOUT_MSG_NAME: &str = "oak_web_message_name";
 
-///Renders the given view in the current document's body.
+/// Renders the given view in the current document's body.
 pub fn mount_to_body(view: View) {
     let renderer = WebRenderer::new();
-
-    let root = avalanche::vdom::generate_root(view, Box::new(renderer));
+    let root = avalanche::vdom::generate_root(view, renderer);
 
     root.native_handle(|native_handle| {
         if let Some(native_handle) = native_handle {
@@ -486,8 +484,7 @@ pub fn mount_to_body(view: View) {
         }
     });
 
-    //TODO: more elegant solution that leaks less memory?
-    //TODO: create Shared leak method to avoid extra alloc of Box call?
+    // TODO: more elegant solution that leaks less memory?
     Box::leak(Box::new(root));
 }
 
@@ -509,8 +506,8 @@ impl WebRenderer {
         let queued_fns = Shared::default();
         let queued_fns_clone = queued_fns.clone();
 
-        //sets up fast execution of 0ms timeouts
-        //uses approach in https://dbaron.org/log/20100309-faster-timeouts
+        // sets up fast execution of 0ms timeouts
+        // uses approach in https://dbaron.org/log/20100309-faster-timeouts
         let listener = EventListener::new(&window, "message", move |e| {
             let e = e.clone();
             match e.dyn_into::<web_sys::MessageEvent>() {
@@ -567,7 +564,7 @@ impl WebRenderer {
 }
 
 impl Renderer for WebRenderer {
-    //TODO: add support for () rendering (important!)
+    // TODO: add support for () rendering (important!)
     fn create_component(&mut self, native_type: &NativeType, component: &View) -> NativeHandle {
         let elem = match native_type.handler.as_ref() {
             "oak_web_text" => {
@@ -761,7 +758,7 @@ impl Renderer for WebRenderer {
         };
     }
 
-    //TODO: check for custom handler
+    // TODO: check for custom handler
     fn remove_component(&mut self, vnode: &mut VNode) {
         match &vnode.native_handle {
             Some(handle) => {
@@ -778,8 +775,8 @@ impl Renderer for WebRenderer {
     }
 
     fn schedule_on_ui_thread(&mut self, f: Box<dyn FnOnce()>) {
-        //post message for 0ms timeouts
-        //technique from https://dbaron.org/log/20100309-faster-timeouts
+        // post message for 0ms timeouts
+        // technique from https://dbaron.org/log/20100309-faster-timeouts
         self.queued_fns.exec_mut(move |queue| {
             queue.push_back(f);
         });
