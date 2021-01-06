@@ -6,7 +6,11 @@ use crate::{
 };
 
 use crate::{shared::Shared, InternalContext};
-use std::{any::Any, collections::HashMap, hash::Hash};
+use std::{
+    any::Any,
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
 const DYNAMIC_CHILDREN_ERR: &'static str = "Dynamic components must be provided keys.";
 
@@ -239,11 +243,9 @@ pub(crate) fn update_vnode(
     let mut native_indices = Vec::with_capacity(vnode_children_len);
 
     for (idx, old_vnode) in vnode_children_iter {
-        let old_value = in_place_components
-            .insert(ChildId::from_view(&old_vnode.get(tree).component), {
-                (old_vnode, idx)
-            });
-        assert!(old_value.is_none(), DYNAMIC_CHILDREN_ERR);
+        in_place_components.insert(ChildId::from_view(&old_vnode.get(tree).component), {
+            (old_vnode, idx)
+        });
         native_indices.push(child_with_native_handle(old_vnode, tree).map(|_| {
             let idx = curr_native_idx;
             curr_native_idx += 1;
@@ -260,16 +262,20 @@ pub(crate) fn update_vnode(
         .map(|view| ChildId::from_view(view))
         .collect();
 
+    let check_duplicates: HashSet<_> = children_ids.iter().collect();
+    if check_duplicates.len() != children_ids.len() {
+        panic!(DYNAMIC_CHILDREN_ERR)
+    }
+
     let mut children: Vec<_> = children.into_iter().map(|c| Some(c)).collect();
 
     for (child, id) in children.iter_mut().zip(children_ids.iter()) {
         if in_place_components.get(id).is_none() {
             let vnode = VNode::component(child.take().unwrap());
             let new_child = node.push(vnode, tree);
+            in_place_components.insert(id.clone(), (new_child, node.len(tree) - 1));
             generate_vnode(new_child, tree, renderer, vdom.clone());
             native_append_child(node, new_child, tree, renderer);
-            let old_value = in_place_components.insert(id.clone(), (new_child, node.len(tree) - 1));
-            assert!(old_value.is_none(), DYNAMIC_CHILDREN_ERR);
         }
     }
 
@@ -338,7 +344,6 @@ pub(crate) fn update_vnode(
         }
     }
 
-    
     for i in (children_ids.len()..node.len(tree)).rev() {
         node.remove_child(i, tree);
     }
