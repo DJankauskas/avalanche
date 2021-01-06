@@ -4,8 +4,8 @@ pub mod renderer;
 pub mod shared;
 /// An in-memory representation of the current component tree.
 pub mod vdom;
-
-pub mod tree;
+/// A `Vec`-backed implementation of a tree, with a relatively friendly mutation api.
+pub(crate) mod tree;
 
 pub use avalanche_macro::component;
 use downcast_rs::{impl_downcast, Downcast};
@@ -30,7 +30,7 @@ macro_rules! reactive_assert {
 /// let closure1 = enclose!(message; move || println!("{}", message));
 /// let closure2 = enclose!(message; move || eprintln!("{}", message));
 /// ```
-// Note: code from stdweb
+// Note: code derived from stdweb
 // TODO: appropriately license project and/or code snippet as MIT or Apache license
 #[macro_export]
 macro_rules! enclose {
