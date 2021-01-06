@@ -1,6 +1,10 @@
+#![allow(
+    deprecated,
+    unused_variables,
+    dead_code,
+    unused_assignments,
+    path_statements
+)]
+
 #[cfg(test)]
-#[allow(unused_variables)]
-#[allow(dead_code)]
-#[allow(unused_assignments)]
-#[allow(path_statements)]
 mod tests;

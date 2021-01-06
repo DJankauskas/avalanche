@@ -240,7 +240,6 @@ fn Enclose(a: u8) {
 }
 
 #[component]
-#[allow(deprecated)]
 fn StdMacros(a: u8, b: u8, c: u8) {
     // testing dbg!
     let a_prime = dbg!(a);
