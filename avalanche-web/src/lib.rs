@@ -1,11 +1,3 @@
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
-
 use avalanche::renderer::{HasChildrenMarker, NativeHandle, NativeType, Renderer};
 use avalanche::vdom::VNode;
 use avalanche::{Component, View};

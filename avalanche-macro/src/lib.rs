@@ -1,6 +1,3 @@
-#[cfg(test)]
-mod tests {}
-
 mod analyze;
 mod macro_expr;
 
