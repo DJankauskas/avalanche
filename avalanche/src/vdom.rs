@@ -51,12 +51,27 @@ impl VNode {
 /// # Usage
 /// 
 /// In order to render an avalanche `View`, a renderer library should accept a `View` from the user, then 
-/// use the `generate_root` constructor to create a `Root` instance. 
+/// use the `new` method to create a `Root` instance. 
 pub struct Root {
     vdom: Shared<VDom>,
 }
 
 impl Root {
+    pub fn new<R: Renderer + 'static>(component: View, renderer: R) -> Self {
+        let vdom = VDom {
+            tree: Tree::new(VNode::component(component)),
+            renderer: Box::new(renderer),
+        };
+        let root_node = vdom.tree.root();
+        let vdom = Shared::new(vdom);
+        let vdom_clone = vdom.clone();
+        vdom.exec_mut(|vdom| {
+            generate_vnode(root_node, &mut vdom.tree, &mut vdom.renderer, vdom_clone);
+        });
+    
+        Root { vdom }
+    }
+
     pub fn native_handle<F: FnOnce(Option<&NativeHandle>)>(&self, f: F) {
         &self.vdom.exec(|vdom| {
             let node = child_with_native_handle(vdom.tree.root(), &vdom.tree);
@@ -64,21 +79,6 @@ impl Root {
             f(native_handle.flatten());
         });
     }
-}
-
-pub fn generate_root<R: Renderer + 'static>(component: View, renderer: R) -> Root {
-    let vdom = VDom {
-        tree: Tree::new(VNode::component(component)),
-        renderer: Box::new(renderer),
-    };
-    let root_node = vdom.tree.root();
-    let vdom = Shared::new(vdom);
-    let vdom_clone = vdom.clone();
-    vdom.exec_mut(|vdom| {
-        generate_vnode(root_node, &mut vdom.tree, &mut vdom.renderer, vdom_clone);
-    });
-
-    Root { vdom }
 }
 
 /// Traverses hierarchy until node with NativeHandle is found.

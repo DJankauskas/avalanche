@@ -465,7 +465,7 @@ static TIMEOUT_MSG_NAME: &str = "oak_web_message_name";
 /// Renders the given view in the current document's body.
 pub fn mount_to_body(view: View) {
     let renderer = WebRenderer::new();
-    let root = avalanche::vdom::generate_root(view, renderer);
+    let root = avalanche::vdom::Root::new(view, renderer);
 
     root.native_handle(|native_handle| {
         if let Some(native_handle) = native_handle {
