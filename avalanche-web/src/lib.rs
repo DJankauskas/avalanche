@@ -172,6 +172,8 @@ macro_rules! def_component {
                 self
             }
         }
+
+        add_global_attrs!{$tag_builder}
     };
 }
 
@@ -180,7 +182,7 @@ macro_rules! def_component_attrs {
         $mac:ident;
         props: $($propnative:expr => $propident:ident : $proptype:ty),*;
         $(bool_props: $($boolpropnative: expr => $boolpropident:ident),*;)?
-        listeners: $($listennative:expr => $listenident:ident : $listentype:ty),*;
+        $(listeners: $($listennative:expr => $listenident:ident : $listentype:ty),*;)?
     ) => {
         macro_rules! $mac {
             ($builder:ty) => {
@@ -214,15 +216,17 @@ macro_rules! def_component_attrs {
                     )?
 
                     $(
-                        pub fn $listenident(mut self, f: impl Fn($listentype) + 'static, updated: bool) -> Self {
-                            self.raw.attr(
-                                $listennative,
-                                Some(Attr::Handler(std::rc::Rc::new(move |e| f(e.dyn_into::<$listentype>().unwrap())))),
-                                updated
-                            );
-                            self
-                        }
-                    )*
+                        $(
+                            pub fn $listenident(mut self, f: impl Fn($listentype) + 'static, updated: bool) -> Self {
+                                self.raw.attr(
+                                    $listennative,
+                                    Some(Attr::Handler(std::rc::Rc::new(move |e| f(e.dyn_into::<$listentype>().unwrap())))),
+                                    updated
+                                );
+                                self
+                            }
+                        )*
+                    )?
                 }
             }
         }
@@ -374,15 +378,11 @@ def_component! {
     DivBuilder;
 }
 
-add_global_attrs! {DivBuilder}
-
 def_component! {
     "button";
     Button;
     ButtonBuilder;
 }
-
-add_global_attrs! {ButtonBuilder}
 
 def_component! {
     "h1";
@@ -390,15 +390,11 @@ def_component! {
     H1Builder;
 }
 
-add_global_attrs! {H1Builder}
-
 def_component! {
     "h2";
     H2;
     H2Builder;
 }
-
-add_global_attrs! {H2Builder}
 
 def_component! {
     "h3";
@@ -406,15 +402,11 @@ def_component! {
     H3Builder;
 }
 
-add_global_attrs! {H3Builder}
-
 def_component! {
     "h4";
     H4;
     H4Builder;
 }
-
-add_global_attrs! {H4Builder}
 
 def_component! {
     "h5";
@@ -422,15 +414,339 @@ def_component! {
     H5Builder;
 }
 
-add_global_attrs! {H5Builder}
-
 def_component! {
     "h6";
     H6;
     H6Builder;
 }
 
-add_global_attrs! {H6Builder}
+// TODO: should meta-type tags be implemented?
+
+def_component! {
+    "body";
+    Body;
+    BodyBuilder;
+}
+
+def_component! {
+    "address";
+    Address;
+    AddressBuilder;
+}
+
+def_component! {
+    "article";
+    Article;
+    ArticleBuilder;
+}
+
+def_component!{
+    "aside";
+    Aside;
+    AsideBuilder;
+}
+
+def_component!{
+    "footer";
+    Footer;
+    FooterBuilder;
+}
+
+def_component!{
+    "header";
+    Header;
+    HeaderBuilder;
+}
+
+def_component!{
+    "hgroup";
+    HGroup;
+    HGroupBuilder;
+}
+
+def_component!{
+    "main";
+    Main;
+    MainBuilder;
+}
+
+def_component!{
+    "nav";
+    Nav;
+    NavBuilder;
+}
+
+def_component!{
+    "section";
+    Section;
+    SectionBuilder;
+}
+
+def_component_attrs!{
+    add_blockquote_attrs;
+    props:
+        "cite" => cite: String;
+}
+
+def_component!{
+    "blockquote";
+    BlockQuote;
+    BlockQuoteBuilder;
+}
+
+add_blockquote_attrs!{BlockQuoteBuilder}
+
+def_component!{
+    "dd";
+    Dd;
+    DdBuilder;
+}
+
+def_component!{
+    "dl";
+    Dl;
+    DlBuilder;
+}
+
+def_component!{
+    "dt";
+    Dt;
+    DtBuilder;
+}
+
+def_component!{
+    "figcaption";
+    FigCaption;
+    FigCaptionBuilder;
+}
+
+def_component!{
+    "figure";
+    Figure;
+    FigureBuilder;
+}
+
+def_component!{
+    "hr";
+    Hr;
+    HrBuilder;
+}
+
+// TODO: add integral value prop
+def_component!{
+    "li";
+    Li;
+    LiBuilder;
+}
+
+// TODO: attrs
+def_component!{
+    "ol";
+    Ol;
+    OlBuilder;
+}
+
+def_component!{
+    "p";
+    P;
+    PBuilder;
+}
+
+def_component!{
+    "pre";
+    Pre;
+    PreBuilder;
+}
+
+def_component!{
+    "ul";
+    Ul;
+    UlBuilder;
+}
+
+// TODO: props
+def_component!{
+    "a";
+    A;
+    ABuilder;
+}
+
+def_component!{
+    "abbr";
+    Abbr;
+    AbbrBuilder;
+}
+
+def_component!{
+    "b";
+    B;
+    BBuilder;
+}
+
+def_component!{
+    "bdi";
+    Bdi;
+    BdiBuilder;
+}
+
+def_component!{
+    "bdo";
+    Bdo;
+    BdoBuilder;
+}
+
+def_component!{
+    "br";
+    Br;
+    BrBuilder;
+}
+
+def_component!{
+    "cite";
+    Cite;
+    CiteBuilder;
+}
+
+def_component!{
+    "code";
+    Code;
+    CodeBuilder;
+}
+
+// TODO: string value attr
+def_component!{
+    "data";
+    Data;
+    DataBuilder;
+}
+
+def_component!{
+    "dfn";
+    Dfn;
+    DfnBuilder;
+}
+
+def_component!{
+    "em";
+    Em;
+    EmBuilder;
+}
+
+def_component!{
+    "i";
+    I;
+    IBuilder;
+}
+
+def_component!{
+    "kbd";
+    Kbd;
+    KbdBuilder;
+}
+
+def_component!{
+    "mark";
+    Mark;
+    MarkBuilder;
+}
+
+//TODO: cite attr, repurpose blockquote
+def_component!{
+    "q";
+    Q;
+    QBuilder;
+}
+
+def_component!{
+    "rp";
+    Rp;
+    RpBuilder;
+}
+
+def_component!{
+    "rt";
+    Rt;
+    RtBuilder;
+}
+
+def_component!{
+    "rtc";
+    Rtc;
+    RtcBuilder;
+}
+
+def_component!{
+    "ruby";
+    Ruby;
+    RubyBuilder;
+}
+
+def_component!{
+    "s";
+    S;
+    SBuilder;
+}
+
+def_component!{
+    "samp";
+    Samp;
+    SampBuilder;
+}
+
+def_component!{
+    "small";
+    Small;
+    SmallBuilder;
+}
+
+def_component!{
+    "span";
+    Span;
+    SpanBuilder;
+}
+
+def_component!{
+    "strong";
+    Strong;
+    StrongBuilder;
+}
+
+def_component!{
+    "sub";
+    Sub;
+    SubBuilder;
+}
+
+def_component!{
+    "sup";
+    Sup;
+    SupBuilder;
+}
+
+// TODO: datetime string
+def_component!{
+    "time";
+    Time;
+    TimeBuilder;
+}
+
+def_component!{
+    "u";
+    U;
+    UBuilder;
+}
+
+def_component!{
+    "var";
+    Var;
+    VarBuilder;
+}
+
+def_component!{
+    "wbr";
+    Wbr;
+    WbrBuilder;
+}
 
 def_component_attrs! {
     add_form_attrs;
@@ -445,8 +761,6 @@ def_component_attrs! {
         "disabled" => disabled,
         "readonly" => read_only,
         "required" => required;
-    listeners:
-        ;
 }
 
 def_component! {
@@ -455,7 +769,6 @@ def_component! {
     InputBuilder;
 }
 
-add_global_attrs! {InputBuilder}
 add_form_attrs! {InputBuilder}
 
 impl InputBuilder {
