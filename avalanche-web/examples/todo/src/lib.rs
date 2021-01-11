@@ -46,7 +46,7 @@ fn Todo() {
                         })
                     },
                 ],
-                key: item.id.to_string()
+                key: item.id
             }
         })
         .collect::<Vec<_>>();
@@ -68,7 +68,7 @@ fn Todo() {
             Div!{
                 children: [
                     Text!{text: "id: "},
-                    Text!{text: monotonic_id.to_string()},
+                    Text!{text: monotonic_id},
                     Text!{text: " text: "},
                     Text!{text: text.clone()}
                 ]

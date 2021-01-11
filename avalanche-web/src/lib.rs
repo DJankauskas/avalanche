@@ -157,18 +157,8 @@ macro_rules! def_component {
                 self.raw
             }
 
-            pub fn key(mut self, key: String, _updated: bool) -> Self {
-                self.raw.key = Some(key);
-                self
-            }
-
-            pub fn hidden(mut self, val: Option<bool>, updated: bool) -> Self {
-                if let Some(hidden) = &val {
-                    if *hidden {
-                        self.raw
-                            .attr("hidden", Some(Attr::Prop(String::new())), updated);
-                    }
-                };
+            pub fn key<S: ToString>(mut self, key: S, _updated: bool) -> Self {
+                self.raw.key = Some(key.to_string());
                 self
             }
 
@@ -189,21 +179,39 @@ macro_rules! def_component_attrs {
     (
         $mac:ident;
         props: $($propnative:expr => $propident:ident : $proptype:ty),*;
+        $(bool_props: $($boolpropnative: expr => $boolpropident:ident),*;)?
         listeners: $($listennative:expr => $listenident:ident : $listentype:ty),*;
     ) => {
         macro_rules! $mac {
             ($builder:ty) => {
                 impl $builder {
                     $(
-                        pub fn $propident(mut self, val: Option<$proptype>, updated: bool) -> Self {
+                        pub fn $propident<T>(mut self, val: Option<T>, updated: bool) -> Self where T : Into<$proptype> {
                             self.raw.attr(
                                 $propnative,
-                                val.map(|k| Attr::Prop(k.to_string())),
+                                val.map(|k| Attr::Prop(Into::<$proptype>::into(k).to_string())),
                                 updated
                             );
                             self
                         }
                     )*
+
+                    $(
+                        $(
+                            pub fn $boolpropident(mut self, val: Option<bool>, updated: bool) -> Self {
+                                if let Some(val) = val {
+                                    if val {
+                                        self.raw.attr(
+                                            $boolpropnative,
+                                            Some(Attr::Prop(String::new())),
+                                            updated
+                                        );
+                                    }
+                                }
+                                self
+                            }
+                        )*
+                    )?
 
                     $(
                         pub fn $listenident(mut self, f: impl Fn($listentype) + 'static, updated: bool) -> Self {
@@ -240,6 +248,8 @@ def_component_attrs! {
         "tabindex" => tab_index: i16,
         "title" => title: String,
         "translate" => translate: Translate;
+    bool_props: 
+        "hidden" => hidden;
     listeners:
         //Focus events
         "blur" => on_blur: FocusEvent,
@@ -422,7 +432,6 @@ def_component! {
 
 add_global_attrs! {H6Builder}
 
-// TODO: boolean attributes autofocus, disabled, readonly, required
 def_component_attrs! {
     add_form_attrs;
     props:
@@ -431,6 +440,11 @@ def_component_attrs! {
         "maxlength" => max_length: u32,
         "minlength" => min_length: u32,
         "name" => name: String;
+    bool_props: 
+        "autofocus" => auto_focus,
+        "disabled" => disabled,
+        "readonly" => read_only,
+        "required" => required;
     listeners:
         ;
 }
