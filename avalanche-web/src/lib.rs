@@ -1213,6 +1213,40 @@ impl Renderer for WebRenderer {
                             }
                         }
                     }
+                    "textarea" => {
+                        let text_area_element = element
+                            .clone()
+                            .dyn_into::<web_sys::HtmlTextAreaElement>()
+                            .expect("HTMLTextAreaElement");
+                        for (name, attr) in raw_element.attrs.iter() {
+                            if let Some(attr) = &attr.0 {
+                                match attr {
+                                    Attr::Prop(prop) => match *name {
+                                        "value" => text_area_element.set_value(prop),
+                                        _ => text_area_element.set_attribute(name, &prop).unwrap(),
+                                    },
+                                    Attr::Handler(handler) => match *name {
+                                        "input" if raw_element.is_controlled => {
+                                            add_listener_prevent_default(
+                                                &element,
+                                                name,
+                                                handler.clone(),
+                                                &mut listeners,
+                                            );
+                                        }
+                                        _ => {
+                                            add_listener(
+                                                &element,
+                                                name,
+                                                handler.clone(),
+                                                &mut listeners,
+                                            );
+                                        }
+                                    },
+                                }
+                            }
+                        }
+                    }
                     _ => {
                         for (name, attr) in raw_element.attrs.iter() {
                             if let Some(attr) = &attr.0 {
