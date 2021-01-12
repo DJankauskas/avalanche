@@ -4,8 +4,11 @@ use avalanche::{Component, View};
 
 use avalanche::{shared::Shared, InternalContext};
 
-use std::{collections::{HashMap, VecDeque}, fmt::Display};
 use std::rc::Rc;
+use std::{
+    collections::{HashMap, VecDeque},
+    fmt::Display,
+};
 
 use crate::events::*;
 use gloo::events::{EventListener, EventListenerOptions};
@@ -205,7 +208,8 @@ macro_rules! def_component_attrs {
                                     if val {
                                         self.raw.attr(
                                             $boolpropnative,
-                                            Some(Attr::Prop(String::new())),
+                                            // TODO: use Cow<String> for Prop to avoid alloc
+                                            Some(Attr::Prop(String::from($boolpropnative))),
                                             updated
                                         );
                                     }
@@ -384,6 +388,18 @@ def_component_attrs! {
         "datetime" => date_time: String;
 }
 
+def_component_attrs! {
+    add_string_value_attr;
+    props:
+        "value" => value: String;
+}
+
+def_component_attrs! {
+    add_name_attr;
+    props:
+        "name" => name: String;
+}
+
 def_component! {
     "div";
     Div;
@@ -532,19 +548,34 @@ def_component! {
     HrBuilder;
 }
 
-// TODO: add integral value prop
 def_component! {
     "li";
     Li;
     LiBuilder;
 }
 
-// TODO: attrs
+def_component_attrs! {
+    add_li_attrs;
+    props:
+        "value" => value: u32;
+}
+add_li_attrs! {LiBuilder}
+
 def_component! {
     "ol";
     Ol;
     OlBuilder;
 }
+
+def_component_attrs! {
+    add_ol_attrs;
+    props:
+        "start" => start: i32,
+        "type" => type_: String;
+    bool_props:
+        "reversed" => reversed;
+}
+add_ol_attrs! {OlBuilder}
 
 def_component! {
     "p";
@@ -564,12 +595,25 @@ def_component! {
     UlBuilder;
 }
 
-// TODO: props
 def_component! {
     "a";
     A;
     ABuilder;
 }
+
+def_component_attrs! {
+    add_a_attrs;
+    props:
+        "download" => download: String,
+        "href" => href: String,
+        "hreflanf" => href_lang: String,
+        "ping" => ping: String,
+        "referrerpolicy" => referrer_policy: String,
+        "rel" => rel: String,
+        "target" => target: String,
+        "type" => type_: String;
+}
+add_a_attrs! {ABuilder}
 
 def_component! {
     "abbr";
@@ -613,12 +657,12 @@ def_component! {
     CodeBuilder;
 }
 
-// TODO: string value attr
 def_component! {
     "data";
     Data;
     DataBuilder;
 }
+add_string_value_attr! {DataBuilder}
 
 def_component! {
     "dfn";
@@ -751,6 +795,15 @@ def_component! {
 
 // TODO: multimedia
 
+def_component_attrs! {
+    add_base_img_attrs;
+    props:
+        "alt" => alt: String,
+        "height" => height: u32,
+        "src" => src: String,
+        "width" => width: u32;
+}
+
 def_component! {
     "ins";
     Ins;
@@ -773,12 +826,18 @@ def_component! {
    CaptionBuilder;
 }
 
-// TODO: positive integer span
 def_component! {
     "col";
     Col;
     ColBuilder;
 }
+
+def_component_attrs! {
+    add_col_attrs;
+    props:
+        "span" => span: u32;
+}
+add_col_attrs! {ColBuilder}
 
 // same as above
 def_component! {
@@ -799,12 +858,20 @@ def_component! {
     TBodyBuilder;
 }
 
-// TODO: attrs
 def_component! {
     "td";
     Td;
     TdBuilder;
 }
+
+def_component_attrs! {
+    add_td_th_attrs;
+    props:
+        "colspan" => col_span: u32,
+        "rowspan" => row_span: u32,
+        "headers" => headers: String;
+}
+add_td_th_attrs! {TdBuilder}
 
 def_component! {
     "tfoot";
@@ -818,6 +885,39 @@ def_component! {
     Th;
     ThBuilder;
 }
+add_td_th_attrs! {ThBuilder}
+
+pub enum Scope {
+    Row,
+    Col,
+    RowGroup,
+    ColGroup,
+    Auto,
+}
+
+impl Display for Scope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Scope::Row => "row",
+                Scope::Col => "col",
+                Scope::RowGroup => "rowgroup",
+                Scope::ColGroup => "colgroup",
+                Scope::Auto => "auto",
+            }
+        )
+    }
+}
+
+def_component_attrs! {
+    add_th_attrs;
+    props:
+        "abbr" => abbr: String,
+        "scope" => scope: Scope;
+}
+add_th_attrs! {ThBuilder}
 
 def_component! {
     "thead";
@@ -832,7 +932,7 @@ def_component! {
 }
 
 def_component_attrs! {
-    add_form_attrs;
+    add_form_field_attrs;
     props:
         "form" => form: String,
         "name" => name: String;
@@ -842,16 +942,20 @@ def_component_attrs! {
 }
 
 def_component_attrs! {
-    add_button_attrs;
+    add_form_submit_attrs;
     props:
         "formaction" => form_ation: String,
         "formenctype" => form_enc_type: String,
         "formmethod" => form_method: String,
-        "formtarget" => form_target: String,
-        "type" => type_: String,
-        "value" => value: String;
+        "formtarget" => form_target: String;
     bool_props:
         "formnovalidate" => form_no_validate;
+}
+
+def_component_attrs! {
+    add_button_attrs;
+    props:
+        "type" => type_: String;
 }
 
 def_component! {
@@ -860,7 +964,9 @@ def_component! {
     ButtonBuilder;
 }
 add_button_attrs! {ButtonBuilder}
-add_form_attrs! {ButtonBuilder}
+add_form_field_attrs! {ButtonBuilder}
+add_form_submit_attrs! {ButtonBuilder}
+add_string_value_attr! {ButtonBuilder}
 
 def_component! {
     "datalist";
@@ -868,21 +974,44 @@ def_component! {
     DataListBuilder;
 }
 
-// TODO: disabled, form, name
 def_component! {
     "fieldset";
     FieldSet;
     FieldSetBuilder;
 }
 
-// TODO: attrs
+def_component_attrs! {
+    add_field_set_attrs;
+    props:
+        "form" => form: String;
+    bool_props:
+        "disabled" => disabled;
+}
+add_field_set_attrs! {FieldSetBuilder}
+add_name_attr! {FieldSetBuilder}
+
 def_component! {
     "form";
     Form;
     FormBuilder;
 }
+add_name_attr! {FormBuilder}
 
-// TODO: fill in
+def_component_attrs! {
+    add_form_attrs;
+    props:
+        "accept-charset" => accept_charset: String,
+        "autocomplete" => auto_complete: String,
+        "rel" => rel: String,
+        "action" => action: String,
+        "enctype" => enc_type: String,
+        "method" => method: String,
+        "target" => target: String;
+    bool_props:
+        "novalidate" => no_validate;
+}
+add_form_attrs! {FormBuilder}
+
 def_component_attrs! {
     add_textinput_attrs;
     props:
@@ -899,13 +1028,31 @@ def_component! {
     Input;
     InputBuilder;
 }
-add_form_attrs! {InputBuilder}
+add_form_field_attrs! {InputBuilder}
 add_textinput_attrs! {InputBuilder}
+add_form_submit_attrs! {InputBuilder}
+add_base_img_attrs! {InputBuilder}
+
+def_component_attrs! {
+    add_input_attrs;
+    props:
+        "capture" => capture: String,
+        "dirname" => dir_name: String,
+        "inputmode" => input_mode: String,
+        "list" => list: String,
+        "min" => min: String,
+        "max" => max: String;
+    bool_props:
+        "checked" => checked,
+        "multiple" => multiple;
+}
+add_input_attrs! {InputBuilder}
 
 impl InputBuilder {
     pub fn value<S: ToString>(mut self, val: S, updated: bool) -> Self {
         self.raw.is_controlled = true;
-        self.raw.attr("value", Some(Attr::Prop(val.to_string())), updated);
+        self.raw
+            .attr("value", Some(Attr::Prop(val.to_string())), updated);
         self
     }
 }
@@ -915,13 +1062,14 @@ def_component! {
     TextArea;
     TextAreaBuilder;
 }
-add_form_attrs! {TextAreaBuilder}
+add_form_field_attrs! {TextAreaBuilder}
 add_textinput_attrs! {TextAreaBuilder}
 
 impl TextAreaBuilder {
     pub fn value<S: ToString>(mut self, val: S, updated: bool) -> Self {
         self.raw.is_controlled = true;
-        self.raw.attr("value", Some(Attr::Prop(val.to_string())), updated);
+        self.raw
+            .attr("value", Some(Attr::Prop(val.to_string())), updated);
         self
     }
 }
@@ -929,16 +1077,20 @@ impl TextAreaBuilder {
 pub enum Wrap {
     Soft,
     Hard,
-    Off
+    Off,
 }
 
 impl Display for Wrap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            Wrap::Soft => "soft",
-            Wrap::Hard => "hard",
-            Wrap::Off => "off"
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Wrap::Soft => "soft",
+                Wrap::Hard => "hard",
+                Wrap::Off => "off",
+            }
+        )
     }
 }
 
@@ -970,7 +1122,6 @@ def_component! {
     LegendBuilder;
 }
 
-// TODO: form, value
 def_component_attrs! {
     add_meter_attrs;
     props:
@@ -978,7 +1129,9 @@ def_component_attrs! {
         "max" => max: f64,
         "low" => low: f64,
         "high" => high: f64,
-        "optimum" => optimum: f64;
+        "optimum" => optimum: f64,
+        "form" => form: String,
+        "value" => value: String;
 }
 
 def_component! {
@@ -988,27 +1141,52 @@ def_component! {
 }
 add_meter_attrs! {MeterBuilder}
 
-// TODO: value, label
 def_component! {
     "optgroup";
     OptGroup;
     OptGroupBuilder;
 }
 
-// TODO: disabled, label, selected, value
+def_component_attrs! {
+    add_label_value_attrs;
+    props:
+        "value" => value: String,
+        "label" => label: String;
+}
+add_label_value_attrs! {OptGroupBuilder}
+
 // TODO: doc alias for Option
 def_component! {
     "option";
     Opt;
     OptBuilder;
 }
+add_label_value_attrs! {OptBuilder}
 
-// TODO: for, form, name
+def_component_attrs! {
+    add_opt_attrs;
+    props:
+        ;
+    bool_props:
+        "disabled" => disabled,
+        "selected" => selected;
+}
+add_opt_attrs! {OptBuilder}
+
 def_component! {
     "output";
     Output;
     OutputBuilder;
 }
+
+def_component_attrs! {
+    add_output_attrs;
+    props:
+        "for" => for_: String,
+        "form" => form: String,
+        "name" => name: String;
+}
+add_output_attrs! {OutputBuilder}
 
 def_component! {
     "progress";
@@ -1032,7 +1210,7 @@ def_component! {
     SelectBuilder;
 }
 
-add_form_attrs! {SelectBuilder}
+add_form_field_attrs! {SelectBuilder}
 
 def_component_attrs! {
     add_select_attrs;
