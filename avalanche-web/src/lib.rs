@@ -4,7 +4,7 @@ use avalanche::{Component, View};
 
 use avalanche::{shared::Shared, InternalContext};
 
-use std::collections::{HashMap, VecDeque};
+use std::{collections::{HashMap, VecDeque}, fmt::Display};
 use std::rc::Rc;
 
 use crate::events::*;
@@ -128,7 +128,7 @@ macro_rules! def_component {
 
         // Dummy implenentation of Component for $tag
         // Used only for Builder; all tags create RawElements
-        impl ::avalanche::Component for $tag {
+        impl ::avalanche::Component for crate::$tag {
             type Builder = $tag_builder;
 
             fn render(&self, _: InternalContext) -> View {
@@ -173,7 +173,7 @@ macro_rules! def_component {
             }
         }
 
-        add_global_attrs!{$tag_builder}
+        add_global_attrs! {$tag_builder}
     };
 }
 
@@ -252,7 +252,7 @@ def_component_attrs! {
         "tabindex" => tab_index: i16,
         "title" => title: String,
         "translate" => translate: Translate;
-    bool_props: 
+    bool_props:
         "hidden" => hidden;
     listeners:
         //Focus events
@@ -372,16 +372,22 @@ def_component_attrs! {
         "progress" => on_progress: ProgressEvent;
 }
 
+def_component_attrs! {
+    add_cite_attr;
+    props:
+        "cite" => cite: String;
+}
+
+def_component_attrs! {
+    add_datetime_attr;
+    props:
+        "datetime" => date_time: String;
+}
+
 def_component! {
     "div";
     Div;
     DivBuilder;
-}
-
-def_component! {
-    "button";
-    Button;
-    ButtonBuilder;
 }
 
 def_component! {
@@ -440,325 +446,450 @@ def_component! {
     ArticleBuilder;
 }
 
-def_component!{
+def_component! {
     "aside";
     Aside;
     AsideBuilder;
 }
 
-def_component!{
+def_component! {
     "footer";
     Footer;
     FooterBuilder;
 }
 
-def_component!{
+def_component! {
     "header";
     Header;
     HeaderBuilder;
 }
 
-def_component!{
+def_component! {
     "hgroup";
     HGroup;
     HGroupBuilder;
 }
 
-def_component!{
+def_component! {
     "main";
     Main;
     MainBuilder;
 }
 
-def_component!{
+def_component! {
     "nav";
     Nav;
     NavBuilder;
 }
 
-def_component!{
+def_component! {
     "section";
     Section;
     SectionBuilder;
 }
 
-def_component_attrs!{
-    add_blockquote_attrs;
-    props:
-        "cite" => cite: String;
-}
-
-def_component!{
+def_component! {
     "blockquote";
     BlockQuote;
     BlockQuoteBuilder;
 }
 
-add_blockquote_attrs!{BlockQuoteBuilder}
+add_cite_attr! {BlockQuoteBuilder}
 
-def_component!{
+def_component! {
     "dd";
     Dd;
     DdBuilder;
 }
 
-def_component!{
+def_component! {
     "dl";
     Dl;
     DlBuilder;
 }
 
-def_component!{
+def_component! {
     "dt";
     Dt;
     DtBuilder;
 }
 
-def_component!{
+def_component! {
     "figcaption";
     FigCaption;
     FigCaptionBuilder;
 }
 
-def_component!{
+def_component! {
     "figure";
     Figure;
     FigureBuilder;
 }
 
-def_component!{
+def_component! {
     "hr";
     Hr;
     HrBuilder;
 }
 
 // TODO: add integral value prop
-def_component!{
+def_component! {
     "li";
     Li;
     LiBuilder;
 }
 
 // TODO: attrs
-def_component!{
+def_component! {
     "ol";
     Ol;
     OlBuilder;
 }
 
-def_component!{
+def_component! {
     "p";
     P;
     PBuilder;
 }
 
-def_component!{
+def_component! {
     "pre";
     Pre;
     PreBuilder;
 }
 
-def_component!{
+def_component! {
     "ul";
     Ul;
     UlBuilder;
 }
 
 // TODO: props
-def_component!{
+def_component! {
     "a";
     A;
     ABuilder;
 }
 
-def_component!{
+def_component! {
     "abbr";
     Abbr;
     AbbrBuilder;
 }
 
-def_component!{
+def_component! {
     "b";
     B;
     BBuilder;
 }
 
-def_component!{
+def_component! {
     "bdi";
     Bdi;
     BdiBuilder;
 }
 
-def_component!{
+def_component! {
     "bdo";
     Bdo;
     BdoBuilder;
 }
 
-def_component!{
+def_component! {
     "br";
     Br;
     BrBuilder;
 }
 
-def_component!{
+def_component! {
     "cite";
     Cite;
     CiteBuilder;
 }
 
-def_component!{
+def_component! {
     "code";
     Code;
     CodeBuilder;
 }
 
 // TODO: string value attr
-def_component!{
+def_component! {
     "data";
     Data;
     DataBuilder;
 }
 
-def_component!{
+def_component! {
     "dfn";
     Dfn;
     DfnBuilder;
 }
 
-def_component!{
+def_component! {
     "em";
     Em;
     EmBuilder;
 }
 
-def_component!{
+def_component! {
     "i";
     I;
     IBuilder;
 }
 
-def_component!{
+def_component! {
     "kbd";
     Kbd;
     KbdBuilder;
 }
 
-def_component!{
+def_component! {
     "mark";
     Mark;
     MarkBuilder;
 }
 
-//TODO: cite attr, repurpose blockquote
-def_component!{
+def_component! {
     "q";
     Q;
     QBuilder;
 }
+add_cite_attr! {QBuilder}
 
-def_component!{
+def_component! {
     "rp";
     Rp;
     RpBuilder;
 }
 
-def_component!{
+def_component! {
     "rt";
     Rt;
     RtBuilder;
 }
 
-def_component!{
+def_component! {
     "rtc";
     Rtc;
     RtcBuilder;
 }
 
-def_component!{
+def_component! {
     "ruby";
     Ruby;
     RubyBuilder;
 }
 
-def_component!{
+def_component! {
     "s";
     S;
     SBuilder;
 }
 
-def_component!{
+def_component! {
     "samp";
     Samp;
     SampBuilder;
 }
 
-def_component!{
+def_component! {
     "small";
     Small;
     SmallBuilder;
 }
 
-def_component!{
+def_component! {
     "span";
     Span;
     SpanBuilder;
 }
 
-def_component!{
+def_component! {
     "strong";
     Strong;
     StrongBuilder;
 }
 
-def_component!{
+def_component! {
     "sub";
     Sub;
     SubBuilder;
 }
 
-def_component!{
+def_component! {
     "sup";
     Sup;
     SupBuilder;
 }
 
-// TODO: datetime string
-def_component!{
+def_component! {
     "time";
     Time;
     TimeBuilder;
 }
 
-def_component!{
+add_datetime_attr! {TimeBuilder}
+
+def_component! {
     "u";
     U;
     UBuilder;
 }
 
-def_component!{
+def_component! {
     "var";
     Var;
     VarBuilder;
 }
 
-def_component!{
+def_component! {
     "wbr";
     Wbr;
     WbrBuilder;
 }
 
+// TODO: multimedia
+
+def_component! {
+    "ins";
+    Ins;
+    InsBuilder;
+}
+add_cite_attr! {InsBuilder}
+add_datetime_attr! {InsBuilder}
+
+def_component! {
+    "del";
+    Del;
+    DelBuilder;
+}
+add_cite_attr! {DelBuilder}
+add_datetime_attr! {DelBuilder}
+
+def_component! {
+   "caption";
+   Caption;
+   CaptionBuilder;
+}
+
+// TODO: positive integer span
+def_component! {
+    "col";
+    Col;
+    ColBuilder;
+}
+
+// same as above
+def_component! {
+    "colgroup";
+    ColGroup;
+    ColGroupBuilder;
+}
+
+def_component! {
+    "table";
+    Table;
+    TableBuilder;
+}
+
+def_component! {
+    "tbody";
+    TBody;
+    TBodyBuilder;
+}
+
+// TODO: attrs
+def_component! {
+    "td";
+    Td;
+    TdBuilder;
+}
+
+def_component! {
+    "tfoot";
+    TFoot;
+    TFootBuilder;
+}
+
+// TODO: attrs
+def_component! {
+    "th";
+    Th;
+    ThBuilder;
+}
+
+def_component! {
+    "thead";
+    THead;
+    THeadBuilder;
+}
+
+def_component! {
+    "tr";
+    Tr;
+    TrBuilder;
+}
+
 def_component_attrs! {
     add_form_attrs;
     props:
-        "autocomplete" => auto_complete: String,
         "form" => form: String,
-        "maxlength" => max_length: u32,
-        "minlength" => min_length: u32,
         "name" => name: String;
-    bool_props: 
+    bool_props:
         "autofocus" => auto_focus,
-        "disabled" => disabled,
+        "disabled" => disabled;
+}
+
+def_component_attrs! {
+    add_button_attrs;
+    props:
+        "formaction" => form_ation: String,
+        "formenctype" => form_enc_type: String,
+        "formmethod" => form_method: String,
+        "formtarget" => form_target: String,
+        "type" => type_: String,
+        "value" => value: String;
+    bool_props:
+        "formnovalidate" => form_no_validate;
+}
+
+def_component! {
+    "button";
+    Button;
+    ButtonBuilder;
+}
+add_button_attrs! {ButtonBuilder}
+add_form_attrs! {ButtonBuilder}
+
+def_component! {
+    "datalist";
+    DataList;
+    DataListBuilder;
+}
+
+// TODO: disabled, form, name
+def_component! {
+    "fieldset";
+    FieldSet;
+    FieldSetBuilder;
+}
+
+// TODO: attrs
+def_component! {
+    "form";
+    Form;
+    FormBuilder;
+}
+
+// TODO: fill in
+def_component_attrs! {
+    add_textinput_attrs;
+    props:
+        "autocomplete" => auto_complete: String,
+        "maxlength" => max_length: u32,
+        "minlength" => min_length: u32;
+    bool_props:
         "readonly" => read_only,
         "required" => required;
 }
@@ -768,16 +899,151 @@ def_component! {
     Input;
     InputBuilder;
 }
-
 add_form_attrs! {InputBuilder}
+add_textinput_attrs! {InputBuilder}
 
 impl InputBuilder {
-    pub fn value(mut self, val: String, updated: bool) -> Self {
+    pub fn value<S: ToString>(mut self, val: S, updated: bool) -> Self {
         self.raw.is_controlled = true;
-        self.raw.attr("value", Some(Attr::Prop(val)), updated);
+        self.raw.attr("value", Some(Attr::Prop(val.to_string())), updated);
         self
     }
 }
+
+def_component! {
+    "textarea";
+    TextArea;
+    TextAreaBuilder;
+}
+add_form_attrs! {TextAreaBuilder}
+add_textinput_attrs! {TextAreaBuilder}
+
+impl TextAreaBuilder {
+    pub fn value<S: ToString>(mut self, val: S, updated: bool) -> Self {
+        self.raw.is_controlled = true;
+        self.raw.attr("value", Some(Attr::Prop(val.to_string())), updated);
+        self
+    }
+}
+
+pub enum Wrap {
+    Soft,
+    Hard,
+    Off
+}
+
+impl Display for Wrap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Wrap::Soft => "soft",
+            Wrap::Hard => "hard",
+            Wrap::Off => "off"
+        })
+    }
+}
+
+def_component_attrs! {
+    add_textarea_attrs;
+    props:
+        "cols" => cols: u32,
+        "rows" => rows: u32,
+        "wrap" => wrap: Wrap;
+}
+add_textarea_attrs! {TextAreaBuilder}
+
+def_component_attrs! {
+    add_label_attrs;
+    props:
+        "for" => for_: String;
+}
+
+def_component! {
+    "label";
+    Label;
+    LabelBuilder;
+}
+add_label_attrs! {LabelBuilder}
+
+def_component! {
+    "legend";
+    Legend;
+    LegendBuilder;
+}
+
+// TODO: form, value
+def_component_attrs! {
+    add_meter_attrs;
+    props:
+        "min" => min: f64,
+        "max" => max: f64,
+        "low" => low: f64,
+        "high" => high: f64,
+        "optimum" => optimum: f64;
+}
+
+def_component! {
+    "meter";
+    Meter;
+    MeterBuilder;
+}
+add_meter_attrs! {MeterBuilder}
+
+// TODO: value, label
+def_component! {
+    "optgroup";
+    OptGroup;
+    OptGroupBuilder;
+}
+
+// TODO: disabled, label, selected, value
+// TODO: doc alias for Option
+def_component! {
+    "option";
+    Opt;
+    OptBuilder;
+}
+
+// TODO: for, form, name
+def_component! {
+    "output";
+    Output;
+    OutputBuilder;
+}
+
+def_component! {
+    "progress";
+    Progress;
+    ProgressBuilder;
+}
+
+def_component_attrs! {
+    add_progress_attrs;
+    props:
+        "max" => max: f64,
+        "value" => value: f64;
+}
+
+add_progress_attrs! {ProgressBuilder}
+
+// TODO: add controlled functionality
+def_component! {
+    "select";
+    Select;
+    SelectBuilder;
+}
+
+add_form_attrs! {SelectBuilder}
+
+def_component_attrs! {
+    add_select_attrs;
+    props:
+        "autocomplete" => auto_complete: String,
+        "size" => size: u32;
+    bool_props:
+        "multiple" => multiple,
+        "required" => required;
+}
+add_select_attrs! {SelectBuilder}
 
 static TIMEOUT_MSG_NAME: &str = "oak_web_message_name";
 
