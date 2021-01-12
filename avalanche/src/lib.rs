@@ -57,7 +57,7 @@ macro_rules! __internal_identity {
 }
 
 /// A reference-counted type that holds an instance of a component.
-/// Component functions must return a view.
+/// Component functions must return a [`View`].
 #[derive(Clone)]
 pub struct View {
     rc: Rc<dyn DynComponent>,
@@ -179,11 +179,11 @@ pub struct InternalContext<'a> {
 /// Internal data structure that stores what tree a component
 /// belongs to, and its position within it
 pub struct ComponentPos {
-    ///Shared value ONLY for passing to UseState
-    ///within the render function this value is mutably borrowed,
-    ///so exec and exec_mut will panic
+    /// Shared value ONLY for passing to UseState
+    /// within the render function this value is mutably borrowed,
+    /// so exec and exec_mut will panic
     pub vnode: NodeId<VNode>,
-    ///shared container to the VDom of which
+    /// Shared container to the VDom of which the [`vnode`] is a part.
     pub vdom: Shared<VDom>,
 }
 
@@ -232,7 +232,7 @@ impl<T> UseState<T> {
     }
 }
 
-///Provides a setter for a piece of state managed by `UseState<T>`.
+/// Provides a setter for a piece of state managed by `UseState<T>`.
 pub struct UseStateSetter<T: 'static> {
     component_pos: ComponentPos,
     get_mut: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
@@ -286,26 +286,6 @@ impl<T: 'static> UseStateSetter<T> {
                 })
             }));
         });
-        // let vnode_clone = self.vnode.clone();
-        // let vdom_clone = self.vnode.exec(|vnode| vnode.vdom.clone());
-        // let get_mut = self.get_mut;
-
-        // self.vnode.exec_mut(move |vnode| {
-        //     let mut_ref_to_state = get_mut(vnode.state.as_mut().unwrap());
-        //     f(mut_ref_to_state.state.as_mut().unwrap());
-        //     mut_ref_to_state.updated = true;
-
-        //     vnode.vdom.exec_mut(|vdom| {
-        //         vdom.renderer.schedule_on_ui_thread(
-        //             Box::new(move || {
-        //                 vnode_clone.exec_mut(|vnode| vnode.dirty = true);
-        //                 vdom_clone.exec_mut(|vdom| {
-        //                     update_vnode(vnode_clone, None, &mut vdom.renderer);
-        //                 });
-        //             })
-        //         )
-        //     });
-        // });
     }
 }
 
@@ -316,13 +296,13 @@ pub struct UseStateUpdates {
 
 impl UseStateUpdates {
     #[doc(hidden)]
-    ///Used to get the status of a portion of returned state
-    ///Usage: if the return type is an array or tuple, passing a &[num] will
-    ///yield whether that element has been updated. If that element is also
-    //a tuple or array, this logic applies recursively.
-    /// TODO: actually use this model!
-    /// Or replace it with something else!
-    /// For now, each element corresponds to an index within
+    /// Used to get the status of a portion of returned state
+    /// Usage: if the return type is an array or tuple, passing a &[num] will
+    /// yield whether that element has been updated. If that element is also
+    /// a tuple or array, this logic applies recursively.
+    // TODO: actually use this model!
+    // Or replace it with something else!
+    // For now, each element corresponds to an index within
     pub fn index(&self, idx: &[usize]) -> bool {
         // match idx {
         //     //corresponds to &'a T in hook()
