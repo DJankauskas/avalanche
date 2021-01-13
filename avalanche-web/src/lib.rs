@@ -793,7 +793,191 @@ def_component! {
     WbrBuilder;
 }
 
-// TODO: multimedia
+def_component! {
+    "area";
+    Area;
+    AreaBuilder;
+}
+add_a_attrs! {AreaBuilder}
+
+def_component_attrs! {
+    add_area_attrs;
+    props:
+        "coords" => coords: String,
+        "shape" => shape: String;
+}
+add_area_attrs! {AreaBuilder}
+
+pub enum CrossOrigin {
+    Anonymous,
+    UseCredentials
+}
+
+impl Display for CrossOrigin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            CrossOrigin::Anonymous => "anonymous",
+            CrossOrigin::UseCredentials => "use-credentials"
+        })
+    }
+}
+
+pub enum Preload {
+    None,
+    Metadata,
+    Auto
+}
+
+impl Display for Preload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Preload::None => "none",
+            Preload::Metadata => "metadata",
+            Preload::Auto => "auto"
+        })
+    }
+}
+
+def_component_attrs! {
+    add_media_attrs;
+    props:
+        "crossorigin" => cross_origin: CrossOrigin,
+        "preload" => preload: Preload,
+        "src" => src: String;
+    bool_props:
+        "autoplay" => autoplay,
+        "controls" => controls,
+        "disableRemotePlayback" => disable_remote_playback,
+        "loop" => loop_,
+        "muted" => muted;
+}
+
+def_component! {
+    "audio";
+    Audio;
+    AudioBuilder;
+}
+add_media_attrs! {AudioBuilder}
+
+def_component! {
+    "video";
+    Video;
+    VideoBuilder;
+}
+add_media_attrs! {VideoBuilder}
+
+def_component_attrs! {
+    add_video_attrs;
+    props:
+        "width" => width: f64,
+        "height" => height: f64,
+        "poster" => poster: String;
+    bool_props:
+        "autoPictureInPicture" => auto_picture_in_picture,
+        "disablePictureInPicture" => disable_picture_in_picture,
+        "playsinline" => plays_inline;
+}
+add_video_attrs! {VideoBuilder}
+
+def_component! {
+    "img";
+    Img;
+    ImgBuilder;
+}
+
+pub enum Decoding {
+    Sync,
+    Async,
+    Auto
+}
+
+impl Display for Decoding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Decoding::Sync => "sync",
+            Decoding::Async => "async",
+            Decoding::Auto => "auto"
+        })
+    }
+}
+
+pub enum Loading {
+    Eager,
+    Lazy
+}
+
+impl Display for Loading {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Loading::Eager => "eager",
+            Loading::Lazy => "lazy"
+        })
+    }
+}
+
+def_component_attrs! {
+    add_img_attrs;
+    props:
+        "alt" => alt: String,
+        "crossorigin" => cross_origin: CrossOrigin,
+        "decoding" => decoding: Decoding,
+        "width" => width: f64,
+        "height" => height: f64,
+        "loading" => loading: Loading,
+        "referrerpolicy" => referrer_policy: String,
+        "sizes" => sizes: String,
+        "src" => src: String,
+        "srcset" => srcset: String,
+        "usemap" => use_map: String;
+    bool_props:
+        "ismap" => is_map;
+}
+add_img_attrs! {ImgBuilder}
+
+def_component! {
+    "map";
+    Map;
+    MapBuilder;
+}
+add_name_attr! {MapBuilder}
+
+def_component! {
+    "track";
+    Track;
+    TrackBuilder;
+}
+
+pub enum TrackKind {
+    Subtitles,
+    Captions,
+    Descriptions,
+    Chapters,
+    Metadata
+}
+
+impl Display for TrackKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            TrackKind::Subtitles => "subtitles",
+            TrackKind::Captions => "captions",
+            TrackKind::Descriptions => "descriptions",
+            TrackKind::Chapters => "chapters",
+            TrackKind::Metadata => "metadata"
+        })
+    }
+}
+
+def_component_attrs! {
+    add_track_attrs;
+    props:
+        "kind" => kind: TrackKind,
+        "label" => label: String,
+        "src" => src: String,
+        "srclang" => src_lang: String;
+    bool_props:
+        "default" => default;
+}
+add_track_attrs! {TrackBuilder}
 
 def_component_attrs! {
     add_base_img_attrs;
@@ -1222,6 +1406,34 @@ def_component_attrs! {
         "required" => required;
 }
 add_select_attrs! {SelectBuilder}
+
+def_component_attrs! {
+    add_open_attr;
+    props:
+        ;
+    bool_props:
+        "open" => open;
+}
+
+def_component! {
+    "details";
+    Details;
+    DetailsBuilder;
+}
+add_open_attr! {DetailsBuilder}
+
+def_component! {
+    "dialog";
+    Dialog;
+    DialogBuilder;
+}
+add_open_attr! {DialogBuilder}
+
+def_component! {
+    "summary";
+    Summary;
+    SummaryBuilder;
+}
 
 static TIMEOUT_MSG_NAME: &str = "oak_web_message_name";
 
