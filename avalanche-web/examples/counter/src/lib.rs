@@ -1,5 +1,5 @@
 use avalanche::{component, UseState};
-use avalanche_web::{Button, Div, Text, H2};
+use avalanche_web::components::{Button, Div, Text, H2};
 use wasm_bindgen::prelude::*;
 
 // When the `wee_alloc` feature is enabled, this uses `wee_alloc` as the global

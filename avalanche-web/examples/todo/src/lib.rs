@@ -1,5 +1,5 @@
 use avalanche::{component, reactive_assert, enclose, UseState};
-use avalanche_web::{Button, Div, Input, Text, H2};
+use avalanche_web::components::{Button, Div, Input, Text, H2};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{JsCast};
 use web_sys::{HtmlInputElement};
