@@ -859,18 +859,24 @@ def_component! {
 }
 add_media_attrs! {AudioBuilder}
 
+def_component_attrs! {
+    add_width_height_attrs;
+    props:
+        "width" => width: f64,
+        "height" => height: f64;
+}
+
 def_component! {
     "video";
     Video;
     VideoBuilder;
 }
 add_media_attrs! {VideoBuilder}
+add_width_height_attrs! {VideoBuilder}
 
 def_component_attrs! {
     add_video_attrs;
     props:
-        "width" => width: f64,
-        "height" => height: f64,
         "poster" => poster: String;
     bool_props:
         "autoPictureInPicture" => auto_picture_in_picture,
@@ -884,6 +890,7 @@ def_component! {
     Img;
     ImgBuilder;
 }
+add_width_height_attrs! {ImgBuilder}
 
 pub enum Decoding {
     Sync,
@@ -921,13 +928,11 @@ def_component_attrs! {
         "alt" => alt: String,
         "crossorigin" => cross_origin: CrossOrigin,
         "decoding" => decoding: Decoding,
-        "width" => width: f64,
-        "height" => height: f64,
         "loading" => loading: Loading,
         "referrerpolicy" => referrer_policy: String,
         "sizes" => sizes: String,
         "src" => src: String,
-        "srcset" => srcset: String,
+        "srcset" => src_set: String,
         "usemap" => use_map: String;
     bool_props:
         "ismap" => is_map;
@@ -983,9 +988,82 @@ def_component_attrs! {
     add_base_img_attrs;
     props:
         "alt" => alt: String,
-        "height" => height: u32,
+        "height" => height: f64,
         "src" => src: String,
-        "width" => width: u32;
+        "width" => width: f64;
+}
+
+def_component! {
+    "embed";
+    Embed;
+    EmbedBuilder;
+}
+add_width_height_attrs! {EmbedBuilder}
+
+def_component_attrs! {
+    add_embed_attrs;
+    props:
+        "src" => src: String,
+        "type" => type_: String;
+}
+add_embed_attrs! {EmbedBuilder}
+
+def_component! {
+    "iframe";
+    IFrame;
+    IFrameBuilder;
+}
+add_width_height_attrs! {IFrameBuilder}
+
+def_component_attrs! {
+    add_iframe_attrs;
+    props:
+        "allow" => allow: String,
+        "csp" => csp: String,
+        "loading" => loading: Loading,
+        "name" => name: String,
+        "referrerpolicy" => referrer_policy: String,
+        "sandbox" => sandbox: String,
+        "src" => src: String,
+        "srcdoc" => src_doc: String;
+    bool_props:
+        "allowfullscreen" => allow_full_screen,
+        "allowpaymentrequest" => allow_payment_request;
+}
+add_iframe_attrs! {IFrameBuilder}
+
+def_component! {
+    "object";
+    Object;
+    ObjectBuilder;
+}
+add_width_height_attrs! {ObjectBuilder}
+add_name_attr! {ObjectBuilder}
+
+def_component_attrs! {
+    add_object_attrs;
+    props:
+        "data" => data: String,
+        "form" => form: String,
+        "type" => type_: String,
+        "usemap" => use_map: String;
+    bool_props:
+        "typemustmatch" => type_must_match;
+}
+add_object_attrs! {ObjectBuilder}
+
+def_component! {
+    "param";
+    Param;
+    ParamBuilder;
+}
+add_string_value_attr! {ParamBuilder}
+add_name_attr! {ParamBuilder}
+
+def_component! {
+    "picture";
+    Picture;
+    PictureBuilder;
 }
 
 def_component! {
