@@ -1,5 +1,7 @@
-use avalanche::{component, reactive_assert, enclose, UseState};
-use avalanche_web::components::{Button, Div, Input, Text, H2};
+use avalanche::{component, enclose, reactive_assert, UseState};
+use avalanche_web::components::{
+    Button, Div, Footer, Header, Input, Label, Li, Section, Span, Strong, Text, Ul, A, H1
+};
 use wasm_bindgen::prelude::*;
 
 // When the `wee_alloc` feature is enabled, this uses `wee_alloc` as the global
@@ -13,38 +15,96 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 #[derive(Debug, Clone)]
 struct Item {
     text: String,
+    completed: bool,
     id: u32,
 }
 
-#[component(text = UseState<String>, items = UseState<Vec<Item>>, monotonic_id = UseState<u32>)]
+#[derive(Clone, Copy, PartialEq)]
+enum Filter {
+    All,
+    Active,
+    Completed,
+}
+
+impl Filter {
+    fn selected(&self, other: Filter) -> Option<&'static str> {
+        if *self == other {
+            Some("selected")
+        } else {
+            None
+        }
+    }
+}
+
+#[component(items = UseState<Vec<Item>>, monotonic_id = UseState<u32>, editing = UseState<Option<u32>>, filter = UseState<Filter>)]
 fn Todo() {
-    let (text, set_text) = text(String::new());
+    let (editing, set_editing) = editing(None);
+    let (filter, set_filter) = filter(Filter::All);
     let (items, update_items) = items(Vec::new());
     let (monotonic_id, update_monotonic_id) = monotonic_id(0);
     let monotonic_id = *monotonic_id;
+
+    let num_completed = items.iter().filter(|item| item.completed).count();
+    let num_active = items.len() - num_completed;
+
+    let clear_completed = enclose!(update_items; move |_| {
+        update_items.call(|items| {
+            items.retain(|item| !item.completed);
+        })
+    });
 
     let children = items
         .iter()
         .enumerate()
         .map(|(i, item)| {
             reactive_assert!(items => i);
-            Div!{
+            Li! {
+                // TODO: replace with then method
+                class: Some(format!(
+                    "{} {}",
+                    if item.completed {
+                        "completed"
+                    } else {
+                        ""
+                    },
+                    if *editing == Some(item.id) {
+                        "editing"
+                    } else {
+                        ""
+                    }
+                )),
+                key: item.id,
                 children: [
-                    Text! {
-                        text: "Item ".to_owned() + &item.text,
+                    Div!{
+                        class: Some("view"),
+                        children: [
+                            Input!{
+                                class: Some("toggle"),
+                                type_: Some("checkbox"),
+                                checked: item.completed,
+                                on_click: enclose!(update_items; move |_| {
+                                    update_items.call(|items| items[i].completed = !items[i].completed)
+                                })
+                            },
+                            Label!{
+                                child: Text!{text: item.text.clone()},
+                            },
+                            Button!{
+                                class: Some("destroy"),
+                            }
+                        ]
                     },
-                    Button!{
-                        child: Text!{
-                            text: "x"
-                        },
-                        on_click: enclose!(update_items; move |_| {
-                            update_items.call(|items| {
-                                items.remove(i);
-                            });
-                        })
-                    },
-                ],
-                key: item.id
+                    if *editing == Some(item.id) {
+                        Input!{
+                            class: Some("edit"),
+                            id: Some("edit"),
+                            auto_focus: true,
+                            value: item.text.clone()
+                        }
+                    } else {
+                        ().into()
+                    }
+                ]
             }
         })
         .collect::<Vec<_>>();
@@ -53,49 +113,94 @@ fn Todo() {
 
     Div! {
         children: [
-            H2!{
-                child: Text!{text: "Todo!"},
-            },
-            Input!{
-                value: text.to_owned(),
-                on_input: enclose!(set_text; move |e| {
-                    let input = e.current_target().unwrap();
-                    set_text.call(|text| *text = input.value());
-                })
-            },
-            Div!{
+            Header!{
+                class: Some("header"),
                 children: [
-                    Text!{text: "id: "},
-                    Text!{text: monotonic_id},
-                    Text!{text: " text: "},
-                    Text!{text: text.clone()}
+                    H1!{
+                        child: Text!{text: "todos"}
+                    },
+                    Input!{
+                        class: Some("new-todo"),
+                        placeholder: Some("What needs to be done?"),
+                        auto_focus: true
+                    }
                 ]
             },
-            Div!{
-                style: Some("display: flex; flex-direction: column;".to_owned()),
-                children
-            },
-            Button!{
-                // on_click: move |_| set_count.call(|count| *count += 1),
-                child: Text!{text: "Create"},
-                on_click: enclose!(text, update_items; move |_| {
-                    let text = text.clone();
-                    update_items.call(|items| items.push(Item {
-                        text,
-                        id: monotonic_id
-                    }));
-                    set_text.call(|text| text.clear());
-                    update_monotonic_id.call(|id| *id += 1);
-                })
-            },
-            Button!{
-                child: Text!{text: "Sort alphabetically"},
-                on_click: move |_| {
-                    update_items.call(|items| {
-                        items.sort_by(|a, b| a.text.cmp(&b.text))
-                    })
+            if items.len() > 0 {
+                Section!{
+                    class: Some("main"),
+                    children: [
+                        Input!{
+                            id: Some("toggle-all"),
+                            class: Some("toggle-all"),
+                            type_: Some("checkbox")
+                        },
+                        Label!{
+                            for_: Some("toggle-all"),
+                            child: Text!{text: "Mark all as complete"}
+                        },
+
+                        Ul!{
+                            class: Some("todo-list"),
+                            children: children
+                        },
+
+                        Footer!{
+                            class: Some("footer"),
+                            children: [
+                                Span!{
+                                    class: Some("todo-count"),
+                                    children: [
+                                        Strong! {
+                                            child: Text!{text: num_active}
+                                        },
+                                        Text!{text: if num_active == 1 { "item" } else { "items" }}
+                                    ]
+                                },
+
+                                Ul! {
+                                    class: Some("filters"),
+                                    children: [
+                                        Li! {
+                                            child: A! {
+                                                class: filter.selected(Filter::All),
+                                                href: Some("#/"),
+                                                child: Text!{text: "All"}
+                                            }
+                                        },
+                                        Li! {
+                                            child: A! {
+                                                class: filter.selected(Filter::Active),
+                                                href: Some("#/active"),
+                                                child: Text!{text: "Active"}
+                                            }
+                                        },
+                                        Li! {
+                                            child: A! {
+                                                class: filter.selected(Filter::Completed),
+                                                href: Some("#/completed"),
+                                                child: Text!{text: "Completed"}
+                                            }
+                                        }
+                                    ]
+                                },
+
+                                if num_completed > 0 {
+                                    Button!{
+                                        class: Some("clear-completed"),
+                                        on_click: clear_completed,
+                                        child: Text!{text: "Clear completed"}
+                                    }
+                                } else {
+                                    ().into()
+                                }
+                            ]
+                        }
+                    ]
                 }
-            }
+            } else {
+                ().into()
+            },
         ]
     }
 }
