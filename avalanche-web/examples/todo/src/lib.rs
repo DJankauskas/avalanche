@@ -1,6 +1,6 @@
 use avalanche::{component, enclose, reactive_assert, UseState};
 use avalanche_web::components::{
-    Button, Div, Footer, Header, Input, Label, Li, Section, Span, Strong, Text, Ul, A, H1
+    Button, Div, Footer, Header, Input, Label, Li, Section, Span, Strong, Text, Ul, A, H1,
 };
 use wasm_bindgen::prelude::*;
 
@@ -11,6 +11,9 @@ use wasm_bindgen::prelude::*;
 #[cfg(feature = "wee_alloc")]
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+
+const ENTER_KEY: u32 = 13;
+const ESCAPE_KEY: u32 = 27;
 
 #[derive(Debug, Clone)]
 struct Item {
@@ -31,7 +34,7 @@ impl Filter {
         if *self == other {
             Some("selected")
         } else {
-            None
+            Some("")
         }
     }
 }
@@ -55,9 +58,17 @@ fn Todo() {
 
     let children = items
         .iter()
+        .filter(|item| {
+            match filter {
+                Filter::All => true,
+                Filter::Completed => item.completed,
+                Filter::Active => !item.completed
+            }
+        })
         .enumerate()
         .map(|(i, item)| {
             reactive_assert!(items => i);
+            let id = item.id;
             Li! {
                 // TODO: replace with then method
                 class: Some(format!(
@@ -88,9 +99,17 @@ fn Todo() {
                             },
                             Label!{
                                 child: Text!{text: item.text.clone()},
+                                on_double_click: enclose!(set_editing; move |_| {
+                                    set_editing.call(|editing| *editing = Some(id))
+                                })
                             },
                             Button!{
                                 class: Some("destroy"),
+                                on_click: enclose!(update_items; move |_| {
+                                    update_items.call(|items| {
+                                        items.remove(i);
+                                    })
+                                })
                             }
                         ]
                     },
@@ -99,7 +118,19 @@ fn Todo() {
                             class: Some("edit"),
                             id: Some("edit"),
                             auto_focus: true,
-                            value: item.text.clone()
+                            value: item.text.clone(),
+                            on_key_down: enclose!(set_editing; move |e| {
+                                let which = e.which();
+                                if which == ENTER_KEY {
+                                    e.current_target().unwrap().blur().expect("blur");
+                                } else if which == ESCAPE_KEY {
+                                    set_editing.call(|editing| *editing = None);
+                                }
+                            }),
+                            on_blur: enclose!(update_items, set_editing; move |e| {
+                                update_items.call(|items| items[i].text = e.current_target().unwrap().value());
+                                set_editing.call(|editing| *editing = None);
+                            })
                         }
                     } else {
                         ().into()
@@ -122,7 +153,22 @@ fn Todo() {
                     Input!{
                         class: Some("new-todo"),
                         placeholder: Some("What needs to be done?"),
-                        auto_focus: true
+                        auto_focus: true,
+                        on_key_down: enclose!(update_items; move |e| {
+                            if e.which() == ENTER_KEY {
+                                let current_target = e.current_target().unwrap();
+                                update_items.call(|items| {
+                                    let new_item = Item {
+                                        text: current_target.value(),
+                                        completed: false,
+                                        id: monotonic_id
+                                    };
+                                    items.push(new_item);
+                                });
+                                update_monotonic_id.call(|id| *id += 1);
+                                current_target.set_value("");
+                            }
+                        })
                     }
                 ]
             },
@@ -133,7 +179,15 @@ fn Todo() {
                         Input!{
                             id: Some("toggle-all"),
                             class: Some("toggle-all"),
-                            type_: Some("checkbox")
+                            type_: Some("checkbox"),
+                            on_change: enclose!(update_items; move |e| {
+                                update_items.call(|items| {
+                                    let checked = e.current_target().unwrap().checked();
+                                    for item in items.iter_mut() {
+                                        item.completed = checked;
+                                    }
+                                })
+                            })
                         },
                         Label!{
                             for_: Some("toggle-all"),
@@ -142,7 +196,7 @@ fn Todo() {
 
                         Ul!{
                             class: Some("todo-list"),
-                            children: children
+                            children
                         },
 
                         Footer!{
@@ -154,7 +208,7 @@ fn Todo() {
                                         Strong! {
                                             child: Text!{text: num_active}
                                         },
-                                        Text!{text: if num_active == 1 { "item" } else { "items" }}
+                                        Text!{text: if num_active == 1 { " item" } else { " items" }}
                                     ]
                                 },
 
@@ -165,21 +219,30 @@ fn Todo() {
                                             child: A! {
                                                 class: filter.selected(Filter::All),
                                                 href: Some("#/"),
-                                                child: Text!{text: "All"}
+                                                child: Text!{text: "All"},
+                                                on_click: enclose!(set_filter; move |_| {
+                                                    set_filter.call(|filter| *filter = Filter::All);
+                                                })
                                             }
                                         },
                                         Li! {
                                             child: A! {
                                                 class: filter.selected(Filter::Active),
                                                 href: Some("#/active"),
-                                                child: Text!{text: "Active"}
+                                                child: Text!{text: "Active"},
+                                                on_click: enclose!(set_filter; move |_| {
+                                                    set_filter.call(|filter| *filter = Filter::Active);
+                                                })
                                             }
                                         },
                                         Li! {
                                             child: A! {
                                                 class: filter.selected(Filter::Completed),
                                                 href: Some("#/completed"),
-                                                child: Text!{text: "Completed"}
+                                                child: Text!{text: "Completed"},
+                                                on_click: enclose!(set_filter; move |_| {
+                                                    set_filter.call(|filter| *filter = Filter::Completed);
+                                                })
                                             }
                                         }
                                     ]
