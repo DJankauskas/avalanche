@@ -1,8 +1,6 @@
 use avalanche::{component, reactive_assert, enclose, UseState};
 use avalanche_web::components::{Button, Div, Input, Text, H2};
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::{JsCast};
-use web_sys::{HtmlInputElement};
 
 // When the `wee_alloc` feature is enabled, this uses `wee_alloc` as the global
 // allocator.
@@ -61,7 +59,7 @@ fn Todo() {
             Input!{
                 value: text.to_owned(),
                 on_input: enclose!(set_text; move |e| {
-                    let input = e.current_target().unwrap().dyn_into::<HtmlInputElement>().unwrap();
+                    let input = e.current_target().unwrap();
                     set_text.call(|text| *text = input.value());
                 })
             },

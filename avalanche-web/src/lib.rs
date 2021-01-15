@@ -309,6 +309,49 @@ impl Renderer for WebRenderer {
                                 }
                             }
                         }
+                        "textarea" => {
+                            let text_area_element = element
+                                .clone()
+                                .dyn_into::<web_sys::HtmlTextAreaElement>()
+                                .expect("HTMLTextAreaElement");
+                            for (name, (attr, updated)) in raw_element.attrs.iter() {
+                                if *updated {
+                                    match attr {
+                                        Some(attr) => match attr {
+                                            Attr::Prop(prop) => {
+                                                if *name == "value" {
+                                                    text_area_element.set_value(&prop);
+                                                } else {
+                                                    text_area_element
+                                                        .set_attribute(name, &prop)
+                                                        .unwrap();
+                                                }
+                                            }
+                                            Attr::Handler(handler) => {
+                                                if raw_element.is_controlled && *name == "input" {
+                                                    update_listener_prevent_default(
+                                                        &element,
+                                                        name,
+                                                        handler.clone(),
+                                                        &mut web_handle.listeners,
+                                                    );
+                                                } else {
+                                                    update_listener(
+                                                        &element,
+                                                        name,
+                                                        handler.clone(),
+                                                        &mut web_handle.listeners,
+                                                    );
+                                                }
+                                            }
+                                        },
+                                        None => {
+                                            remove_listener(name, &mut web_handle.listeners);
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         _ => {
                             for (name, (attr, updated)) in raw_element.attrs.iter() {
                                 if *updated {
