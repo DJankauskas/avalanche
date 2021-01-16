@@ -158,9 +158,18 @@ impl Renderer for WebRenderer {
                             if let Some(attr) = &attr.0 {
                                 match attr {
                                     Attr::Prop(prop) => match *name {
-                                        "value" => input_element.set_value(prop),
-                                        _ => input_element.set_attribute(name, &prop).unwrap(),
-                                    },
+                                        "value" => {
+                                            input_element.set_value(&prop);
+                                        }
+                                        "checked" => {
+                                            input_element.set_checked(prop != "")
+                                        }
+                                        _ => {
+                                            input_element
+                                            .set_attribute(name, &prop)
+                                            .unwrap();
+                                        }
+                                    }
                                     Attr::Handler(handler) => match *name {
                                         "input" if raw_element.is_controlled => {
                                             add_listener_prevent_default(
@@ -276,12 +285,18 @@ impl Renderer for WebRenderer {
                                     match attr {
                                         Some(attr) => match attr {
                                             Attr::Prop(prop) => {
-                                                if *name == "value" {
-                                                    input_element.set_value(&prop);
-                                                } else {
-                                                    input_element
+                                                match *name {
+                                                    "value" => {
+                                                        input_element.set_value(&prop);
+                                                    }
+                                                    "checked" => {
+                                                        input_element.set_checked(prop != "")
+                                                    }
+                                                    _ => {
+                                                        input_element
                                                         .set_attribute(name, &prop)
                                                         .unwrap();
+                                                    }
                                                 }
                                             }
                                             Attr::Handler(handler) => {
