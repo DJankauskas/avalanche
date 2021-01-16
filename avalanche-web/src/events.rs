@@ -1,18 +1,18 @@
 use std::{marker::PhantomData, ops::Deref};
 use wasm_bindgen::JsCast;
 
-pub use web_sys::Event;
-pub use web_sys::AnimationEvent;
-pub use web_sys::CompositionEvent;
-pub use web_sys::DragEvent;
-pub use web_sys::KeyboardEvent;
-pub use web_sys::FocusEvent;
-pub use web_sys::MouseEvent;
-pub use web_sys::ProgressEvent;
-pub use web_sys::PointerEvent;
-pub use web_sys::TransitionEvent;
-pub use web_sys::TouchEvent;
-pub use web_sys::WheelEvent;
+pub(crate) use web_sys::Event;
+pub(crate) use web_sys::AnimationEvent;
+pub(crate) use web_sys::CompositionEvent;
+pub(crate) use web_sys::DragEvent;
+pub(crate) use web_sys::KeyboardEvent;
+pub(crate) use web_sys::FocusEvent;
+pub(crate) use web_sys::MouseEvent;
+pub(crate) use web_sys::ProgressEvent;
+pub(crate) use web_sys::PointerEvent;
+pub(crate) use web_sys::TransitionEvent;
+pub(crate) use web_sys::TouchEvent;
+pub(crate) use web_sys::WheelEvent;
 
 /// A typed wrapper over `web_sys`'s event types, allowing for typed access to the native element
 /// reference returned by [current_target](TypedEvent::current_target), as well as access to the methods of
