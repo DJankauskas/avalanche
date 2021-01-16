@@ -2,45 +2,51 @@ use avalanche::renderer::{NativeHandle, NativeType, Renderer};
 use avalanche::vdom::VNode;
 use avalanche::{Component, View};
 
-use avalanche::{shared::Shared};
+use avalanche::shared::Shared;
 
-use std::rc::Rc;
 use std::collections::{HashMap, VecDeque};
+use std::rc::Rc;
 
+use crate::components::{Attr, RawElement, Text};
 use crate::events::Event;
-use crate::components::{Text, RawElement, Attr};
 use gloo::events::{EventListener, EventListenerOptions};
 use wasm_bindgen::JsCast;
+use web_sys::Element;
 
-pub mod events;
 pub mod components;
+pub mod events;
 
 static TIMEOUT_MSG_NAME: &str = "oak_web_message_name";
 
-/// Renders the given view in the current document's body.
-pub fn mount_to_body<C: Component + Default>() {
+pub fn mount<C: Component + Default>(element: Element) {
     let renderer = WebRenderer::new();
     let root = avalanche::vdom::Root::new(C::default().into(), renderer);
 
     root.native_handle(|native_handle| {
         if let Some(native_handle) = native_handle {
-            let body = web_sys::window()
-                .expect("window")
-                .document()
-                .expect("document")
-                .body()
-                .expect("body");
             let ref_to_node = &native_handle
                 .downcast_ref::<WebNativeHandle>()
                 .expect("WebNativeHandle")
                 .node;
-            body.append_child(&ref_to_node)
+            element
+                .append_child(&ref_to_node)
                 .expect("append node to body");
         }
     });
 
     // TODO: more elegant solution that leaks less memory?
     Box::leak(Box::new(root));
+}
+
+/// Renders the given view in the current document's body.
+pub fn mount_to_body<C: Component + Default>() {
+    let body = web_sys::window()
+        .expect("window")
+        .document()
+        .expect("document")
+        .body()
+        .expect("body");
+    mount::<C>(body.into());
 }
 
 struct WebNativeHandle {
@@ -161,15 +167,11 @@ impl Renderer for WebRenderer {
                                         "value" => {
                                             input_element.set_value(&prop);
                                         }
-                                        "checked" => {
-                                            input_element.set_checked(prop != "")
-                                        }
+                                        "checked" => input_element.set_checked(prop != ""),
                                         _ => {
-                                            input_element
-                                            .set_attribute(name, &prop)
-                                            .unwrap();
+                                            input_element.set_attribute(name, &prop).unwrap();
                                         }
-                                    }
+                                    },
                                     Attr::Handler(handler) => match *name {
                                         "input" if raw_element.is_controlled => {
                                             add_listener_prevent_default(
@@ -284,21 +286,17 @@ impl Renderer for WebRenderer {
                                 if *updated {
                                     match attr {
                                         Some(attr) => match attr {
-                                            Attr::Prop(prop) => {
-                                                match *name {
-                                                    "value" => {
-                                                        input_element.set_value(&prop);
-                                                    }
-                                                    "checked" => {
-                                                        input_element.set_checked(prop != "")
-                                                    }
-                                                    _ => {
-                                                        input_element
+                                            Attr::Prop(prop) => match *name {
+                                                "value" => {
+                                                    input_element.set_value(&prop);
+                                                }
+                                                "checked" => input_element.set_checked(prop != ""),
+                                                _ => {
+                                                    input_element
                                                         .set_attribute(name, &prop)
                                                         .unwrap();
-                                                    }
                                                 }
-                                            }
+                                            },
                                             Attr::Handler(handler) => {
                                                 if raw_element.is_controlled && *name == "input" {
                                                     update_listener_prevent_default(
