@@ -308,8 +308,6 @@ pub(crate) fn update_vnode(
         );
     }
 
-    renderer.log(&format!("{:#?}", native_indices));
-
     for (i, id) in children_ids.iter().enumerate() {
         let old_node = node.child(i, tree).get(tree);
         let old_node_id = ChildId::from_view(&old_node.component);
@@ -336,7 +334,6 @@ pub(crate) fn update_vnode(
         for (i, elem) in native_indices.iter().enumerate() {
             native_indices_map[*elem] = i;
         }
-        renderer.log(&format!("{:#?}", native_indices));
         let node_mut = node.get_mut(tree);
         let node_type = node_mut.native_type.as_ref().unwrap();
         let node_handle = node_mut.native_handle.as_mut().unwrap();
