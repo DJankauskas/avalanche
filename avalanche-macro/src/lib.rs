@@ -82,10 +82,12 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
         param_scope.vars.push(var);
     }
 
-    let mut param_ident = Vec::with_capacity(hooks.len());
-    let mut param_type = Vec::with_capacity(hooks.len());
-    let mut param_attributes = Vec::with_capacity(hooks.len());
-    let mut flag = Vec::with_capacity(hooks.len());
+    let inputs_len = item_fn.sig.inputs.len();
+
+    let mut param_ident = Vec::with_capacity(inputs_len);
+    let mut param_type = Vec::with_capacity(inputs_len);
+    let mut param_attributes = Vec::with_capacity(inputs_len);
+    let mut flag = Vec::with_capacity(inputs_len);
 
     //process render code
     for (i, param) in item_fn.sig.inputs.iter().enumerate() {
@@ -131,6 +133,22 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
     let render_body = &item_fn.block;
     let render_body_attributes = &item_fn.attrs;
     let visibility = &item_fn.vis;
+
+    let component_default_impl = if inputs_len == 0 {
+        Some(quote! {
+            impl ::std::default::Default for #name {
+                fn default() -> Self {
+                    Self {
+                        __internal_updates: 0,
+                        __key: None,
+                        __location: (0, 0)
+                    }
+                }
+            }
+        })
+    } else {
+        None
+    };
 
     let component = quote! {
         #[derive(::std::default::Default)]
@@ -183,6 +201,8 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
             __location: (::std::primitive::u32, ::std::primitive::u32),
             #(#param_ident: #param_type),*
         }
+
+        #component_default_impl
 
         impl avalanche::Component for #name {
             type Builder = #builder_name;
