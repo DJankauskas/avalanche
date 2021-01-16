@@ -277,5 +277,14 @@ pub fn main_js() {
     console_error_panic_hook::set_once();
 
     //TODO: the App initialization is ugly, provide a Default impl for unit struct components?
-    avalanche_web::mount_to_body::<Todo>();
+    avalanche_web::mount::<Todo>(
+        web_sys::window()
+            .expect("window")
+            .document()
+            .expect("document")
+            .query_selector(".todoapp")
+            .expect("body")
+            .unwrap()
+            .into()
+    );
 }
