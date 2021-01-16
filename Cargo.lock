@@ -317,8 +317,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "todo"
-version = "0.0.0"
+name = "todomvc"
+version = "0.1.0"
 dependencies = [
  "avalanche",
  "avalanche-web",

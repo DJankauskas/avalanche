@@ -1,6 +1,6 @@
 [package]
-name = "todo"
-version = "0.0.0"
+name = "todomvc"
+version = "0.1.0"
 authors = ["Darius Jankauskas <d5926j@gmail.com>"]
 categories = ["web", "wasm"]
 readme = "README.md"
@@ -22,6 +22,7 @@ lto = true
 # The `wasm-bindgen` crate provides the bare minimum functionality needed
 # to interact with JavaScript.
 wasm-bindgen = "0.2.45"
+web-sys = "0.3"
 avalanche = {path = "../../../avalanche"}
 avalanche-web = {path = "../../../avalanche-web"}
 
@@ -34,13 +35,6 @@ wee_alloc = { version = "0.4.2", optional = true }
 # logging them with `console.error`. This is great for development, but requires
 # all the `std::fmt` and `std::panicking` infrastructure.
 console_error_panic_hook = "0.1.5"
-
-[dependencies.web-sys]
-version = "0.3"
-features = [
-    "console",
-    "HtmlInputElement",
-]
 
 # These crates are used for running unit tests.
 [dev-dependencies]

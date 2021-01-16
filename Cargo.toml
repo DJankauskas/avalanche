@@ -6,5 +6,5 @@ members = [
     "avalanche-macro-test",
     "avalanche-web",
     "avalanche-web/examples/counter",
-    "avalanche-web/examples/todo",
+    "avalanche-web/examples/todomvc",
 ]
