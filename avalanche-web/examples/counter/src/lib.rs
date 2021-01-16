@@ -1,4 +1,4 @@
-use avalanche::{component, UseState};
+use avalanche::{component, View, UseState};
 use avalanche_web::components::{Button, Div, Text, H2};
 use wasm_bindgen::prelude::*;
 
@@ -11,7 +11,7 @@ use wasm_bindgen::prelude::*;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[component(count = UseState<i64>)]
-fn App() {
+fn App() -> View {
     let (count, set_count) = count(0);
     Div! {
         children: [

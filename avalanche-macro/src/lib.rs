@@ -5,7 +5,7 @@ use proc_macro::TokenStream;
 
 use proc_macro_error::{abort, emit_error, proc_macro_error};
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, punctuated::Punctuated, Item, Pat};
+use syn::{parse_macro_input, punctuated::Punctuated, Item, Pat, ReturnType};
 
 use macro_expr::Hooks;
 use analyze::{Function, Scope, Var, Dependencies, DependencyInfo, HookInfo, ExprType};
@@ -29,6 +29,13 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
             "more than 64 properties are unsupported"
         );
     }
+
+    let return_type = match &item_fn.sig.output {
+        ReturnType::Type(_, ty) => ty,
+        ReturnType::Default => {
+            abort!(item_fn.sig, "input function must have return type avalanche::View");
+        }
+    };
 
     if let Some(token) = &item_fn.sig.asyncness {
         abort!(token, "async components currently unsupported");
@@ -212,7 +219,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #( #render_body_attributes )*
-            fn render(&self, context: avalanche::InternalContext) -> avalanche::View {
+            fn render(&self, context: avalanche::InternalContext) -> #return_type {
                 #(
                     fn #hook_get_fn_name(state: &mut ::std::boxed::Box<::std::any::Any>) -> &mut #hook_type {
                         let state = ::std::option::Option::unwrap(::std::any::Any::downcast_mut::<#state_name>(&mut **state));

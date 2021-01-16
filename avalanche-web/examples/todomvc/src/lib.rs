@@ -1,4 +1,4 @@
-use avalanche::{component, enclose, reactive_assert, UseState};
+use avalanche::{component, View, enclose, reactive_assert, UseState};
 use avalanche_web::components::{
     Button, Div, Footer, Header, Input, Label, Li, Section, Span, Strong, Text, Ul, A, H1,
 };
@@ -40,7 +40,7 @@ impl Filter {
 }
 
 #[component(items = UseState<Vec<Item>>, monotonic_id = UseState<u32>, editing = UseState<Option<u32>>, filter = UseState<Filter>)]
-fn Todo() {
+fn Todo() -> View {
     let (editing, set_editing) = editing(None);
     let (filter, set_filter) = filter(Filter::All);
     let (items, update_items) = items(Vec::new());

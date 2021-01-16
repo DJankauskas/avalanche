@@ -1,4 +1,4 @@
-use avalanche::{component, reactive_assert, enclose};
+use avalanche::{component, reactive_assert, enclose, View};
 #[derive(Default)]
 struct HasFields {
     field_one: u8,
@@ -6,12 +6,12 @@ struct HasFields {
 }
 
 #[component]
-fn Bare() {
+fn Bare() -> View {
     ().into()
 }
 
 #[component]
-fn Identity(a: u8) {
+fn Identity(a: u8) -> View {
     reactive_assert!(a => a);
     let a = a;
     reactive_assert!(a => a);
@@ -20,7 +20,7 @@ fn Identity(a: u8) {
 }
 
 #[component]
-fn ArrayIndex(a: u8, b: u8, c: u8) {
+fn ArrayIndex(a: u8, b: u8, c: u8) -> View {
     let arr = [a, b, c];
     reactive_assert!(a, b, c => arr);
 
@@ -44,7 +44,7 @@ fn ArrayIndex(a: u8, b: u8, c: u8) {
 }
 
 #[component]
-fn Assign(a: u8, b: u8) {
+fn Assign(a: u8, b: u8) -> View {
     let mut x = *a;
     reactive_assert!(a => x);
     x = *b;
@@ -65,7 +65,7 @@ fn Assign(a: u8, b: u8) {
 }
 
 #[component]
-fn Binary(a: u16, b: u16, c: u16) {
+fn Binary(a: u16, b: u16, c: u16) -> View {
     let x = a ^ b;
     reactive_assert!(a, b => x);
 
@@ -79,7 +79,7 @@ fn Binary(a: u16, b: u16, c: u16) {
 }
 
 #[component]
-fn Block(a: u8, b: u8) {
+fn Block(a: u8, b: u8) -> View {
     let mut y = 0;
     let x = {
         let x = a + b;
@@ -92,7 +92,7 @@ fn Block(a: u8, b: u8) {
 }
 
 #[component]
-fn FnCall(a: u8) {
+fn FnCall(a: u8) -> View {
     let b = std::convert::identity(a);
     reactive_assert!(a => b);
     
@@ -100,7 +100,7 @@ fn FnCall(a: u8) {
 }
 
 #[component]
-fn Cast(a: u8) {
+fn Cast(a: u8) -> View {
     let ret = *a as u16;
     reactive_assert!(a => ret);
     
@@ -109,7 +109,7 @@ fn Cast(a: u8) {
 
 // TODO: fix closure handling
 #[component]
-fn Closure(a: u8, b: u8) {
+fn Closure(a: u8, b: u8) -> View {
     let closure1 = || {
         let (mut a, b) = (*a, *b);
         a += b;
@@ -126,7 +126,7 @@ fn Closure(a: u8, b: u8) {
 }
 
 #[component]
-fn Field(a: (u8, u8), b: u8) -> u8 {
+fn Field(a: (u8, u8), b: u8) -> View {
     let ret = a.0;
     reactive_assert!(a => ret);
     //test assigning
@@ -139,7 +139,7 @@ fn Field(a: (u8, u8), b: u8) -> u8 {
 }
 
 #[component]
-fn ForLoop(a: u8, b: u8) {
+fn ForLoop(a: u8, b: u8) -> View {
     let mut x = 0;
 
     for n in 0..1 {
@@ -152,7 +152,7 @@ fn ForLoop(a: u8, b: u8) {
 }
 
 #[component]
-fn If(a: u8, b: u8, c: u8) {
+fn If(a: u8, b: u8, c: u8) -> View {
     let x = if *a == 0 {
         b
     }
@@ -180,7 +180,7 @@ fn If(a: u8, b: u8, c: u8) {
 // }
 
 #[component]
-fn Match(a: u8, b: u8, c: u8, d: u8) {
+fn Match(a: u8, b: u8, c: u8, d: u8) -> View {
     let option = Some(a);
     let x = match option {
         Some(var) => var,
@@ -200,7 +200,7 @@ fn Match(a: u8, b: u8, c: u8, d: u8) {
 }
 
 #[component]
-fn Unary(a: u8) {
+fn Unary(a: u8) -> View {
     let b = !a;
     reactive_assert!(a => b);
 
@@ -208,7 +208,7 @@ fn Unary(a: u8) {
 }
 
 #[component]
-fn Tuple(a: u8, b: u8, c: u8) {
+fn Tuple(a: u8, b: u8, c: u8) -> View {
     let tuple = (a, b, c);
     reactive_assert!(a, b, c => tuple);
     {
@@ -222,7 +222,7 @@ fn Tuple(a: u8, b: u8, c: u8) {
 }
 
 #[component]
-fn While(a: u8, b: u8) {
+fn While(a: u8, b: u8) -> View {
     let mut x = 0;
     while *a == 0 {
         x = *b;
@@ -233,14 +233,14 @@ fn While(a: u8, b: u8) {
 }
 
 #[component]
-fn Enclose(a: u8) {
+fn Enclose(a: u8) -> View {
     let b = enclose!(a; a);
     reactive_assert!(a => b);
     ().into()
 }
 
 #[component]
-fn StdMacros(a: u8, b: u8, c: u8) {
+fn StdMacros(a: u8, b: u8, c: u8) -> View {
     // testing dbg!
     let a_prime = dbg!(a);
     reactive_assert!(a => a_prime);
