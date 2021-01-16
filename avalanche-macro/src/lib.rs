@@ -133,74 +133,78 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
     let visibility = &item_fn.vis;
 
     let component = quote! {
-        #[derive(std::default::Default)]
+        #[derive(::std::default::Default)]
         #visibility struct #builder_name {
-            __internal_updates: u64,
-            __key: std::option::Option<std::string::String>,
-            #(#param_ident: std::option::Option<#param_type>),*
+            __internal_updates: ::std::primitive::u64,
+            __key: ::std::option::Option<::std::string::String>,
+            #(#param_ident: ::std::option::Option<#param_type>),*
         }
 
         impl #builder_name {
             fn new() -> Self {
-                std::default::Default::default()
+                ::std::default::Default::default()
             }
 
-            fn build(self, location: (u32, u32)) -> #name {
+            fn build(self, location: (::std::primitive::u32, ::std::primitive::u32)) -> #name {
                 #name {
                     __internal_updates: self.__internal_updates,
                     __key: self.__key,
                     __location: location,
-                    #(#param_ident: self.#param_ident.unwrap()),*
+                    #(#param_ident: ::std::option::Option::unwrap(self.#param_ident)),*
                 }
             }
 
-            fn key(mut self, key: std::string::String, _updated: bool) -> Self {
+            fn key(mut self, key: ::std::string::String, _updated: ::std::primitive::bool) -> Self {
                 //TODO: should updated be used?
-                self.__key = std::option::Option::Some(key);
+                self.__key = ::std::option::Option::Some(key);
                 self
             }
 
             #(
                 #(#param_attributes)*
-                fn #param_ident(mut self, val: #param_type, updated: bool) -> Self {
+                fn #param_ident(mut self, val: #param_type, updated: ::std::primitive::bool) -> Self {
                     if updated {
                         self.__internal_updates |= #flag;
                     }
-                    self.#param_ident = std::option::Option::Some(val);
+                    self.#param_ident = ::std::option::Option::Some(val);
                     self
                 }
             )*
         }
 
-        #[derive(std::default::Default)]
+        #[derive(::std::default::Default)]
         #visibility struct #state_name {
             #( #hook_name: #hook_type ),*
         }
 
         #visibility struct #name {
-            __internal_updates: u64,
-            __key: std::option::Option<std::string::String>,
-            __location: (u32, u32),
+            __internal_updates: ::std::primitive::u64,
+            __key: std::option::Option<::std::string::String>,
+            __location: (::std::primitive::u32, ::std::primitive::u32),
             #(#param_ident: #param_type),*
         }
 
         impl avalanche::Component for #name {
             type Builder = #builder_name;
 
-            fn init_state(&self) -> std::boxed::Box<dyn std::any::Any> {
-                std::boxed::Box::new(<#state_name as std::default::Default>::default())
+            fn init_state(&self) -> ::std::boxed::Box<dyn std::any::Any> {
+                std::boxed::Box::new(<#state_name as ::std::default::Default>::default())
             }
 
             #( #render_body_attributes )*
             fn render(&self, context: avalanche::InternalContext) -> avalanche::View {
                 #(
-                    fn #hook_get_fn_name(state: &mut std::boxed::Box<std::any::Any>) -> &mut #hook_type {
-                        let state = std::option::Option::unwrap(std::any::Any::downcast_mut::<#state_name>(&mut **state));
+                    fn #hook_get_fn_name(state: &mut ::std::boxed::Box<::std::any::Any>) -> &mut #hook_type {
+                        let state = ::std::option::Option::unwrap(::std::any::Any::downcast_mut::<#state_name>(&mut **state));
                         &mut state.#hook_name
                     };
                 )*
-                let state = std::option::Option::unwrap(std::any::Any::downcast_mut::<#state_name>(&mut **context.state));
-                #( let (#hook_name, #hook_updates_name) = state.#hook_name.hook(context.component_pos.clone(), #hook_get_fn_name); );*
+                let state = ::std::option::Option::unwrap(::std::any::Any::downcast_mut::<#state_name>(&mut **context.state));
+                #( let (#hook_name, #hook_updates_name) = <#hook_type>::hook(
+                    &mut state.#hook_name, 
+                    ::std::clone::Clone::clone(&context.component_pos), 
+                    #hook_get_fn_name
+                ); );*
 
                 let _ = state;
                 let _ = context;
@@ -210,11 +214,11 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                 #render_body
             }
 
-            fn updated(&self) -> bool {
+            fn updated(&self) -> ::std::primitive::bool {
                 self.__internal_updates != 0
             }
 
-            fn key(&self) -> std::option::Option<&str> {
+            fn key(&self) -> ::std::option::Option<&str> {
                 self.__key.as_deref()
             }
 
