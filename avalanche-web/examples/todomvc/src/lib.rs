@@ -276,7 +276,6 @@ pub fn main_js() {
     #[cfg(debug_assertions)]
     console_error_panic_hook::set_once();
 
-    //TODO: the App initialization is ugly, provide a Default impl for unit struct components?
     avalanche_web::mount::<Todo>(
         web_sys::window()
             .expect("window")
