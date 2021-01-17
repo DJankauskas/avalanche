@@ -16,7 +16,7 @@ pub(crate) use web_sys::WheelEvent;
 
 /// A typed wrapper over `web_sys`'s event types, allowing for typed access to the native element
 /// reference returned by [current_target](TypedEvent::current_target), as well as access to the methods of
-/// event [E](E).
+/// event `E`.
 pub struct TypedEvent<E: JsCast + Clone + Into<Event>, C: JsCast> {
     event: E,
     phantom: PhantomData<C>

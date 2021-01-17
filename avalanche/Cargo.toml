@@ -7,3 +7,6 @@ edition = "2018"
 [dependencies]
 avalanche-macro = {path = '../avalanche-macro'}
 downcast-rs = "1.1"
+
+[dev-dependencies]
+avalanche-web = {path = '../avalanche-web'}
