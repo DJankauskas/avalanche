@@ -10,8 +10,8 @@ use wasm_bindgen::prelude::*;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-#[component(count = UseState<i64>)]
-fn App() -> View {
+#[component(count = UseState<u64>)]
+fn Counter() -> View {
     let (count, set_count) = count(0);
     Div! {
         children: [
@@ -35,5 +35,5 @@ pub fn main_js() {
     #[cfg(debug_assertions)]
     console_error_panic_hook::set_once();
 
-    avalanche_web::mount_to_body::<App>();
+    avalanche_web::mount_to_body::<Counter>();
 }
