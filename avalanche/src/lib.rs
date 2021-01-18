@@ -282,7 +282,7 @@ pub struct ComponentPos {
 /// A hook that allows a component to keep persistent state across renders.
 /// 
 /// [UseState<T>](UseState) takes a type parameter specifying the type of the state variable the hook manages.
-/// This hook injects a function `impl FnOnce(T) -> (&T, UseStateSetter) into a component.
+/// This hook injects a function `impl FnOnce(T) -> (&T, UseStateSetter)` into a component.
 /// To use it, call the function with your desired default value for `T`. If the function has not been called before,
 /// then the state will be initialized to this value. The return value contains a reference to the current state,
 /// and the setter [UseStateSetter<T>](UseStateSetter). `&T`'s lifetime is only valid within the component's render
@@ -291,6 +291,29 @@ pub struct ComponentPos {
 /// To update the state, use the [call](UseStateSetter::call) method on the setter variable.
 ///
 /// # Example
+/// ```rust
+/// use avalanche::{component, View, UseState};
+/// use avalanche_web::components::{Div, H1, Button, Text};
+///
+/// #[component(count = UseState<u64>)]
+/// fn Counter() -> View {
+///     let (count, set_count) = count(0);
+///     Div! {
+///         children: [
+///             H2!{
+///                 child: Text!{text: "Counter!"},
+///             },
+///             Button!{
+///                 on_click: move |_| set_count.call(|count| *count += 1),
+///                 child: Text!{text: "+"}
+///             },
+///             Text!{text: count}
+///         ]
+///     }
+/// }
+/// ```
+/// __Apdated from the `avalanche_web` 
+/// [counter example.](https://github.com/DJankauskas/avalanche/blob/38ec4ccb83f93550c7d444351fa395708505d053/avalanche-web/examples/counter/src/lib.rs)__
 pub struct UseState<T: 'static> {
     state: Option<T>,
     updated: bool,
