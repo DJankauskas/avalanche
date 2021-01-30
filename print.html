@@ -181,11 +181,11 @@ projects, we <strong>DO NOT</strong> yet recommend you use this library in produ
 Electron apps by compiling your app to WebAssembly. It may be missing some listeners and other functionality as of now, but all
 HTML tags are available for use as components.</p>
 <h2><a class="header" href="#using-this-tutorial" id="using-this-tutorial">Using this tutorial</a></h2>
-<p>Before using this tutorial, you should first have a decent grasp of the Rust programming language, as the library uses
-some more advanced language constructs. This tutorial also heavily uses <code>avalanche_web</code>, so you should be familiar with basic HTML.</p>
-<p>This tutorial is early and still rough, so if you have any confusion or see a potential error, we'd be grateful if you shared on <a href="https://github.com/DJankauskas/avalanche/issues">our GitHub repository issues</a>.</p>
+<p>Before using this tutorial, you should first have a decent grasp of the Rust programming language. This tutorial also heavily uses <code>avalanche_web</code>, so you should be familiar with basic HTML.</p>
+<p>This tutorial is new and still rough, so if you have any confusion or see a potential error, we'd be grateful if you
+<a href="https://github.com/DJankauskas/avalanche/issues">created an issue</a>.</p>
 <h2><a class="header" href="#what-are-components" id="what-are-components">What are components?</a></h2>
-<p>Components are encapsulated pieces of UI, potentially with complex logic and state, that can be reused as desired. An <code>avalanche</code> app always contains a root component, and can be built with many more.</p>
+<p>Components are encapsulated pieces of UI, potentially with complex logic and state, that can be reused as desired. An <code>avalanche</code> app always contains a root component, and can be built out of many more.</p>
 <h1><a class="header" href="#getting-started" id="getting-started">Getting started</a></h1>
 <h2><a class="header" href="#prerequisites" id="prerequisites">Prerequisites</a></h2>
 <p>Before you get started, ensure you have <code>cargo</code> and <code>npm</code> installed.</p>
@@ -291,8 +291,8 @@ fn Link(to: String, text: String) -&gt; View {
 }
 <span class="boring">}
 </span></code></pre></pre>
-<pre><code>Notice that for the text parame
-</code></pre>
+<p>Notice that for the text parameter, we pass <code>text.clone()</code> instead of <code>text</code>. That's because even though we specify <code>text</code> is a <code>String</code>,
+we actually receive parameters as references (allowing a componen to be rerendered when its state but not props change). So <code>text</code> is really a <code>&amp;String</code>.</p>
 <p>We can then construct <code>Link</code> inside of other components:</p>
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
