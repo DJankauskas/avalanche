@@ -293,7 +293,7 @@ pub struct ComponentPos {
 /// # Example
 /// ```rust
 /// use avalanche::{component, View, UseState};
-/// use avalanche_web::components::{Div, H1, Button, Text};
+/// use avalanche_web::components::{Div, H2, Button, Text};
 ///
 /// #[component(count = UseState<u64>)]
 /// fn Counter() -> View {
@@ -312,7 +312,7 @@ pub struct ComponentPos {
 ///     }
 /// }
 /// ```
-/// __Apdated from the `avalanche_web` 
+/// __Adapted from the `avalanche_web` 
 /// [counter example.](https://github.com/DJankauskas/avalanche/blob/38ec4ccb83f93550c7d444351fa395708505d053/avalanche-web/examples/counter/src/lib.rs)__
 pub struct UseState<T: 'static> {
     state: Option<T>,
