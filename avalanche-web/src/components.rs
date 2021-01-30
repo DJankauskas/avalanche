@@ -34,8 +34,8 @@ impl TextBuilder {
         self
     }
 
-    pub fn key(mut self, key: String, _updated: bool) -> Self {
-        self.key = Some(key);
+    pub fn key<T: ToString>(mut self, key: T, _updated: bool) -> Self {
+        self.key = Some(key.to_string());
         self
     }
 

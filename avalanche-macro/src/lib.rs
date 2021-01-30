@@ -179,9 +179,9 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }
 
-            fn key(mut self, key: ::std::string::String, _updated: ::std::primitive::bool) -> Self {
+            fn key<T: ::std::string::ToString>(mut self, key: T, _updated: ::std::primitive::bool) -> Self {
                 //TODO: should updated be used?
-                self.__key = ::std::option::Option::Some(key);
+                self.__key = ::std::option::Option::Some(::std::string::ToString::to_string(&key));
                 self
             }
 
