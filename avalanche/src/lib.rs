@@ -2,13 +2,13 @@
 pub mod renderer;
 /// A reference-counted interior-mutable type designed to reduce runtime borrow rule violations.
 pub mod shared;
-/// An in-memory representation of the current component tree.
-pub mod vdom;
 /// A `Vec`-backed implementation of a tree, with a relatively friendly mutation api.
 pub(crate) mod tree;
+/// An in-memory representation of the current component tree.
+pub mod vdom;
 
-use std::{any::Any, rc::Rc};
 use downcast_rs::{impl_downcast, Downcast};
+use std::{any::Any, rc::Rc};
 
 use renderer::NativeType;
 use shared::Shared;
@@ -29,18 +29,18 @@ use vdom::{update_vnode, VDom, VNode};
 /// and allow components to be rendered multiple times. Parameters must have concrete types: they cannot use the `impl Trait`
 /// syntax. Components cannot be `async` or generic.
 ///
-/// A component must return a [View] describing what it will render. 
+/// A component must return a [View] describing what it will render.
 /// A [View] contains an instance of a [Component]. The simplest possible [Component] to return is the `()` type:
 /// ```rust
 /// use avalanche::{component, View};
 ///
 /// #[component]
 /// pub fn Void() -> View {
-///     ().into() 
+///     ().into()
 /// }
 /// ```
 /// The `()` type signifies that there is nothing to render. While this is sometimes useful, usually you will want
-/// to render more complex components. Components are invoked with the same syntax as `struct` init expressions, except with 
+/// to render more complex components. Components are invoked with the same syntax as `struct` init expressions, except with
 /// the macro `!` after the type name:
 /// ```rust
 /// use avalanche::{component, View};
@@ -53,7 +53,7 @@ use vdom::{update_vnode, VDom, VNode};
 ///     H1! {
 ///         id: class,
 ///         class,
-///         child: Text! {text: format!("Hi there, {}!", name)} 
+///         child: Text! {text: format!("Hi there, {}!", name)}
 ///     }
 /// }
 /// ```
@@ -70,16 +70,16 @@ use vdom::{update_vnode, VDom, VNode};
 /// beginning with `_`.
 ///
 /// # Hooks
-/// Pure components (those whose output only depends on their inputs) can be useful, but oftentimes you'll want 
+/// Pure components (those whose output only depends on their inputs) can be useful, but oftentimes you'll want
 /// components with state to enable more complex behaviors. Hooks are composeable abstractions that enable you
-/// to introduce state, side effects, and reusable functionality in your components. 
+/// to introduce state, side effects, and reusable functionality in your components.
 ///
 /// Hooks are specified within the component attribute like this:
 /// `#[component(name1 = HookType1, name2 = HookType2<u8>)]`
 /// This injects two values, usually functions, with names `name1` and `name2` into your component's render code.
-/// 
+///
 /// Unlike in some other frameworks, hook values can be used in any order and within any language construct,
-/// although hooks often implement [`FnOnce`](std::ops::FnOnce) and thus can only be called once. A very commonly used 
+/// although hooks often implement [`FnOnce`](std::ops::FnOnce) and thus can only be called once. A very commonly used
 /// hook is [UseState<T>](UseState), as it allows injecting state into your component; check the linked docs for more details.
 /// Custom hooks, defined by the `hook` attribute macro, will be introduced in a future version.
 ///
@@ -87,12 +87,12 @@ use vdom::{update_vnode, VDom, VNode};
 /// On each rerender, `avalanche` calculates whether each parameter of each component has been updated.
 /// In order to enable this, the `component` attribute macro analyzes the dependency flow of parameters within UI code.
 /// In each instance where a given `Component` is created with the syntax `Component !`, avalanche calculates which hooks
-/// and parent parameter values contribute to the value of each child parameter. This enables efficienct updates, 
+/// and parent parameter values contribute to the value of each child parameter. This enables efficienct updates,
 /// but has a few caveats that creates two major rules to follow:
-/// 
+///
 /// ## Avoid side effects and interior mutability
-/// `avalanche` considers a parameter updated if one of the parameters or hooks that influence it change, but 
-/// a function like [rand::thread_rng](https://docs.rs/rand/0.8/rand/fn.thread_rng.html) has a different value on every call 
+/// `avalanche` considers a parameter updated if one of the parameters or hooks that influence it change, but
+/// a function like [rand::thread_rng](https://docs.rs/rand/0.8/rand/fn.thread_rng.html) has a different value on every call
 /// despite having no parameter or hook dependencies.
 /// Using values from functions and methods that are not pure or have interior mutability will lead to missed updates.
 ///
@@ -101,7 +101,7 @@ use vdom::{update_vnode, VDom, VNode};
 /// All `std` macros (like [vec!](std::vec!()) and [format!](std::format!())) and `avalanche` macros (like [enclose!()])
 /// work well, but any others may lead to parameters being incorrectly marked as not updated.
 ///
-/// If a component's parameter seems not to be update when it should, first check you're following these rules. 
+/// If a component's parameter seems not to be update when it should, first check you're following these rules.
 /// If you are, then use the [reactive_assert!()] macro to check your assumptions.
 /// If you find a bug where a value's dependencies are incorrectly calculated, please let us know!
 #[doc(inline)]
@@ -172,6 +172,15 @@ impl std::ops::Deref for View {
 impl<T: DynComponent> From<T> for View {
     fn from(val: T) -> Self {
         Self::new(val)
+    }
+}
+
+impl<T: DynComponent> From<Option<T>> for View {
+    fn from(val: Option<T>) -> Self {
+        match val {
+            Some(val) => return View::new(val),
+            None => return View::new(()),
+        }
     }
 }
 
@@ -280,13 +289,13 @@ pub struct ComponentPos {
 }
 
 /// A hook that allows a component to keep persistent state across renders.
-/// 
+///
 /// [UseState<T>](UseState) takes a type parameter specifying the type of the state variable the hook manages.
 /// This hook injects a function `impl FnOnce(T) -> (&T, UseStateSetter)` into a component.
 /// To use it, call the function with your desired default value for `T`. If the function has not been called before,
 /// then the state will be initialized to this value. The return value contains a reference to the current state,
 /// and the setter [UseStateSetter<T>](UseStateSetter). `&T`'s lifetime is only valid within the component's render
-/// function, but [UseStateSetter<T>](UseStateSetter) may be freely moved and cloned. 
+/// function, but [UseStateSetter<T>](UseStateSetter) may be freely moved and cloned.
 ///
 /// To update the state, use the [call](UseStateSetter::call) method on the setter variable.
 ///
@@ -312,7 +321,7 @@ pub struct ComponentPos {
 ///     }
 /// }
 /// ```
-/// __Adapted from the `avalanche_web` 
+/// __Adapted from the `avalanche_web`
 /// [counter example.](https://github.com/DJankauskas/avalanche/blob/38ec4ccb83f93550c7d444351fa395708505d053/avalanche-web/examples/counter/src/lib.rs)__
 pub struct UseState<T: 'static> {
     state: Option<T>,
@@ -385,7 +394,7 @@ impl<T: 'static> UseStateSetter<T> {
         }
     }
 
-    /// Takes a function that modifies the state associated with [UseStateSetter] and 
+    /// Takes a function that modifies the state associated with [UseStateSetter] and
     /// triggers a rerender of its associated component.
     /// The update is not performed immediately; its effect will only be accessible
     /// on its component's rerender. Note that `call` always triggers a rerender, and the state value
