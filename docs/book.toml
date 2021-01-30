@@ -1,0 +1,6 @@
+[book]
+authors = ["Darius Jankauskas"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Avalanche + Avalanche Web Tutorial"
