@@ -73,6 +73,7 @@ We can then construct `Link` inside of other components:
 # }
 use avalanche_web::{Text, Div};
 
+#[component]
 fn Example() -> View {
     Div! {
         children: [
