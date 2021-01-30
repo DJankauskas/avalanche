@@ -60,7 +60,7 @@ fn Counter() -> View {
 }
 ```
 
-> Note that for examples past this point, we will be ommiting `avalanche` and `avalanche_web` imports for brevity.
+> Note that for examples past this point, we will be omitting `avalanche` and `avalanche_web` imports for brevity.
 
 First, notice that we declare hooks within the `#[component]` attribute, with the syntax `#[component(hook_name = HookType, ...)]`. For each 
 `hook_name`, this introduces a variable of that name into the component function's scope. Note that each hook name must be unique within a component.
