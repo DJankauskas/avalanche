@@ -43,7 +43,7 @@ you should see your first `avalanche` and `avalanche_web` web!
 So what exactly is going on in the code above? Well, the most important aspect here is the `#[component]` attribute macro. 
 `#[component]` accepts a function returning a `View`, which is a wrapper around an instance of a component. 
 Within a function marked with `#[component]`, macros whose names begin with a capital ASCII character are interpreted as 
-special component constructors. `Text` is a component with a single parameter `text`, so by specifying that we get an 
+special component constructors. `Text` is a component with a single parameter `text`, so by specifying that we get an instance 
 of `View` with that text component. `H1` can take either one `child` or an array of children, so this component here is equivalent to writing
 this raw HTML:
 ```html
