@@ -22,11 +22,11 @@ HTML tags are available for use as components.
 
 ## Using this tutorial
 
-Before using this tutorial, you should first have a decent grasp of the Rust programming language, as the library uses
-some more advanced language constructs. This tutorial also heavily uses `avalanche_web`, so you should be familiar with basic HTML.
+Before using this tutorial, you should first have a decent grasp of the Rust programming language. This tutorial also heavily uses `avalanche_web`, so you should be familiar with basic HTML.
 
-This tutorial is early and still rough, so if you have any confusion or see a potential error, we'd be grateful if you shared on [our GitHub repository issues](https://github.com/DJankauskas/avalanche/issues).
+This tutorial is new and still rough, so if you have any confusion or see a potential error, we'd be grateful if you
+[created an issue](https://github.com/DJankauskas/avalanche/issues).
 
 ## What are components?
 
-Components are encapsulated pieces of UI, potentially with complex logic and state, that can be reused as desired. An `avalanche` app always contains a root component, and can be built with many more.
+Components are encapsulated pieces of UI, potentially with complex logic and state, that can be reused as desired. An `avalanche` app always contains a root component, and can be built out of many more.

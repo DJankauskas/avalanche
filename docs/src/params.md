@@ -56,9 +56,8 @@ fn Link(to: String, text: String) -> View {
 }
 ```
 
-```
-Notice that for the text parame
-```
+Notice that for the text parameter, we pass `text.clone()` instead of `text`. That's because even though we specify `text` is a `String`,
+we actually receive parameters as references (allowing a componen to be rerendered when its state but not props change). So `text` is really a `&String`.
 
 We can then construct `Link` inside of other components:
 
