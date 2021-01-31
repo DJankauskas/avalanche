@@ -169,8 +169,8 @@
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>import avalanche::{component, View};
-import avalanche::components::A;
+</span>use avalanche::{component, View};
+use avalanche::components::A;
 
 const href: &amp;str = &quot;http://info.cern.ch/hypertext/WWW/TheProject.html&quot;;
 
@@ -187,8 +187,8 @@ fn Link() -&gt; View {
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>import avalanche::{component, View};
-import avalanche::components::A;
+</span>use avalanche::{component, View};
+use avalanche::components::A;
 
 const href: &amp;str = &quot;http://info.cern.ch/hypertext/WWW/TheProject.html&quot;;
 
@@ -209,8 +209,8 @@ and want to allow a custom destination and text to be specified. We can simply j
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>import avalanche::{component, View};
-import avalanche::components::A;
+</span>use avalanche::{component, View};
+use avalanche::components::A;
 
 #[component]
 fn Link(to: String, text: String) -&gt; View {
@@ -228,7 +228,7 @@ we actually receive parameters as references (allowing a componen to be rerender
 <span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span><span class="boring">use avalanche::{component, View};
-</span><span class="boring">import avalanche::components::A;
+</span><span class="boring">use avalanche::components::A;
 </span><span class="boring">
 </span><span class="boring">#[component]
 </span><span class="boring">fn Link(to: String) -&gt; View {
