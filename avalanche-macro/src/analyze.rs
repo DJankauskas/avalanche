@@ -451,7 +451,7 @@ impl Function {
                                         }
                                         DependencyInfo::Prop(prop) => {
                                             dependency_update
-                                                .push(quote! {self.__internal_updates & #prop});
+                                                .push(quote! {(self.__internal_updates & #prop > 0)});
                                         }
                                     }
                                 }
