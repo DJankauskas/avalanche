@@ -5,8 +5,8 @@
 Component constructors can take expressions as parameters, not just literals:
 
 ```rust
-import avalanche::{component, View};
-import avalanche::components::A;
+use avalanche::{component, View};
+use avalanche::components::A;
 
 const href: &str = "http://info.cern.ch/hypertext/WWW/TheProject.html";
 
@@ -22,8 +22,8 @@ fn Link() -> View {
 In cases where a variable has the same name as a parameter, there's a shorthand available:
 
 ```rust
-import avalanche::{component, View};
-import avalanche::components::A;
+use avalanche::{component, View};
+use avalanche::components::A;
 
 const href: &str = "http://info.cern.ch/hypertext/WWW/TheProject.html";
 
@@ -44,8 +44,8 @@ To enable that, you simply need to add parameters to your component function. He
 and want to allow a custom destination and text to be specified. We can simply just add `to` and `text` parameters:
 
 ```rust
-import avalanche::{component, View};
-import avalanche::components::A;
+use avalanche::{component, View};
+use avalanche::components::A;
 
 #[component]
 fn Link(to: String, text: String) -> View {
@@ -63,7 +63,7 @@ We can then construct `Link` inside of other components:
 
 ```rust
 # use avalanche::{component, View};
-# import avalanche::components::A;
+# use avalanche::components::A;
 # 
 # #[component]
 # fn Link(to: String) -> View {
