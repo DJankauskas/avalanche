@@ -103,7 +103,7 @@ There is also a shorthand for this some component-or-nothing case:
 #
 #[component]
 fn Conditional(cond: bool) -> View {
-    *cond.then(Text! {text: "True!"}).into()
+    *cond.then(|| Text! {text: "True!"}).into()
 }
 ```
 
