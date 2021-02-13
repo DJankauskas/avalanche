@@ -184,6 +184,15 @@ impl<T: DynComponent> From<Option<T>> for View {
     }
 }
 
+impl From<Option<View>> for View {
+    fn from(val: Option<View>) -> Self {
+        match val {
+            Some(val) => return val,
+            None => return View::new(()),
+        }
+    }
+}
+
 /// The trait representing a component. Except for renderer libraries,
 /// users should not implement this trait manually but instead use the `component` attribute.
 pub trait Component: 'static {
