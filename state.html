@@ -262,7 +262,7 @@ fn Conditional(cond: bool) -&gt; View {
 </span><span class="boring">
 </span>#[component]
 fn Conditional(cond: bool) -&gt; View {
-    *cond.then(Text! {text: &quot;True!&quot;}).into()
+    *cond.then(|| Text! {text: &quot;True!&quot;}).into()
 }
 <span class="boring">}
 </span></code></pre></pre>
