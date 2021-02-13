@@ -477,10 +477,11 @@ impl Function {
 
                             *syntax = parse_quote! {
                                 avalanche::__internal_identity! {
-                                    <<#type_path as ::avalanche::Component>::Builder>::new()
-                                    #(.#field_ident(#init_expr, #is_field_updated))*
-                                    .build((#line, #column))
-                                    .into()
+                                    ::std::convert::Into::<::avalanche::View>::into(
+                                        <<#type_path as ::avalanche::Component>::Builder>::new()
+                                        #(.#field_ident(#init_expr, #is_field_updated))*
+                                        .build((#line, #column))
+                                    )
                                 }
                             };
 
