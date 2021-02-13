@@ -70,7 +70,6 @@ fn Todo() -> View {
             reactive_assert!(items => i);
             let id = item.id;
             Li! {
-                // TODO: replace with then method
                 class: Some(format!(
                     "{} {}",
                     if item.completed {
@@ -113,28 +112,24 @@ fn Todo() -> View {
                             }
                         ]
                     },
-                    if *editing == Some(item.id) {
-                        Input!{
-                            class: Some("edit"),
-                            id: Some("edit"),
-                            auto_focus: true,
-                            value: item.text.clone(),
-                            on_key_down: enclose!(set_editing; move |e| {
-                                let which = e.which();
-                                if which == ENTER_KEY {
-                                    e.current_target().unwrap().blur().expect("blur");
-                                } else if which == ESCAPE_KEY {
-                                    set_editing.call(|editing| *editing = None);
-                                }
-                            }),
-                            on_blur: enclose!(update_items, set_editing; move |e| {
-                                update_items.call(|items| items[i].text = e.current_target().unwrap().value());
+                    (*editing == Some(item.id)).then(|| Input!{
+                        class: Some("edit"),
+                        id: Some("edit"),
+                        auto_focus: true,
+                        value: item.text.clone(),
+                        on_key_down: enclose!(set_editing; move |e| {
+                            let which = e.which();
+                            if which == ENTER_KEY {
+                                e.current_target().unwrap().blur().expect("blur");
+                            } else if which == ESCAPE_KEY {
                                 set_editing.call(|editing| *editing = None);
-                            })
-                        }
-                    } else {
-                        ().into()
-                    }
+                            }
+                        }),
+                        on_blur: enclose!(update_items, set_editing; move |e| {
+                            update_items.call(|items| items[i].text = e.current_target().unwrap().value());
+                            set_editing.call(|editing| *editing = None);
+                        })
+                    }).into()
                 ]
             }
         })
@@ -172,98 +167,90 @@ fn Todo() -> View {
                     }
                 ]
             },
-            if items.len() > 0 {
-                Section!{
-                    class: Some("main"),
-                    children: [
-                        Input!{
-                            id: Some("toggle-all"),
-                            class: Some("toggle-all"),
-                            type_: Some("checkbox"),
-                            on_change: enclose!(update_items; move |e| {
-                                update_items.call(|items| {
-                                    let checked = e.current_target().unwrap().checked();
-                                    for item in items.iter_mut() {
-                                        item.completed = checked;
-                                    }
-                                })
-                            })
-                        },
-                        Label!{
-                            for_: Some("toggle-all"),
-                            child: Text!{text: "Mark all as complete"}
-                        },
-
-                        Ul!{
-                            class: Some("todo-list"),
-                            children
-                        },
-
-                        Footer!{
-                            class: Some("footer"),
-                            children: [
-                                Span!{
-                                    class: Some("todo-count"),
-                                    children: [
-                                        Strong! {
-                                            child: Text!{text: num_active}
-                                        },
-                                        Text!{text: if num_active == 1 { " item" } else { " items" }}
-                                    ]
-                                },
-
-                                Ul! {
-                                    class: Some("filters"),
-                                    children: [
-                                        Li! {
-                                            child: A! {
-                                                class: filter.selected(Filter::All),
-                                                href: Some("#/"),
-                                                child: Text!{text: "All"},
-                                                on_click: enclose!(set_filter; move |_| {
-                                                    set_filter.call(|filter| *filter = Filter::All);
-                                                })
-                                            }
-                                        },
-                                        Li! {
-                                            child: A! {
-                                                class: filter.selected(Filter::Active),
-                                                href: Some("#/active"),
-                                                child: Text!{text: "Active"},
-                                                on_click: enclose!(set_filter; move |_| {
-                                                    set_filter.call(|filter| *filter = Filter::Active);
-                                                })
-                                            }
-                                        },
-                                        Li! {
-                                            child: A! {
-                                                class: filter.selected(Filter::Completed),
-                                                href: Some("#/completed"),
-                                                child: Text!{text: "Completed"},
-                                                on_click: enclose!(set_filter; move |_| {
-                                                    set_filter.call(|filter| *filter = Filter::Completed);
-                                                })
-                                            }
-                                        }
-                                    ]
-                                },
-
-                                if num_completed > 0 {
-                                    Button!{
-                                        class: Some("clear-completed"),
-                                        on_click: clear_completed,
-                                        child: Text!{text: "Clear completed"}
-                                    }
-                                } else {
-                                    ().into()
+            (items.len() > 0).then(|| Section!{
+                class: Some("main"),
+                children: [
+                    Input!{
+                        id: Some("toggle-all"),
+                        class: Some("toggle-all"),
+                        type_: Some("checkbox"),
+                        on_change: enclose!(update_items; move |e| {
+                            update_items.call(|items| {
+                                let checked = e.current_target().unwrap().checked();
+                                for item in items.iter_mut() {
+                                    item.completed = checked;
                                 }
-                            ]
-                        }
-                    ]
-                }
-            } else {
-                ().into()
-            },
+                            })
+                        })
+                    },
+                    Label!{
+                        for_: Some("toggle-all"),
+                        child: Text!{text: "Mark all as complete"}
+                    },
+
+                    Ul!{
+                        class: Some("todo-list"),
+                        children
+                    },
+
+                    Footer!{
+                        class: Some("footer"),
+                        children: [
+                            Span!{
+                                class: Some("todo-count"),
+                                children: [
+                                    Strong! {
+                                        child: Text!{text: num_active}
+                                    },
+                                    Text!{text: if num_active == 1 { " item" } else { " items" }}
+                                ]
+                            },
+
+                            Ul! {
+                                class: Some("filters"),
+                                children: [
+                                    Li! {
+                                        child: A! {
+                                            class: filter.selected(Filter::All),
+                                            href: Some("#/"),
+                                            child: Text!{text: "All"},
+                                            on_click: enclose!(set_filter; move |_| {
+                                                set_filter.call(|filter| *filter = Filter::All);
+                                            })
+                                        }
+                                    },
+                                    Li! {
+                                        child: A! {
+                                            class: filter.selected(Filter::Active),
+                                            href: Some("#/active"),
+                                            child: Text!{text: "Active"},
+                                            on_click: enclose!(set_filter; move |_| {
+                                                set_filter.call(|filter| *filter = Filter::Active);
+                                            })
+                                        }
+                                    },
+                                    Li! {
+                                        child: A! {
+                                            class: filter.selected(Filter::Completed),
+                                            href: Some("#/completed"),
+                                            child: Text!{text: "Completed"},
+                                            on_click: enclose!(set_filter; move |_| {
+                                                set_filter.call(|filter| *filter = Filter::Completed);
+                                            })
+                                        }
+                                    }
+                                ]
+                            },
+
+                            (num_completed > 0).then(|| Button!{
+                                class: Some("clear-completed"),
+                                on_click: clear_completed,
+                                child: Text!{text: "Clear completed"}
+                            }).into()
+                        ]
+                    }
+                ]
+            }).into()
         ]
     }
 }
