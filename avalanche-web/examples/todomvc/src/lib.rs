@@ -51,7 +51,7 @@ fn Todo() -> View {
     let num_active = items.len() - num_completed;
 
     let clear_completed = enclose!(update_items; move |_| {
-        update_items.call(|items| {
+        update_items.update(|items| {
             items.retain(|item| !item.completed);
         })
     });
@@ -93,19 +93,19 @@ fn Todo() -> View {
                                 type_: "checkbox",
                                 checked: item.completed,
                                 on_click: enclose!(update_items; move |_| {
-                                    update_items.call(|items| items[i].completed = !items[i].completed)
+                                    update_items.update(|items| items[i].completed = !items[i].completed)
                                 })
                             },
                             Label!{
                                 child: Text!{text: item.text.clone()},
                                 on_double_click: enclose!(set_editing; move |_| {
-                                    set_editing.call(|editing| *editing = Some(id))
+                                    set_editing.set(Some(id))
                                 })
                             },
                             Button!{
                                 class: "destroy",
                                 on_click: enclose!(update_items; move |_| {
-                                    update_items.call(|items| {
+                                    update_items.update(|items| {
                                         items.remove(i);
                                     })
                                 })
@@ -122,12 +122,12 @@ fn Todo() -> View {
                             if which == ENTER_KEY {
                                 e.current_target().unwrap().blur().expect("blur");
                             } else if which == ESCAPE_KEY {
-                                set_editing.call(|editing| *editing = None);
+                                set_editing.set(None);
                             }
                         }),
                         on_blur: enclose!(update_items, set_editing; move |e| {
-                            update_items.call(|items| items[i].text = e.current_target().unwrap().value());
-                            set_editing.call(|editing| *editing = None);
+                            update_items.update(|items| items[i].text = e.current_target().unwrap().value());
+                            set_editing.set(None);
                         })
                     }).into()
                 ]
@@ -152,7 +152,7 @@ fn Todo() -> View {
                         on_key_down: enclose!(update_items; move |e| {
                             if e.which() == ENTER_KEY {
                                 let current_target = e.current_target().unwrap();
-                                update_items.call(|items| {
+                                update_items.update(|items| {
                                     let new_item = Item {
                                         text: current_target.value(),
                                         completed: false,
@@ -160,7 +160,7 @@ fn Todo() -> View {
                                     };
                                     items.push(new_item);
                                 });
-                                update_monotonic_id.call(|id| *id += 1);
+                                update_monotonic_id.update(|id| *id += 1);
                                 current_target.set_value("");
                             }
                         })
@@ -175,7 +175,7 @@ fn Todo() -> View {
                         class: "toggle-all",
                         type_: "checkbox",
                         on_change: enclose!(update_items; move |e| {
-                            update_items.call(|items| {
+                            update_items.update(|items| {
                                 let checked = e.current_target().unwrap().checked();
                                 for item in items.iter_mut() {
                                     item.completed = checked;
@@ -215,7 +215,7 @@ fn Todo() -> View {
                                             href: "#/",
                                             child: Text!{text: "All"},
                                             on_click: enclose!(set_filter; move |_| {
-                                                set_filter.call(|filter| *filter = Filter::All);
+                                                set_filter.set(Filter::All);
                                             })
                                         }
                                     },
@@ -225,7 +225,7 @@ fn Todo() -> View {
                                             href: "#/active",
                                             child: Text!{text: "Active"},
                                             on_click: enclose!(set_filter; move |_| {
-                                                set_filter.call(|filter| *filter = Filter::Active);
+                                                set_filter.set(Filter::Active);
                                             })
                                         }
                                     },
@@ -235,7 +235,7 @@ fn Todo() -> View {
                                             href: "#/completed",
                                             child: Text!{text: "Completed"},
                                             on_click: enclose!(set_filter; move |_| {
-                                                set_filter.call(|filter| *filter = Filter::Completed);
+                                                set_filter.set(Filter::Completed);
                                             })
                                         }
                                     }

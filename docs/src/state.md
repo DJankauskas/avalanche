@@ -51,7 +51,7 @@ fn Counter() -> View {
                 child: Text! {text: "Counter!"},
             },
             Button! {
-                on_click: move |_| set_counter.call(|count| *count += 1),
+                on_click: move |_| set_counter.update(|count| *count += 1),
                 child: Text! {text: "+"}
             },
             Text! {text: count}
@@ -66,8 +66,9 @@ First, notice that we declare hooks within the `#[component]` attribute, with th
 `hook_name`, this introduces a variable of that name into the component function's scope. Note that each hook name must be unique within a component.
 
 Here, the `count` injected by `UseState` is a function which takes the state's default value for `u64` and returns a tuple with a reference to the 
-current state (which we name `count`) and a setter, which we name `set_count`. The setter has a `call` method which accepts a closure that receives a `&mut u64` and modifies it. Every time the user clicks on the button, `on_click` fires, calling `set_counter.call()`, which runs 
-`count += 1`, updating the state and causing the component to be rerendered. With that, we have our first stateful component! 
+current state (which we name `count`) and a setter, which we name `set_count`. The setter has an `update` method which accepts a closure that receives a `&mut u64` and modifies it. Every time the user clicks on the button, `on_click` fires, calling `set_counter.update()`, which runs 
+`count += 1`, updating the state and causing the component to be rerendered. With that, we have our first stateful component! If we instead wanted to simply 
+set the state to a value like `0`, we could write `set_count.set(0)` as a shorthand for `set_count.update(|count| *count = 0)`.
 
 ## Dynamic rendering
 

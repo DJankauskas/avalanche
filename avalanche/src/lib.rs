@@ -306,7 +306,7 @@ pub struct ComponentPos {
 /// and the setter [UseStateSetter<T>](UseStateSetter). `&T`'s lifetime is only valid within the component's render
 /// function, but [UseStateSetter<T>](UseStateSetter) may be freely moved and cloned.
 ///
-/// To update the state, use the [call](UseStateSetter::call) method on the setter variable.
+/// To update the state, use the [set](UseStateSetter::set) or [update](UseStateSetter::update) methods on the setter variable.
 ///
 /// # Example
 /// ```rust
@@ -322,7 +322,7 @@ pub struct ComponentPos {
 ///                 child: Text!{text: "Counter!"},
 ///             },
 ///             Button!{
-///                 on_click: move |_| set_count.call(|count| *count += 1),
+///                 on_click: move |_| set_count.update(|count| *count += 1),
 ///                 child: Text!{text: "+"}
 ///             },
 ///             Text!{text: count}
@@ -406,9 +406,9 @@ impl<T: 'static> UseStateSetter<T> {
     /// Takes a function that modifies the state associated with [UseStateSetter] and
     /// triggers a rerender of its associated component.
     /// The update is not performed immediately; its effect will only be accessible
-    /// on its component's rerender. Note that `call` always triggers a rerender, and the state value
+    /// on its component's rerender. Note that `update` always triggers a rerender, and the state value
     /// is marked as updated, even if the given function performs no mutations.
-    pub fn call<F: FnOnce(&mut T)>(&self, f: F) {
+    pub fn update<F: FnOnce(&mut T)>(&self, f: F) {
         let get_mut = self.get_mut;
         let vdom_clone = self.component_pos.vdom.clone();
         let vdom_clone_2 = vdom_clone.clone();
@@ -433,6 +433,15 @@ impl<T: 'static> UseStateSetter<T> {
                 })
             }));
         });
+    }
+
+    /// Sets the state to the given value.
+    ///
+    /// The update is not performed immediately; its effect will only be accessible
+    /// on its component's rerender. Note that `set` always triggers a rerender, and the state value
+    /// is marked as updated, even if the new state is equal to the old.
+    pub fn set(&self, val: T) {
+        self.update(move |state| *state = val);
     }
 }
 

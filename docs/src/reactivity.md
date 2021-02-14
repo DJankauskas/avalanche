@@ -23,7 +23,7 @@ fn Random() -> View {
         children: [
             Button! {
                 child: Text! {text: "Generate new number"},
-                on_click: move |_| trigger_update.call(|_| ())
+                on_click: move |_| trigger_update.set(())
             },
             Div! {
                 child: Text! {text: random::<u16>()}
@@ -50,7 +50,7 @@ fn Random() -> View {
         children: [
             Button! {
                 child: Text! {text: "Generate new number"},
-                on_click: move |_| set_value.call(|value| *value = random::<u16>())
+                on_click: move |_| set_value.set(random::<u16>())
             },
             Div! {
                 child: Text! {text: value}
@@ -69,7 +69,7 @@ This example leads us to the two main reactivity rules:
 For parameter values, directly using values like `rand::random()` is a problem because they depend on some external state
 that `avalanche` is not aware of, leading to stale values displayed on rerender. This also applies to values like `Rc<RefCell<T>>`
 if they are updated outside of hook functionality. When using interior mutability, then, make sure to wrap it in `UseState`, and perform updates 
-within the `call` method.
+within the `update` method.
 
 ### Avoid third-party macros
 

@@ -19,7 +19,7 @@ fn Counter() -> View {
                 child: Text!{text: "Counter!"},
             },
             Button!{
-                on_click: move |_| set_count.call(|count| *count += 1),
+                on_click: move |_| set_count.update(|count| *count += 1),
                 child: Text!{text: "+"}
             },
             Text!{text: count}

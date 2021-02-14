@@ -28,7 +28,7 @@ fn ControlledInput() -> View {
 
     Input! {
         value: text.clone(),
-        on_input: move |e| set_text.call(|text| *text = e.current_target().unwrap().value())
+        on_input: move |e| set_text.set(e.current_target().unwrap().value())
     }
 }
 ```
