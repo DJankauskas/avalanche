@@ -154,42 +154,53 @@ impl Renderer for WebRenderer {
 
                 let mut listeners = HashMap::new();
 
+                if raw_element.value_controlled {
+                    add_named_listener(
+                        &element,
+                        "input",
+                        "#v",
+                        false,
+                        Rc::new(|e| e.prevent_default()),
+                        &mut listeners,
+                    );
+                }
+                if raw_element.checked_controlled {
+                    add_named_listener(
+                        &element,
+                        "change",
+                        "#c",
+                        false,
+                        Rc::new(|e| e.prevent_default()),
+                        &mut listeners,
+                    );
+                }
+
                 match raw_element.tag {
                     "input" => {
                         let input_element = element
                             .clone()
                             .dyn_into::<web_sys::HtmlInputElement>()
                             .expect("HTMLInputElement");
-                        for (name, attr) in raw_element.attrs.iter() {
-                            if let Some(attr) = &attr.0 {
-                                match attr {
-                                    Attr::Prop(prop) => match *name {
-                                        "value" => {
-                                            input_element.set_value(&prop);
+
+                        for (name, (attr, _)) in raw_element.attrs.iter() {
+                            match attr {
+                                Attr::Prop(prop) => {
+                                    if let Some(prop) = prop {
+                                        match *name {
+                                            "value" => {
+                                                input_element.set_value(&prop);
+                                            }
+                                            "checked" => {
+                                                input_element.set_checked(!prop.is_empty());
+                                            }
+                                            _ => {
+                                                input_element.set_attribute(name, &prop).unwrap();
+                                            }
                                         }
-                                        "checked" => input_element.set_checked(prop != ""),
-                                        _ => {
-                                            input_element.set_attribute(name, &prop).unwrap();
-                                        }
-                                    },
-                                    Attr::Handler(handler) => match *name {
-                                        "input" if raw_element.is_controlled => {
-                                            add_listener_prevent_default(
-                                                &element,
-                                                name,
-                                                handler.clone(),
-                                                &mut listeners,
-                                            );
-                                        }
-                                        _ => {
-                                            add_listener(
-                                                &element,
-                                                name,
-                                                handler.clone(),
-                                                &mut listeners,
-                                            );
-                                        }
-                                    },
+                                    }
+                                }
+                                Attr::Handler(handler) => {
+                                    add_listener(&element, name, handler.clone(), &mut listeners)
                                 }
                             }
                         }
@@ -199,50 +210,35 @@ impl Renderer for WebRenderer {
                             .clone()
                             .dyn_into::<web_sys::HtmlTextAreaElement>()
                             .expect("HTMLTextAreaElement");
-                        for (name, attr) in raw_element.attrs.iter() {
-                            if let Some(attr) = &attr.0 {
-                                match attr {
-                                    Attr::Prop(prop) => match *name {
-                                        "value" => text_area_element.set_value(prop),
-                                        _ => text_area_element.set_attribute(name, &prop).unwrap(),
-                                    },
-                                    Attr::Handler(handler) => match *name {
-                                        "input" if raw_element.is_controlled => {
-                                            add_listener_prevent_default(
-                                                &element,
-                                                name,
-                                                handler.clone(),
-                                                &mut listeners,
-                                            );
+
+                        for (name, (attr, _)) in raw_element.attrs.iter() {
+                            match attr {
+                                Attr::Prop(prop) => {
+                                    if let Some(prop) = prop {
+                                        match *name {
+                                            "value" => text_area_element.set_value(prop),
+                                            _ => text_area_element
+                                                .set_attribute(name, &prop)
+                                                .unwrap(),
                                         }
-                                        _ => {
-                                            add_listener(
-                                                &element,
-                                                name,
-                                                handler.clone(),
-                                                &mut listeners,
-                                            );
-                                        }
-                                    },
+                                    }
+                                }
+                                Attr::Handler(handler) => {
+                                    add_listener(&element, name, handler.clone(), &mut listeners)
                                 }
                             }
                         }
                     }
                     _ => {
-                        for (name, attr) in raw_element.attrs.iter() {
-                            if let Some(attr) = &attr.0 {
-                                match attr {
-                                    Attr::Prop(prop) => {
+                        for (name, (attr, _)) in raw_element.attrs.iter() {
+                            match attr {
+                                Attr::Prop(prop) => {
+                                    if let Some(prop) = prop {
                                         element.set_attribute(name, &prop).unwrap();
                                     }
-                                    Attr::Handler(handler) => {
-                                        add_listener(
-                                            &element,
-                                            name,
-                                            handler.clone(),
-                                            &mut listeners,
-                                        );
-                                    }
+                                }
+                                Attr::Handler(handler) => {
+                                    add_listener(&element, name, handler.clone(), &mut listeners);
                                 }
                             }
                         }
@@ -285,38 +281,24 @@ impl Renderer for WebRenderer {
                             for (name, (attr, updated)) in raw_element.attrs.iter() {
                                 if *updated {
                                     match attr {
-                                        Some(attr) => match attr {
-                                            Attr::Prop(prop) => match *name {
-                                                "value" => {
+                                        Attr::Prop(prop) => match *name {
+                                            "value" => {
+                                                if let Some(prop) = prop {
                                                     input_element.set_value(&prop);
                                                 }
-                                                "checked" => input_element.set_checked(prop != ""),
-                                                _ => {
-                                                    input_element
-                                                        .set_attribute(name, &prop)
-                                                        .unwrap();
-                                                }
-                                            },
-                                            Attr::Handler(handler) => {
-                                                if raw_element.is_controlled && *name == "input" {
-                                                    update_listener_prevent_default(
-                                                        &element,
-                                                        name,
-                                                        handler.clone(),
-                                                        &mut web_handle.listeners,
-                                                    );
-                                                } else {
-                                                    update_listener(
-                                                        &element,
-                                                        name,
-                                                        handler.clone(),
-                                                        &mut web_handle.listeners,
-                                                    );
-                                                }
                                             }
+                                            "checked" => {
+                                                input_element.set_checked(prop.is_some());
+                                            }
+                                            _ => update_generic_prop(&element, name, prop.as_deref())
                                         },
-                                        None => {
-                                            remove_listener(name, &mut web_handle.listeners);
+                                        Attr::Handler(handler) => {
+                                            update_listener(
+                                                &element,
+                                                name,
+                                                handler.clone(),
+                                                &mut web_handle.listeners,
+                                            );
                                         }
                                     }
                                 }
@@ -330,36 +312,22 @@ impl Renderer for WebRenderer {
                             for (name, (attr, updated)) in raw_element.attrs.iter() {
                                 if *updated {
                                     match attr {
-                                        Some(attr) => match attr {
-                                            Attr::Prop(prop) => {
-                                                if *name == "value" {
+                                        Attr::Prop(prop) => {
+                                            if *name == "value" {
+                                                if let Some(prop) = prop {
                                                     text_area_element.set_value(&prop);
-                                                } else {
-                                                    text_area_element
-                                                        .set_attribute(name, &prop)
-                                                        .unwrap();
                                                 }
+                                            } else {
+                                                update_generic_prop(&element, name, prop.as_deref())
                                             }
-                                            Attr::Handler(handler) => {
-                                                if raw_element.is_controlled && *name == "input" {
-                                                    update_listener_prevent_default(
-                                                        &element,
-                                                        name,
-                                                        handler.clone(),
-                                                        &mut web_handle.listeners,
-                                                    );
-                                                } else {
-                                                    update_listener(
-                                                        &element,
-                                                        name,
-                                                        handler.clone(),
-                                                        &mut web_handle.listeners,
-                                                    );
-                                                }
-                                            }
-                                        },
-                                        None => {
-                                            remove_listener(name, &mut web_handle.listeners);
+                                        }
+                                        Attr::Handler(handler) => {
+                                            update_listener(
+                                                &element,
+                                                name,
+                                                handler.clone(),
+                                                &mut web_handle.listeners,
+                                            );
                                         }
                                     }
                                 }
@@ -369,21 +337,14 @@ impl Renderer for WebRenderer {
                             for (name, (attr, updated)) in raw_element.attrs.iter() {
                                 if *updated {
                                     match attr {
-                                        Some(attr) => match attr {
-                                            Attr::Prop(prop) => {
-                                                element.set_attribute(name, &prop).unwrap();
-                                            }
-                                            Attr::Handler(handler) => {
-                                                update_listener(
-                                                    &element,
-                                                    name,
-                                                    handler.clone(),
-                                                    &mut web_handle.listeners,
-                                                );
-                                            }
-                                        },
-                                        None => {
-                                            remove_listener(name, &mut web_handle.listeners);
+                                        Attr::Prop(prop) => update_generic_prop(&element, name, prop.as_deref()),
+                                        Attr::Handler(handler) => {
+                                            update_listener(
+                                                &element,
+                                                name,
+                                                handler.clone(),
+                                                &mut web_handle.listeners,
+                                            );
                                         }
                                     }
                                 }
@@ -548,26 +509,39 @@ impl Renderer for WebRenderer {
     }
 }
 
+fn update_generic_prop(element: &Element, name: &str, prop: Option<&str>) {
+    match prop {
+        Some(prop) => {
+            element
+                .set_attribute(name, &prop)
+                .unwrap();
+        }
+        None => {
+            element.remove_attribute(name).unwrap();
+        }
+    }
+}
+
 fn add_listener(
     element: &web_sys::Element,
     name: &'static str,
     callback: Rc<dyn Fn(Event)>,
     listeners: &mut HashMap<&'static str, EventListener>,
 ) {
-    let listener = EventListener::new(&element, name, move |event| callback(event.clone()));
-    listeners.insert(name, listener);
+    add_named_listener(element, name, name, true, callback, listeners)
 }
 
-fn add_listener_prevent_default(
+fn add_named_listener(
     element: &web_sys::Element,
+    event: &'static str,
     name: &'static str,
+    passive: bool,
     callback: Rc<dyn Fn(Event)>,
     listeners: &mut HashMap<&'static str, EventListener>,
 ) {
     let mut options = EventListenerOptions::default();
-    options.passive = false;
-    let listener = EventListener::new_with_options(&element, name, options, move |event| {
-        event.prevent_default();
+    options.passive = passive;
+    let listener = EventListener::new_with_options(&element, event, options, move |event| {
         callback(event.clone())
     });
     listeners.insert(name, listener);
@@ -582,22 +556,4 @@ fn update_listener(
     let _ = listeners.remove(name);
     let listener = EventListener::new(&element, name, move |event| callback(event.clone()));
     listeners.insert(name, listener);
-}
-
-fn update_listener_prevent_default(
-    element: &web_sys::Element,
-    name: &'static str,
-    callback: Rc<dyn Fn(Event)>,
-    listeners: &mut HashMap<&'static str, EventListener>,
-) {
-    let _ = listeners.remove(name);
-    let listener = EventListener::new(&element, name, move |event| {
-        event.prevent_default();
-        callback(event.clone());
-    });
-    listeners.insert(name, listener);
-}
-
-fn remove_listener(name: &'static str, listeners: &mut HashMap<&'static str, EventListener>) {
-    let _ = listeners.remove(name);
 }

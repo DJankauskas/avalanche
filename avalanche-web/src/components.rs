@@ -78,25 +78,26 @@ impl Component for Text {
 }
 
 pub(crate) enum Attr {
-    Prop(String),
+    Prop(Option<String>),
     Handler(Rc<dyn Fn(Event)>),
 }
 #[derive(Default)]
 #[doc(hidden)]
 pub struct RawElement {
     /// The `bool` represents whether the attr was updated.
-    pub(crate) attrs: HashMap<&'static str, (Option<Attr>, bool)>,
+    pub(crate) attrs: HashMap<&'static str, (Attr, bool)>,
     pub(crate) attrs_updated: bool,
     pub(crate) children: Vec<View>,
     pub(crate) children_updated: bool,
-    pub(crate) is_controlled: bool,
+    pub(crate) value_controlled: bool,
+    pub(crate) checked_controlled: bool,
     pub(crate) key: Option<String>,
     pub(crate) location: (u32, u32),
     pub(crate) tag: &'static str,
 }
 
 impl RawElement {
-    fn attr(&mut self, name: &'static str, attr: Option<Attr>, updated: bool) {
+    fn attr(&mut self, name: &'static str, attr: Attr, updated: bool) {
         self.attrs.insert(name, (attr, updated));
         self.attrs_updated |= updated;
     }
@@ -268,7 +269,7 @@ macro_rules! def_component_attrs {
                         pub fn $propident<T>(mut self, val: T, updated: bool) -> Self where T : Into<$proptype> {
                             self.raw.attr(
                                 $propnative,
-                                Some(Attr::Prop(Into::<$proptype>::into(val).to_string())),
+                                Attr::Prop(Some(Into::<$proptype>::into(val).to_string())),
                                 updated
                             );
                             self
@@ -278,14 +279,12 @@ macro_rules! def_component_attrs {
                     $(
                         $(
                             pub fn $boolpropident(mut self, val: bool, updated: bool) -> Self {
-                                if val {
-                                    self.raw.attr(
-                                        $boolpropnative,
-                                        // TODO: use Cow<String> for Prop to avoid alloc
-                                        Some(Attr::Prop(String::from($boolpropnative))),
-                                        updated
-                                    );
-                                };
+                                self.raw.attr(
+                                    $boolpropnative,
+                                    // TODO: use Cow<String> for Prop to avoid alloc
+                                    Attr::Prop(val.then(|| String::from($boolpropnative))),
+                                    updated
+                                );
                                 self
                             }
                         )*
@@ -296,9 +295,9 @@ macro_rules! def_component_attrs {
                             pub fn $listenident(mut self, f: impl Fn(TypedEvent::<$listentype, <$builder as AssociatedNativeElement>::NativeElement>) + 'static, updated: bool) -> Self {
                                 self.raw.attr(
                                     $listennative,
-                                    Some(Attr::Handler(std::rc::Rc::new(move |e: Event| f(
+                                    Attr::Handler(std::rc::Rc::new(move |e: Event| f(
                                         TypedEvent::<$listentype, <$builder as AssociatedNativeElement>::NativeElement>::new(e.dyn_into::<$listentype>().unwrap())
-                                    )))),
+                                    ))),
                                     updated
                                 );
                                 self
@@ -1467,16 +1466,25 @@ def_component_attrs! {
         "min" => min: String,
         "max" => max: String;
     bool_props:
-        "checked" => checked,
         "multiple" => multiple;
 }
 add_input_attrs! {InputBuilder}
 
 impl InputBuilder {
     pub fn value<S: ToString>(mut self, val: S, updated: bool) -> Self {
-        self.raw.is_controlled = true;
+        self.raw.value_controlled = true;
         self.raw
-            .attr("value", Some(Attr::Prop(val.to_string())), updated);
+            .attr("value",Attr::Prop(Some(val.to_string())), updated);
+        self
+    }
+
+    pub fn checked(mut self, val: bool, updated: bool) -> Self {
+        self.raw.checked_controlled = true;
+        self.raw.attr(
+            "checked",
+            Attr::Prop(val.then(|| "checked".to_string())),
+            updated
+        );
         self
     }
 }
@@ -1492,9 +1500,9 @@ add_textinput_attrs! {TextAreaBuilder}
 
 impl TextAreaBuilder {
     pub fn value<S: ToString>(mut self, val: S, updated: bool) -> Self {
-        self.raw.is_controlled = true;
+        self.raw.value_controlled = true;
         self.raw
-            .attr("value", Some(Attr::Prop(val.to_string())), updated);
+            .attr("value", Attr::Prop(Some(val.to_string())), updated);
         self
     }
 }
