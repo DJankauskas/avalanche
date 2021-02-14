@@ -58,14 +58,14 @@ fn Todo() -> View {
 
     let children = items
         .iter()
-        .filter(|item| {
+        .enumerate()
+        .filter(|(_, item)| {
             match filter {
                 Filter::All => true,
                 Filter::Completed => item.completed,
                 Filter::Active => !item.completed
             }
         })
-        .enumerate()
         .map(|(i, item)| {
             reactive_assert!(items => i);
             let id = item.id;
