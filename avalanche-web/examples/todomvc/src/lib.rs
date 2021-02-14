@@ -30,11 +30,11 @@ enum Filter {
 }
 
 impl Filter {
-    fn selected(&self, other: Filter) -> Option<&'static str> {
+    fn selected(&self, other: Filter) ->&'static str {
         if *self == other {
-            Some("selected")
+            "selected"
         } else {
-            Some("")
+            ""
         }
     }
 }
@@ -70,7 +70,7 @@ fn Todo() -> View {
             reactive_assert!(items => i);
             let id = item.id;
             Li! {
-                class: Some(format!(
+                class: format!(
                     "{} {}",
                     if item.completed {
                         "completed"
@@ -82,15 +82,15 @@ fn Todo() -> View {
                     } else {
                         ""
                     }
-                )),
+                ),
                 key: item.id,
                 children: [
                     Div!{
-                        class: Some("view"),
+                        class: "view",
                         children: [
                             Input!{
-                                class: Some("toggle"),
-                                type_: Some("checkbox"),
+                                class: "toggle",
+                                type_: "checkbox",
                                 checked: item.completed,
                                 on_click: enclose!(update_items; move |_| {
                                     update_items.call(|items| items[i].completed = !items[i].completed)
@@ -103,7 +103,7 @@ fn Todo() -> View {
                                 })
                             },
                             Button!{
-                                class: Some("destroy"),
+                                class: "destroy",
                                 on_click: enclose!(update_items; move |_| {
                                     update_items.call(|items| {
                                         items.remove(i);
@@ -113,8 +113,8 @@ fn Todo() -> View {
                         ]
                     },
                     (*editing == Some(item.id)).then(|| Input!{
-                        class: Some("edit"),
-                        id: Some("edit"),
+                        class: "edit",
+                        id: "edit",
                         auto_focus: true,
                         value: item.text.clone(),
                         on_key_down: enclose!(set_editing; move |e| {
@@ -140,14 +140,14 @@ fn Todo() -> View {
     Div! {
         children: [
             Header!{
-                class: Some("header"),
+                class: "header",
                 children: [
                     H1!{
                         child: Text!{text: "todos"}
                     },
                     Input!{
-                        class: Some("new-todo"),
-                        placeholder: Some("What needs to be done?"),
+                        class: "new-todo",
+                        placeholder: "What needs to be done?",
                         auto_focus: true,
                         on_key_down: enclose!(update_items; move |e| {
                             if e.which() == ENTER_KEY {
@@ -168,12 +168,12 @@ fn Todo() -> View {
                 ]
             },
             (items.len() > 0).then(|| Section!{
-                class: Some("main"),
+                class: "main",
                 children: [
                     Input!{
-                        id: Some("toggle-all"),
-                        class: Some("toggle-all"),
-                        type_: Some("checkbox"),
+                        id: "toggle-all",
+                        class: "toggle-all",
+                        type_: "checkbox",
                         on_change: enclose!(update_items; move |e| {
                             update_items.call(|items| {
                                 let checked = e.current_target().unwrap().checked();
@@ -184,20 +184,20 @@ fn Todo() -> View {
                         })
                     },
                     Label!{
-                        for_: Some("toggle-all"),
+                        for_: "toggle-all",
                         child: Text!{text: "Mark all as complete"}
                     },
 
                     Ul!{
-                        class: Some("todo-list"),
+                        class: "todo-list",
                         children
                     },
 
                     Footer!{
-                        class: Some("footer"),
+                        class: "footer",
                         children: [
                             Span!{
-                                class: Some("todo-count"),
+                                class: "todo-count",
                                 children: [
                                     Strong! {
                                         child: Text!{text: num_active}
@@ -207,12 +207,12 @@ fn Todo() -> View {
                             },
 
                             Ul! {
-                                class: Some("filters"),
+                                class: "filters",
                                 children: [
                                     Li! {
                                         child: A! {
                                             class: filter.selected(Filter::All),
-                                            href: Some("#/"),
+                                            href: "#/",
                                             child: Text!{text: "All"},
                                             on_click: enclose!(set_filter; move |_| {
                                                 set_filter.call(|filter| *filter = Filter::All);
@@ -222,7 +222,7 @@ fn Todo() -> View {
                                     Li! {
                                         child: A! {
                                             class: filter.selected(Filter::Active),
-                                            href: Some("#/active"),
+                                            href: "#/active",
                                             child: Text!{text: "Active"},
                                             on_click: enclose!(set_filter; move |_| {
                                                 set_filter.call(|filter| *filter = Filter::Active);
@@ -232,7 +232,7 @@ fn Todo() -> View {
                                     Li! {
                                         child: A! {
                                             class: filter.selected(Filter::Completed),
-                                            href: Some("#/completed"),
+                                            href: "#/completed",
                                             child: Text!{text: "Completed"},
                                             on_click: enclose!(set_filter; move |_| {
                                                 set_filter.call(|filter| *filter = Filter::Completed);
@@ -243,7 +243,7 @@ fn Todo() -> View {
                             },
 
                             (num_completed > 0).then(|| Button!{
-                                class: Some("clear-completed"),
+                                class: "clear-completed",
                                 on_click: clear_completed,
                                 child: Text!{text: "Clear completed"}
                             }).into()

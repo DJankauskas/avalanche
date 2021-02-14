@@ -265,10 +265,10 @@ macro_rules! def_component_attrs {
             ($builder:ty) => {
                 impl $builder {
                     $(
-                        pub fn $propident<T>(mut self, val: Option<T>, updated: bool) -> Self where T : Into<$proptype> {
+                        pub fn $propident<T>(mut self, val: T, updated: bool) -> Self where T : Into<$proptype> {
                             self.raw.attr(
                                 $propnative,
-                                val.map(|k| Attr::Prop(Into::<$proptype>::into(k).to_string())),
+                                Some(Attr::Prop(Into::<$proptype>::into(val).to_string())),
                                 updated
                             );
                             self
@@ -316,8 +316,8 @@ def_component_attrs! {
     props:
         "accesskey" => access_key: String,
         "class" => class:  String,
-        //TODO: this is enumerable
-        //for forwards-compatability, make enum?
+        // TODO: this is enumerable
+        // for forwards-compatability, make enum?
         "contenteditable" => content_editable: bool,
         "dir" => dir: Dir,
         "draggable" => draggable: bool,
@@ -333,37 +333,37 @@ def_component_attrs! {
     bool_props:
         "hidden" => hidden;
     listeners:
-        //Focus events
+        // Focus events
         "blur" => on_blur: FocusEvent,
         "focus" => on_focus: FocusEvent,
         //focusin, focusout?
 
-        //Clipboard events
-        //TODO: these are unstable web_sys apis
-        //cut, copy, and paste
+        // Clipboard events
+        // TODO: these are unstable web_sys apis
+        // cut, copy, and paste
 
-        //Composition events
+        // Composition events
         "compositionstart" => on_composition_start: CompositionEvent,
         "compositionupdate" => on_composition_update: CompositionEvent,
         "compositionend" => on_composition_end: CompositionEvent,
 
-        //Form events
+        // Form events
         "change" => on_change: Event,
         "input" => on_input: Event,
-        //TODO: for form only?
+        // TODO: for form only?
         "reset" => on_reset: Event,
         "submit" => on_submit: Event,
         "invalid" => on_invalid: Event,
 
-        //Image events
+        // Image events
         "load" => on_load: Event,
         "error" => on_error: Event,
 
-        //Keyboard events
+        // Keyboard events
         "keydown" => on_key_down: KeyboardEvent,
         "keyup" => on_key_up: KeyboardEvent,
 
-        //Media events
+        // Media events
         "canplay" => on_can_play: Event,
         "canplaythrough" => on_can_play_through: Event,
         "durationchange" => on_duration_change: Event,
@@ -383,7 +383,7 @@ def_component_attrs! {
         "volumechange" => on_volume_change: Event,
         "waiting" => on_waiting: Event,
 
-        //Mouse events
+        // Mouse events
         "auxclick" => on_aux_click: MouseEvent,
         "click" => on_click: MouseEvent,
         "contextmenu" => on_context_menu: MouseEvent,
@@ -399,10 +399,10 @@ def_component_attrs! {
         "pointerlockerror" => on_pointer_lock_error: Event,
         "select" => on_select: Event,
 
-        //Wheel event
+        // Wheel event
         "wheel" => on_wheel: WheelEvent,
 
-        //Drag and drop events
+        // Drag and drop events
         "drag" => on_drag: DragEvent,
         "dragend" => on_drag_end: DragEvent,
         "dragenter" => on_drag_enter: DragEvent,
@@ -411,13 +411,13 @@ def_component_attrs! {
         "dragover" => on_drag_over: DragEvent,
         "drop" => on_drop: DragEvent,
 
-        //Touch events
+        // Touch events
         "touchcancel" => on_touch_cancel: TouchEvent,
         "touchend" => on_touch_end: TouchEvent,
         "touchmove" => on_touch_move: TouchEvent,
         "touchstart" => on_touch_start: TouchEvent,
 
-        //Pointer events
+        // Pointer events
         "pointerover" => on_pointer_over: PointerEvent,
         "pointerenter" => on_pointer_enter: PointerEvent,
         "pointerdown" => on_pointer_down: PointerEvent,
@@ -429,22 +429,22 @@ def_component_attrs! {
         "gotpointercapture" => on_got_pointer_capture: PointerEvent,
         "lostpointercapture" => on_lost_pointer_capture: PointerEvent,
 
-        //Scroll event
+        // Scroll event
         "scroll" => on_scroll: Event,
 
-        //Animation events
+        // Animation events
         "animationstart" => on_animation_start: AnimationEvent,
         "animationcancel" => on_animation_cancel: AnimationEvent,
         "animationend" => on_animation_end: AnimationEvent,
         "animationinteraction" => on_animation_interaction: AnimationEvent,
 
-        //Transition events
+        // Transition events
         "transitionstart" => on_transition_start: TransitionEvent,
         "transitioncancel" => on_transition_cancel: TransitionEvent,
         "transitionend" => on_transition_end: TransitionEvent,
         "transitionrun" => on_transition_run: TransitionEvent,
 
-        //Progress events
+        // Progress events
         "abort" => on_abort: Event,
         "loadstart" => on_load_start: ProgressEvent,
         "progress" => on_progress: ProgressEvent;

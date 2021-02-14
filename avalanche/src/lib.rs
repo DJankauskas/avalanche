@@ -46,7 +46,7 @@ use vdom::{update_vnode, VDom, VNode};
 /// use avalanche::{component, View};
 /// use avalanche_web::components::{H1, Text};
 ///
-/// const class: Option<&'static str> = Some("hello-world");
+/// const class: &str = "hello-world";
 ///
 /// #[component]
 /// pub fn HelloWorld(name: String) -> View {
