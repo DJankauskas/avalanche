@@ -339,7 +339,7 @@ fn Example() -&gt; View {
 <h2><a class="header" href="#parameter-type-restrictions" id="parameter-type-restrictions">Parameter type restrictions</a></h2>
 <p>You might have noticed that we used the <code>String</code> type for our parameters, rather than the more generic <code>&amp;str</code>. That's because 
 parameters are stored and need to live longer than the function body, and are thus required to be <code>'static</code>. That means
-parameter types can't contain non-<code>-static</code> references. However, <code>static</code> references like <code>&amp;'static str</code> are allowed.</p>
+parameter types can't contain non-<code>'static</code> references. However, <code>static</code> references like <code>&amp;'static str</code> are allowed.</p>
 <h1><a class="header" href="#hooks-state-and-control-flow" id="hooks-state-and-control-flow">Hooks, State, and Control Flow</a></h1>
 <h2><a class="header" href="#hooks" id="hooks">Hooks</a></h2>
 <p>So far, all the data we've passed to parameters and used in general was static, specified at compilation time.
@@ -390,7 +390,7 @@ fn Counter() -&gt; View {
                 child: Text! {text: &quot;Counter!&quot;},
             },
             Button! {
-                on_click: move |_| set_counter.call(|count| *count += 1),
+                on_click: move |_| set_counter.update(|count| *count += 1),
                 child: Text! {text: &quot;+&quot;}
             },
             Text! {text: count}
@@ -405,8 +405,9 @@ fn Counter() -&gt; View {
 <p>First, notice that we declare hooks within the <code>#[component]</code> attribute, with the syntax <code>#[component(hook_name = HookType, ...)]</code>. For each 
 <code>hook_name</code>, this introduces a variable of that name into the component function's scope. Note that each hook name must be unique within a component.</p>
 <p>Here, the <code>count</code> injected by <code>UseState</code> is a function which takes the state's default value for <code>u64</code> and returns a tuple with a reference to the 
-current state (which we name <code>count</code>) and a setter, which we name <code>set_count</code>. The setter has a <code>call</code> method which accepts a closure that receives a <code>&amp;mut u64</code> and modifies it. Every time the user clicks on the button, <code>on_click</code> fires, calling <code>set_counter.call()</code>, which runs 
-<code>count += 1</code>, updating the state and causing the component to be rerendered. With that, we have our first stateful component! </p>
+current state (which we name <code>count</code>) and a setter, which we name <code>set_count</code>. The setter has an <code>update</code> method which accepts a closure that receives a <code>&amp;mut u64</code> and modifies it. Every time the user clicks on the button, <code>on_click</code> fires, calling <code>set_counter.update()</code>, which runs 
+<code>count += 1</code>, updating the state and causing the component to be rerendered. With that, we have our first stateful component! If we instead wanted to simply 
+set the state to a value like <code>0</code>, we could write <code>set_count.set(0)</code> as a shorthand for <code>set_count.update(|count| *count = 0)</code>.</p>
 <h2><a class="header" href="#dynamic-rendering" id="dynamic-rendering">Dynamic rendering</a></h2>
 <p>Oftentimes, we don't just want to update property values based on changes to state and props, but also what children we render.
 In some frameworks, that requires special template syntax, but we can take advantage of the fact that the <code>Component! {}</code> syntax returns plain 
@@ -506,7 +507,7 @@ fn Random() -&gt; View {
         children: [
             Button! {
                 child: Text! {text: &quot;Generate new number&quot;},
-                on_click: move |_| trigger_update.call(|_| ())
+                on_click: move |_| trigger_update.set(())
             },
             Div! {
                 child: Text! {text: random::&lt;u16&gt;()}
@@ -535,7 +536,7 @@ fn Random() -&gt; View {
         children: [
             Button! {
                 child: Text! {text: &quot;Generate new number&quot;},
-                on_click: move |_| set_value.call(|value| *value = random::&lt;u16&gt;())
+                on_click: move |_| set_value.set(random::&lt;u16&gt;())
             },
             Div! {
                 child: Text! {text: value}
@@ -551,7 +552,7 @@ fn Random() -&gt; View {
 <p>For parameter values, directly using values like <code>rand::random()</code> is a problem because they depend on some external state
 that <code>avalanche</code> is not aware of, leading to stale values displayed on rerender. This also applies to values like <code>Rc&lt;RefCell&lt;T&gt;&gt;</code>
 if they are updated outside of hook functionality. When using interior mutability, then, make sure to wrap it in <code>UseState</code>, and perform updates 
-within the <code>call</code> method.</p>
+within the <code>update</code> method.</p>
 <h3><a class="header" href="#avoid-third-party-macros" id="avoid-third-party-macros">Avoid third-party macros</a></h3>
 <p>Macros can lead to convenient code; for example, <code>Text! {text: format!(&quot;Hello, {} {}!&quot;, rank, name)}</code> is a lot clearer than the macro-free
 alternative. However, when using non-<code>std</code> and <code>avalanche</code> macros, <code>#[component]</code> is unable to track their dependencies correctly, meaning
@@ -586,7 +587,7 @@ fn ControlledInput() -&gt; View {
 
     Input! {
         value: text.clone(),
-        on_input: move |e| set_text.call(|text| *text = e.current_target().unwrap().value())
+        on_input: move |e| set_text.set(e.current_target().unwrap().value())
     }
 }
 <span class="boring">}

@@ -187,7 +187,7 @@ fn Random() -&gt; View {
         children: [
             Button! {
                 child: Text! {text: &quot;Generate new number&quot;},
-                on_click: move |_| trigger_update.call(|_| ())
+                on_click: move |_| trigger_update.set(())
             },
             Div! {
                 child: Text! {text: random::&lt;u16&gt;()}
@@ -216,7 +216,7 @@ fn Random() -&gt; View {
         children: [
             Button! {
                 child: Text! {text: &quot;Generate new number&quot;},
-                on_click: move |_| set_value.call(|value| *value = random::&lt;u16&gt;())
+                on_click: move |_| set_value.set(random::&lt;u16&gt;())
             },
             Div! {
                 child: Text! {text: value}
@@ -232,7 +232,7 @@ fn Random() -&gt; View {
 <p>For parameter values, directly using values like <code>rand::random()</code> is a problem because they depend on some external state
 that <code>avalanche</code> is not aware of, leading to stale values displayed on rerender. This also applies to values like <code>Rc&lt;RefCell&lt;T&gt;&gt;</code>
 if they are updated outside of hook functionality. When using interior mutability, then, make sure to wrap it in <code>UseState</code>, and perform updates 
-within the <code>call</code> method.</p>
+within the <code>update</code> method.</p>
 <h3><a class="header" href="#avoid-third-party-macros" id="avoid-third-party-macros">Avoid third-party macros</a></h3>
 <p>Macros can lead to convenient code; for example, <code>Text! {text: format!(&quot;Hello, {} {}!&quot;, rank, name)}</code> is a lot clearer than the macro-free
 alternative. However, when using non-<code>std</code> and <code>avalanche</code> macros, <code>#[component]</code> is unable to track their dependencies correctly, meaning

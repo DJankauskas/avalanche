@@ -213,7 +213,7 @@ fn Counter() -&gt; View {
                 child: Text! {text: &quot;Counter!&quot;},
             },
             Button! {
-                on_click: move |_| set_counter.call(|count| *count += 1),
+                on_click: move |_| set_counter.update(|count| *count += 1),
                 child: Text! {text: &quot;+&quot;}
             },
             Text! {text: count}
@@ -228,8 +228,9 @@ fn Counter() -&gt; View {
 <p>First, notice that we declare hooks within the <code>#[component]</code> attribute, with the syntax <code>#[component(hook_name = HookType, ...)]</code>. For each 
 <code>hook_name</code>, this introduces a variable of that name into the component function's scope. Note that each hook name must be unique within a component.</p>
 <p>Here, the <code>count</code> injected by <code>UseState</code> is a function which takes the state's default value for <code>u64</code> and returns a tuple with a reference to the 
-current state (which we name <code>count</code>) and a setter, which we name <code>set_count</code>. The setter has a <code>call</code> method which accepts a closure that receives a <code>&amp;mut u64</code> and modifies it. Every time the user clicks on the button, <code>on_click</code> fires, calling <code>set_counter.call()</code>, which runs 
-<code>count += 1</code>, updating the state and causing the component to be rerendered. With that, we have our first stateful component! </p>
+current state (which we name <code>count</code>) and a setter, which we name <code>set_count</code>. The setter has an <code>update</code> method which accepts a closure that receives a <code>&amp;mut u64</code> and modifies it. Every time the user clicks on the button, <code>on_click</code> fires, calling <code>set_counter.update()</code>, which runs 
+<code>count += 1</code>, updating the state and causing the component to be rerendered. With that, we have our first stateful component! If we instead wanted to simply 
+set the state to a value like <code>0</code>, we could write <code>set_count.set(0)</code> as a shorthand for <code>set_count.update(|count| *count = 0)</code>.</p>
 <h2><a class="header" href="#dynamic-rendering" id="dynamic-rendering">Dynamic rendering</a></h2>
 <p>Oftentimes, we don't just want to update property values based on changes to state and props, but also what children we render.
 In some frameworks, that requires special template syntax, but we can take advantage of the fact that the <code>Component! {}</code> syntax returns plain 

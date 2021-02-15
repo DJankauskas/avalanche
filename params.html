@@ -269,7 +269,7 @@ fn Example() -&gt; View {
 <h2><a class="header" href="#parameter-type-restrictions" id="parameter-type-restrictions">Parameter type restrictions</a></h2>
 <p>You might have noticed that we used the <code>String</code> type for our parameters, rather than the more generic <code>&amp;str</code>. That's because 
 parameters are stored and need to live longer than the function body, and are thus required to be <code>'static</code>. That means
-parameter types can't contain non-<code>-static</code> references. However, <code>static</code> references like <code>&amp;'static str</code> are allowed.</p>
+parameter types can't contain non-<code>'static</code> references. However, <code>static</code> references like <code>&amp;'static str</code> are allowed.</p>
 
                     </main>
 
