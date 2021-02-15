@@ -109,4 +109,4 @@ Link! {
 
 You might have noticed that we used the `String` type for our parameters, rather than the more generic `&str`. That's because 
 parameters are stored and need to live longer than the function body, and are thus required to be `'static`. That means
-parameter types can't contain non-`-static` references. However, `static` references like `&'static str` are allowed.
+parameter types can't contain non-`'static` references. However, `static` references like `&'static str` are allowed.

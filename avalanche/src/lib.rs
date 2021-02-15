@@ -405,6 +405,7 @@ impl<T: 'static> UseStateSetter<T> {
 
     /// Takes a function that modifies the state associated with [UseStateSetter] and
     /// triggers a rerender of its associated component.
+    ///
     /// The update is not performed immediately; its effect will only be accessible
     /// on its component's rerender. Note that `update` always triggers a rerender, and the state value
     /// is marked as updated, even if the given function performs no mutations.

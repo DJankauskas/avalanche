@@ -7,7 +7,11 @@ use crate::{InternalContext};
 /// An opaque handle whose underlying type is determined by the current `Renderer`.
 pub type NativeHandle = Box<dyn Any>;
 
+/// The interface through which `avalanche` updates the native UI as described by changes to components.
+/// This allows `avalanche` to be platform-agnostic.
 pub trait Renderer {
+    /// Given a component and its native type, generate its native representation and return 
+    /// an opaque `NativeHandle` to it.
     fn create_component(
         &mut self, 
         native_type: &NativeType, 
@@ -92,19 +96,23 @@ pub trait Renderer {
         component: &View,
     );
 
+    /// Destroy the native component corresponding to the `VNode`. This method will probably be removed.
+    #[deprecated]
     fn remove_component(&mut self, vnode: &mut VNode);
 
     /// Schedule the given function to be run on the ui thread in the future.
     fn schedule_on_ui_thread(&mut self, f: Box<dyn FnOnce()>);
 
-    // Logs the given string to a platform-appropriate destination.
-    // This method is a placeholder, and may either be elaborated or replaced with
-    // the `log` crate
+    /// Logs the given string to a platform-appropriate destination.
+    /// This method is a placeholder, and may either be elaborated or replaced with
+    /// the `log` crate
     fn log(&self, _string: &str) {
 
     }
 }
 
+/// Describes the native element type a given [`Component`] corresponds to.
+/// The meaning of its fields is up to a particular renderer implementation to define.
 pub struct NativeType {
     pub handler: &'static str,
     pub name: &'static str,
