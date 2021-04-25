@@ -49,9 +49,9 @@ impl VNode {
 /// should only be used by renderer implementation libraries.
 ///
 /// # Usage
-/// 
-/// In order to render an avalanche `View`, a renderer library should accept a `View` from the user, then 
-/// use the `new` method to create a `Root` instance. 
+///
+/// In order to render an avalanche `View`, a renderer library should accept a `View` from the user, then
+/// use the `new` method to create a `Root` instance.
 pub struct Root {
     vdom: Shared<VDom>,
 }
@@ -68,7 +68,7 @@ impl Root {
         vdom.exec_mut(|vdom| {
             generate_vnode(root_node, &mut vdom.tree, &mut vdom.renderer, vdom_clone);
         });
-    
+
         Root { vdom }
     }
 
@@ -204,12 +204,30 @@ impl ChildId {
     }
 }
 
+/// Given a node within the VDom, goes up its hierarchy until finding the first parent with a
+/// native handle, returning it if present, or `None` otherwise. Sets all nodes up to but
+/// excluding the parent to `dirty` to propagate the need for an update
+fn propogate_update_to_native_parent(
+    mut node: NodeId<VNode>,
+    tree: &mut Tree<VNode>,
+) -> Option<NodeId<VNode>> {
+    loop {
+        node = node.parent(tree)?;
+        let node = node.get_mut(tree);
+        if node.native_handle.is_some() {
+            break;
+        }
+        node.dirty = true;
+    }
+    Some(node)
+}
+
 // TODO: clarify: can new_component be a different type than the old component?
 // right now, assumption is no
 /// Updates the given `node` so that its children and corresponding native elements
 /// match the current properties and state of its component.
 pub(crate) fn update_vnode(
-    mut new_component: Option<View>,
+    new_component: Option<View>,
     node: NodeId<VNode>,
     tree: &mut Tree<VNode>,
     renderer: &mut Box<dyn Renderer>,
@@ -231,10 +249,13 @@ pub(crate) fn update_vnode(
         return;
     }
 
+    // enables recursive behavior like propogate_update_to_native_parent to work properly
+    vnode.dirty = true;
+
     let old_component = match new_component {
-        Some(ref mut comp) => {
-            std::mem::swap(&mut vnode.component, comp);
-            Some(&*comp)
+        Some(mut comp) => {
+            std::mem::swap(&mut vnode.component, &mut comp);
+            Some(comp)
         }
         None => None,
     };
@@ -252,6 +273,28 @@ pub(crate) fn update_vnode(
     let children = match child.downcast_ref::<HasChildrenMarker>() {
         Some(marker) => marker.children.clone(),
         None => vec![child],
+    };
+
+    // If the component is non-native, but its native_child potentially changes, this result must be
+    // propagated up to its native parent, unless if the native parent is already being processed
+    if !is_native {
+        let old_child = &node.child(0, tree).get(tree).component;
+        let new_child = &children[0];
+        if old_child.location() != new_child.location() || old_child.key() != new_child.key() {
+            let native_parent = propogate_update_to_native_parent(node, tree)
+                .expect("native parent of a component with updated native identity");
+            let native_parent_mut = native_parent.get_mut(tree);
+            // If the native parent is not currently being updated, restart the update process there.
+            if !native_parent_mut.dirty {
+                native_parent_mut.dirty = true;
+                if let Some(mut old_component) = old_component {
+                    let vnode_mut = node.get_mut(tree);
+                    std::mem::swap(&mut vnode_mut.component, &mut old_component);
+                }
+                update_vnode(None, native_parent, tree, renderer, vdom.clone());
+                return;
+            }
+        }
     };
 
     let vnode_children_iter = node.iter(tree).enumerate();
@@ -294,7 +337,9 @@ pub(crate) fn update_vnode(
             let new_child = node.push(vnode, tree);
             in_place_components.insert(id.clone(), (new_child, node.len(tree) - 1));
             generate_vnode(new_child, tree, renderer, vdom.clone());
-            native_append_child(node, new_child, tree, renderer);
+            if is_native {
+                native_append_child(node, new_child, tree, renderer);
+            }
         }
     }
 
@@ -438,12 +483,12 @@ fn native_insert_child(
 }
 
 /// Updates the given `child`, and if `is_native` is true, creates, updates, or removes its
-/// corresponding native element as needed. `native_pos` should be the index of the native element of `child`, 
+/// corresponding native element as needed. `native_pos` should be the index of the native element of `child`,
 // if it possesses one.
 /// This function is intended to be called from the last child
 /// to the first, in reverse order, as `native_pos` is decremented when a child that contains a native element is processed.
 /// # Panics
-/// Panics if `is_native` is incorrect, `native_pos` is out of bounds, or `parent` and `child` are not 
+/// Panics if `is_native` is incorrect, `native_pos` is out of bounds, or `parent` and `child` are not
 /// valid parents and children within `tree`.
 fn native_update_vnode(
     is_native: bool,
@@ -461,6 +506,7 @@ fn native_update_vnode(
         None
     };
     update_vnode(new_component, child, tree, renderer, vdom);
+
     let new_native_child = if is_native {
         child_with_native_handle(child, tree)
     } else {
