@@ -465,7 +465,7 @@ impl Renderer for WebRenderer {
         let replace_child_node = Self::handle_to_node(child_handle);
         if curr_child_node != replace_child_node {
             parent_element
-                .replace_child(&curr_child_node, &replace_child_node)
+                .replace_child(&replace_child_node, &curr_child_node)
                 .expect("successful replace");
         }
     }
