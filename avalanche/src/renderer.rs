@@ -113,6 +113,7 @@ pub trait Renderer {
 
 /// Describes the native element type a given [`Component`] corresponds to.
 /// The meaning of its fields is up to a particular renderer implementation to define.
+#[derive(Copy, Clone)]
 pub struct NativeType {
     pub handler: &'static str,
     pub name: &'static str,
