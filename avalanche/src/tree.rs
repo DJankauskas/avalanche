@@ -232,7 +232,7 @@ impl<T> Tree<T> {
     /// Constructs a new `Tree<T>`, with a root node containing the element `data`.
     pub fn new(data: T) -> Self {
         Self {
-            nodes: vec![Some(Node {
+            nodes: vec![None, Some(Node {
                 parent: 0,
                 children: Vec::new(),
                 data,
@@ -243,7 +243,7 @@ impl<T> Tree<T> {
 
     /// Returns the `NodeId` of the tree's root node. This will always succeed.
     pub fn root(&self) -> NodeId<T> {
-        NodeId::idx(0)
+        NodeId::idx(1)
     }
 
     /// Removes the node corresponding to `node_id` from `tree`.
@@ -269,6 +269,7 @@ impl<T> Tree<T> {
         let rev_iter = self
             .nodes
             .iter()
+            .skip(1)
             .enumerate()
             .rev()
             .skip(self.nodes.len() - self.last_open - 1);
@@ -278,12 +279,10 @@ impl<T> Tree<T> {
             //this may enable faster searching later
             if let None = x {
                 self.last_open = i;
-                return Some(i);
+                return Some(i)
             }
         }
 
-        // if we didn't find anything, we say there are no open sites
-        self.last_open = 0;
         None
     }
 
