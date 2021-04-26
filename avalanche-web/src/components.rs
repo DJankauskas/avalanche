@@ -93,7 +93,7 @@ pub struct RawElement {
     pub(crate) checked_controlled: bool,
     pub(crate) key: Option<String>,
     pub(crate) location: (u32, u32),
-    pub(crate) tag: &'static str,
+    pub(crate) tag: &'static str
 }
 
 impl RawElement {

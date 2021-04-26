@@ -19,20 +19,28 @@ pub mod events;
 static TIMEOUT_MSG_NAME: &str = "oak_web_message_name";
 
 pub fn mount<C: Component + Default>(element: Element) {
-    let renderer = WebRenderer::new();
-    let root = avalanche::vdom::Root::new(C::default().into(), renderer);
+    let child: View = C::default().into();
+    let native_parent = RawElement {
+        attrs: Default::default(),
+        attrs_updated: false,
+        children: vec![child.clone()],
+        children_updated: false,
+        value_controlled: false,
+        checked_controlled: false,
+        key: None,
+        location: (0, 0),
+        tag: "@root",
+    };
 
-    root.native_handle(|native_handle| {
-        if let Some(native_handle) = native_handle {
-            let ref_to_node = &native_handle
-                .downcast_ref::<WebNativeHandle>()
-                .expect("WebNativeHandle")
-                .node;
-            element
-                .append_child(&ref_to_node)
-                .expect("append node to body");
-        }
-    });
+    let renderer = WebRenderer::new();
+    let native_parent_handle = WebNativeHandle {
+        children_offset: element.child_nodes().length(),
+        node: element.into(),
+        listeners: Default::default(),
+        
+    };
+
+    let root = avalanche::vdom::Root::new(child, native_parent.into(), Box::new(native_parent_handle), renderer);
 
     // TODO: more elegant solution that leaks less memory?
     Box::leak(Box::new(root));
@@ -52,6 +60,9 @@ pub fn mount_to_body<C: Component + Default>() {
 struct WebNativeHandle {
     node: web_sys::Node,
     listeners: HashMap<&'static str, EventListener>,
+    /// position at which renderer indexing should begin
+    // TODO: more memory-efficient implementation?
+    children_offset: u32
 }
 
 struct WebRenderer {
@@ -94,13 +105,13 @@ impl WebRenderer {
         }
     }
 
-    fn get_child(parent: &web_sys::Element, child_idx: usize) -> web_sys::Node {
+    fn get_child(parent: &web_sys::Element, child_idx: usize, offset: u32) -> web_sys::Node {
         // TODO: remove debug info
-        Self::try_get_child(parent, child_idx).expect(&format!("{}", child_idx))
+        Self::try_get_child(parent, child_idx, offset).expect(&format!("{}", child_idx))
     }
 
-    fn try_get_child(parent: &web_sys::Element, child_idx: usize) -> Option<web_sys::Node> {
-        parent.child_nodes().item(child_idx as u32)
+    fn try_get_child(parent: &web_sys::Element, child_idx: usize, offset: u32) -> Option<web_sys::Node> {
+        parent.child_nodes().item(child_idx as u32 + offset)
     }
 
     fn assert_handler_oak_web(native_type: &NativeType) {
@@ -110,15 +121,13 @@ impl WebRenderer {
         )
     }
 
-    fn handle_to_node(native_handle: &NativeHandle) -> web_sys::Node {
-        let web_native = native_handle
+    fn handle_cast(native_handle: &NativeHandle) -> &WebNativeHandle {
+        native_handle
             .downcast_ref::<WebNativeHandle>()
-            .expect("WebNativeHandle");
-        web_native.node.clone()
+            .expect("WebNativeHandle")
     }
 
-    fn handle_to_element(native_handle: &NativeHandle) -> web_sys::Element {
-        let node = Self::handle_to_node(native_handle);
+    fn node_to_element(node: web_sys::Node) -> web_sys::Element {
         node.dyn_into::<web_sys::Element>()
             .expect("Element (not Text node)")
     }
@@ -136,6 +145,7 @@ impl Renderer for WebRenderer {
                 WebNativeHandle {
                     node: web_sys::Node::from(text_node),
                     listeners: HashMap::new(),
+                    children_offset: 0
                 }
             }
             "oak_web" => {
@@ -248,6 +258,7 @@ impl Renderer for WebRenderer {
                 WebNativeHandle {
                     node: web_sys::Node::from(element),
                     listeners,
+                    children_offset: 0
                 }
             }
             _ => panic!("Custom handlers not implemented yet."),
@@ -399,10 +410,11 @@ impl Renderer for WebRenderer {
         child_handle: &NativeHandle,
     ) {
         Self::assert_handler_oak_web(parent_type);
-        let parent_element = Self::handle_to_element(parent_handle);
-        let child_node = Self::handle_to_node(child_handle);
+        let parent_node = Self::handle_cast(parent_handle).node.clone();
+        let parent_element = Self::node_to_element(parent_node);
+        let child_node = &Self::handle_cast(child_handle).node;
         parent_element
-            .append_with_node_1(&child_node)
+            .append_with_node_1(child_node)
             .expect("append success");
     }
 
@@ -416,11 +428,12 @@ impl Renderer for WebRenderer {
     ) {
         self.log("inserting child");
         Self::assert_handler_oak_web(parent_type);
-        let parent_element = Self::handle_to_element(parent_handle);
-        let child_node = Self::handle_to_node(child_handle);
-        let component_after = Self::try_get_child(&parent_element, index);
+        let parent_handle = Self::handle_cast(parent_handle);
+        let parent_element = Self::node_to_element(parent_handle.node.clone());
+        let child_node = &Self::handle_cast(child_handle).node;
+        let component_after = Self::try_get_child(&parent_element, index, parent_handle.children_offset);
         parent_element
-            .insert_before(&child_node, component_after.as_ref())
+            .insert_before(child_node, component_after.as_ref())
             .expect("insert success");
     }
 
@@ -432,14 +445,15 @@ impl Renderer for WebRenderer {
         b: usize,
     ) {
         Self::assert_handler_oak_web(parent_type);
-        let parent_element = Self::handle_to_element(parent_handle);
+        let parent_handle = Self::handle_cast(parent_handle);
+        let parent_element = Self::node_to_element(parent_handle.node.clone());
         let lesser = std::cmp::min(a, b);
         let greater = std::cmp::max(a, b);
 
         // TODO: throw exception if a and b are equal but out of bounds?
         if a != b {
-            let a = Self::get_child(&parent_element, lesser);
-            let b = Self::get_child(&parent_element, greater);
+            let a = Self::get_child(&parent_element, lesser, parent_handle.children_offset);
+            let b = Self::get_child(&parent_element, greater, parent_handle.children_offset);
             let after_b = b.next_sibling();
             // note: idiosyncratic order, a is being replaced with b
             parent_element
@@ -460,12 +474,13 @@ impl Renderer for WebRenderer {
         child_handle: &NativeHandle,
     ) {
         Self::assert_handler_oak_web(parent_type);
-        let parent_element = Self::handle_to_element(parent_handle);
-        let curr_child_node = Self::get_child(&parent_element, index);
-        let replace_child_node = Self::handle_to_node(child_handle);
-        if curr_child_node != replace_child_node {
+        let parent_handle = Self::handle_cast(parent_handle);
+        let parent_element = Self::node_to_element(parent_handle.node.clone());
+        let curr_child_node = Self::get_child(&parent_element, index, parent_handle.children_offset);
+        let replace_child_node = &Self::handle_cast(child_handle).node;
+        if &curr_child_node != replace_child_node {
             parent_element
-                .replace_child(&replace_child_node, &curr_child_node)
+                .replace_child(replace_child_node, &curr_child_node)
                 .expect("successful replace");
         }
     }
@@ -478,12 +493,13 @@ impl Renderer for WebRenderer {
         new: usize,
     ) {
         Self::assert_handler_oak_web(parent_type);
-        let parent_element = Self::handle_to_element(parent_handle);
-        let curr_child_node = Self::get_child(&parent_element, old);
+        let parent_handle = Self::handle_cast(parent_handle);
+        let parent_element = Self::node_to_element(parent_handle.node.clone());
+        let curr_child_node = Self::get_child(&parent_element, old, parent_handle.children_offset);
         let removed = parent_element
             .remove_child(&curr_child_node)
             .expect("successful remove");
-        let component_after_insert = Self::try_get_child(&parent_element, new);
+        let component_after_insert = Self::try_get_child(&parent_element, new, parent_handle.children_offset);
         parent_element
             .insert_before(&removed, component_after_insert.as_ref())
             .expect("insert success");
@@ -496,8 +512,9 @@ impl Renderer for WebRenderer {
         index: usize,
     ) {
         Self::assert_handler_oak_web(parent_type);
-        let parent_element = Self::handle_to_element(parent_handle);
-        let child_node = Self::get_child(&parent_element, index);
+        let parent_handle = Self::handle_cast(parent_handle);
+        let parent_element = Self::node_to_element(parent_handle.node.clone());
+        let child_node = Self::get_child(&parent_element, index, parent_handle.children_offset);
         parent_element
             .remove_child(&child_node)
             .expect("successful remove");
