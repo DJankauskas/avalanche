@@ -53,31 +53,35 @@ impl VNode {
 /// In order to render an avalanche `View`, a renderer library should accept a `View` from the user, then
 /// use the `new` method to create a `Root` instance.
 pub struct Root {
-    vdom: Shared<VDom>,
+    _vdom: Shared<VDom>,
 }
 
 impl Root {
-    pub fn new<R: Renderer + 'static>(component: View, renderer: R) -> Self {
+    /// Creates a new UI tree rooted at `native_parent`, with native handle `native_handle`. That handle will be used,
+    /// and `renderer.create_component` will not be called for it, in order to allow rooting an avaqlanche tree upon
+    /// an existing UI component created externally. Renders `child` as the child of `native_parent`; `native_parent`
+    /// must also return only `child` from its `render` method within `HasChildMarker`.
+    pub fn new<R: Renderer + 'static>(child: View, native_parent: View, native_handle: NativeHandle, renderer: R) -> Self {
+        let native_type = native_parent.native_type().expect("native_parent has native_type");
+        let native_parent_state = native_parent.init_state();
+        let mut vnode = VNode::component(native_parent);
+        vnode.native_type = Some(native_type);
+        vnode.native_handle = Some(native_handle);
+        vnode.state = Some(native_parent_state);
         let vdom = VDom {
-            tree: Tree::new(VNode::component(component)),
+            tree: Tree::new(vnode),
             renderer: Box::new(renderer),
         };
-        let root_node = vdom.tree.root();
         let vdom = Shared::new(vdom);
         let vdom_clone = vdom.clone();
         vdom.exec_mut(|vdom| {
-            generate_vnode(root_node, &mut vdom.tree, &mut vdom.renderer, vdom_clone);
+            let root = vdom.tree.root();
+            let child = root.push(VNode::component(child), &mut vdom.tree);
+            generate_vnode(child, &mut vdom.tree, &mut vdom.renderer, vdom_clone);
+            native_append_child(root, child, &mut vdom.tree, &mut vdom.renderer);
         });
 
-        Root { vdom }
-    }
-
-    pub fn native_handle<F: FnOnce(Option<&NativeHandle>)>(&self, f: F) {
-        &self.vdom.exec(|vdom| {
-            let node = child_with_native_handle(vdom.tree.root(), &vdom.tree);
-            let native_handle = node.map(|node| node.get(&vdom.tree).native_handle.as_ref());
-            f(native_handle.flatten());
-        });
+        Root { _vdom: vdom }
     }
 }
 
