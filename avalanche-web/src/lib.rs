@@ -37,10 +37,14 @@ pub fn mount<C: Component + Default>(element: Element) {
         children_offset: element.child_nodes().length(),
         node: element.into(),
         listeners: Default::default(),
-        
     };
 
-    let root = avalanche::vdom::Root::new(child, native_parent.into(), Box::new(native_parent_handle), renderer);
+    let root = avalanche::vdom::Root::new(
+        child,
+        native_parent.into(),
+        Box::new(native_parent_handle),
+        renderer,
+    );
 
     // TODO: more elegant solution that leaks less memory?
     Box::leak(Box::new(root));
@@ -62,7 +66,7 @@ struct WebNativeHandle {
     listeners: HashMap<&'static str, EventListener>,
     /// position at which renderer indexing should begin
     // TODO: more memory-efficient implementation?
-    children_offset: u32
+    children_offset: u32,
 }
 
 struct WebRenderer {
@@ -110,7 +114,11 @@ impl WebRenderer {
         Self::try_get_child(parent, child_idx, offset).expect(&format!("{}", child_idx))
     }
 
-    fn try_get_child(parent: &web_sys::Element, child_idx: usize, offset: u32) -> Option<web_sys::Node> {
+    fn try_get_child(
+        parent: &web_sys::Element,
+        child_idx: usize,
+        offset: u32,
+    ) -> Option<web_sys::Node> {
         parent.child_nodes().item(child_idx as u32 + offset)
     }
 
@@ -145,7 +153,7 @@ impl Renderer for WebRenderer {
                 WebNativeHandle {
                     node: web_sys::Node::from(text_node),
                     listeners: HashMap::new(),
-                    children_offset: 0
+                    children_offset: 0,
                 }
             }
             "oak_web" => {
@@ -258,7 +266,7 @@ impl Renderer for WebRenderer {
                 WebNativeHandle {
                     node: web_sys::Node::from(element),
                     listeners,
-                    children_offset: 0
+                    children_offset: 0,
                 }
             }
             _ => panic!("Custom handlers not implemented yet."),
@@ -301,7 +309,9 @@ impl Renderer for WebRenderer {
                                             "checked" => {
                                                 input_element.set_checked(prop.is_some());
                                             }
-                                            _ => update_generic_prop(&element, name, prop.as_deref())
+                                            _ => {
+                                                update_generic_prop(&element, name, prop.as_deref())
+                                            }
                                         },
                                         Attr::Handler(handler) => {
                                             update_listener(
@@ -348,7 +358,9 @@ impl Renderer for WebRenderer {
                             for (name, (attr, updated)) in raw_element.attrs.iter() {
                                 if *updated {
                                     match attr {
-                                        Attr::Prop(prop) => update_generic_prop(&element, name, prop.as_deref()),
+                                        Attr::Prop(prop) => {
+                                            update_generic_prop(&element, name, prop.as_deref())
+                                        }
                                         Attr::Handler(handler) => {
                                             update_listener(
                                                 &element,
@@ -431,7 +443,8 @@ impl Renderer for WebRenderer {
         let parent_handle = Self::handle_cast(parent_handle);
         let parent_element = Self::node_to_element(parent_handle.node.clone());
         let child_node = &Self::handle_cast(child_handle).node;
-        let component_after = Self::try_get_child(&parent_element, index, parent_handle.children_offset);
+        let component_after =
+            Self::try_get_child(&parent_element, index, parent_handle.children_offset);
         parent_element
             .insert_before(child_node, component_after.as_ref())
             .expect("insert success");
@@ -476,7 +489,8 @@ impl Renderer for WebRenderer {
         Self::assert_handler_oak_web(parent_type);
         let parent_handle = Self::handle_cast(parent_handle);
         let parent_element = Self::node_to_element(parent_handle.node.clone());
-        let curr_child_node = Self::get_child(&parent_element, index, parent_handle.children_offset);
+        let curr_child_node =
+            Self::get_child(&parent_element, index, parent_handle.children_offset);
         let replace_child_node = &Self::handle_cast(child_handle).node;
         if &curr_child_node != replace_child_node {
             parent_element
@@ -499,7 +513,8 @@ impl Renderer for WebRenderer {
         let removed = parent_element
             .remove_child(&curr_child_node)
             .expect("successful remove");
-        let component_after_insert = Self::try_get_child(&parent_element, new, parent_handle.children_offset);
+        let component_after_insert =
+            Self::try_get_child(&parent_element, new, parent_handle.children_offset);
         parent_element
             .insert_before(&removed, component_after_insert.as_ref())
             .expect("insert success");
@@ -529,9 +544,7 @@ impl Renderer for WebRenderer {
 fn update_generic_prop(element: &Element, name: &str, prop: Option<&str>) {
     match prop {
         Some(prop) => {
-            element
-                .set_attribute(name, &prop)
-                .unwrap();
+            element.set_attribute(name, &prop).unwrap();
         }
         None => {
             element.remove_attribute(name).unwrap();

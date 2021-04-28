@@ -61,8 +61,15 @@ impl Root {
     /// and `renderer.create_component` will not be called for it, in order to allow rooting an avaqlanche tree upon
     /// an existing UI component created externally. Renders `child` as the child of `native_parent`; `native_parent`
     /// must also return only `child` from its `render` method within `HasChildMarker`.
-    pub fn new<R: Renderer + 'static>(child: View, native_parent: View, native_handle: NativeHandle, renderer: R) -> Self {
-        let native_type = native_parent.native_type().expect("native_parent has native_type");
+    pub fn new<R: Renderer + 'static>(
+        child: View,
+        native_parent: View,
+        native_handle: NativeHandle,
+        renderer: R,
+    ) -> Self {
+        let native_type = native_parent
+            .native_type()
+            .expect("native_parent has native_type");
         let native_parent_state = native_parent.init_state();
         let mut vnode = VNode::component(native_parent);
         vnode.native_type = Some(native_type);

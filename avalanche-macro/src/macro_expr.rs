@@ -155,7 +155,7 @@ pub(crate) struct MatchesBody {
     pub pats: Punctuated<syn::Pat, Token![|]>,
     pub if_token: Option<Token![if]>,
     pub if_expr: Option<Expr>,
-    pub trailing_comma_token: Option<Token![,]>
+    pub trailing_comma_token: Option<Token![,]>,
 }
 
 impl Parse for MatchesBody {
@@ -184,13 +184,13 @@ impl Parse for MatchesBody {
 /// a [`vec!`] macro, consisting of its expressions.
 pub(crate) enum VecBody {
     Repeat(VecRepeat),
-    Literal(Punctuated<Expr, Token![,]>)
+    Literal(Punctuated<Expr, Token![,]>),
 }
 
 pub(crate) struct VecRepeat {
     pub expr: Expr,
     pub semicolon_token: Token![;],
-    pub n_expr: Expr
+    pub n_expr: Expr,
 }
 
 impl Parse for VecBody {
@@ -212,7 +212,7 @@ impl Parse for VecBody {
             }
         };
         let n_expr = input.parse()?;
-        
+
         let vec = VecBody::Repeat(VecRepeat {
             expr,
             semicolon_token,
@@ -225,7 +225,7 @@ impl Parse for VecBody {
 
 pub(crate) struct Try {
     pub expr: Expr,
-    pub trailing_comma_token: Option<Token![,]>
+    pub trailing_comma_token: Option<Token![,]>,
 }
 
 impl Parse for Try {
@@ -235,7 +235,7 @@ impl Parse for Try {
 
         let try_ = Try {
             expr,
-            trailing_comma_token
+            trailing_comma_token,
         };
 
         Ok(try_)

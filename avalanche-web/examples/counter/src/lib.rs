@@ -1,4 +1,4 @@
-use avalanche::{component, View, UseState};
+use avalanche::{component, UseState, View};
 use avalanche_web::components::{Button, Div, Text, H2};
 use wasm_bindgen::prelude::*;
 

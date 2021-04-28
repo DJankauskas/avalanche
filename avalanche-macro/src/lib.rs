@@ -7,8 +7,8 @@ use proc_macro_error::{abort, emit_error, proc_macro_error};
 use quote::{format_ident, quote};
 use syn::{parse_macro_input, punctuated::Punctuated, Item, Pat, ReturnType};
 
+use analyze::{Dependencies, DependencyInfo, ExprType, Function, HookInfo, Scope, Var};
 use macro_expr::Hooks;
-use analyze::{Function, Scope, Var, Dependencies, DependencyInfo, HookInfo, ExprType};
 
 #[proc_macro_error]
 #[proc_macro_attribute]
@@ -33,7 +33,10 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
     let return_type = match &item_fn.sig.output {
         ReturnType::Type(_, ty) => ty,
         ReturnType::Default => {
-            abort!(item_fn.sig, "input function must have return type avalanche::View");
+            abort!(
+                item_fn.sig,
+                "input function must have return type avalanche::View"
+            );
         }
     };
 
@@ -228,8 +231,8 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                 )*
                 let state = ::std::option::Option::unwrap(::std::any::Any::downcast_mut::<#state_name>(&mut **context.state));
                 #( let (#hook_name, #hook_updates_name) = <#hook_type>::hook(
-                    &mut state.#hook_name, 
-                    ::std::clone::Clone::clone(&context.component_pos), 
+                    &mut state.#hook_name,
+                    ::std::clone::Clone::clone(&context.component_pos),
                     #hook_get_fn_name
                 ); );*
 

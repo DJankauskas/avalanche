@@ -1,4 +1,4 @@
-use avalanche::{component, View, enclose, reactive_assert, UseState};
+use avalanche::{component, enclose, reactive_assert, UseState, View};
 use avalanche_web::components::{
     Button, Div, Footer, Header, Input, Label, Li, Section, Span, Strong, Text, Ul, A, H1,
 };
@@ -30,7 +30,7 @@ enum Filter {
 }
 
 impl Filter {
-    fn selected(&self, other: Filter) ->&'static str {
+    fn selected(&self, other: Filter) -> &'static str {
         if *self == other {
             "selected"
         } else {
@@ -271,6 +271,6 @@ pub fn main_js() {
             .query_selector(".todoapp")
             .expect("body")
             .unwrap()
-            .into()
+            .into(),
     );
 }

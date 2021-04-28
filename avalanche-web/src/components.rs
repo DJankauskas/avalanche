@@ -1,12 +1,12 @@
-use std::rc::Rc;
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::rc::Rc;
 
 use wasm_bindgen::JsCast;
 
 use crate::events::*;
-use avalanche::{Component, View, InternalContext};
 use avalanche::renderer::{HasChildrenMarker, NativeType};
+use avalanche::{Component, InternalContext, View};
 
 /// Represents a text node.
 #[derive(Clone, PartialEq)]
@@ -93,7 +93,7 @@ pub struct RawElement {
     pub(crate) checked_controlled: bool,
     pub(crate) key: Option<String>,
     pub(crate) location: (u32, u32),
-    pub(crate) tag: &'static str
+    pub(crate) tag: &'static str,
 }
 
 impl RawElement {
@@ -943,31 +943,39 @@ add_area_attrs! {AreaBuilder}
 
 pub enum CrossOrigin {
     Anonymous,
-    UseCredentials
+    UseCredentials,
 }
 
 impl Display for CrossOrigin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            CrossOrigin::Anonymous => "anonymous",
-            CrossOrigin::UseCredentials => "use-credentials"
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                CrossOrigin::Anonymous => "anonymous",
+                CrossOrigin::UseCredentials => "use-credentials",
+            }
+        )
     }
 }
 
 pub enum Preload {
     None,
     Metadata,
-    Auto
+    Auto,
 }
 
 impl Display for Preload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            Preload::None => "none",
-            Preload::Metadata => "metadata",
-            Preload::Auto => "auto"
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Preload::None => "none",
+                Preload::Metadata => "metadata",
+                Preload::Auto => "auto",
+            }
+        )
     }
 }
 
@@ -1031,30 +1039,38 @@ add_width_height_attrs! {ImgBuilder}
 pub enum Decoding {
     Sync,
     Async,
-    Auto
+    Auto,
 }
 
 impl Display for Decoding {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            Decoding::Sync => "sync",
-            Decoding::Async => "async",
-            Decoding::Auto => "auto"
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Decoding::Sync => "sync",
+                Decoding::Async => "async",
+                Decoding::Auto => "auto",
+            }
+        )
     }
 }
 
 pub enum Loading {
     Eager,
-    Lazy
+    Lazy,
 }
 
 impl Display for Loading {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            Loading::Eager => "eager",
-            Loading::Lazy => "lazy"
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Loading::Eager => "eager",
+                Loading::Lazy => "lazy",
+            }
+        )
     }
 }
 
@@ -1095,18 +1111,22 @@ pub enum TrackKind {
     Captions,
     Descriptions,
     Chapters,
-    Metadata
+    Metadata,
 }
 
 impl Display for TrackKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            TrackKind::Subtitles => "subtitles",
-            TrackKind::Captions => "captions",
-            TrackKind::Descriptions => "descriptions",
-            TrackKind::Chapters => "chapters",
-            TrackKind::Metadata => "metadata"
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                TrackKind::Subtitles => "subtitles",
+                TrackKind::Captions => "captions",
+                TrackKind::Descriptions => "descriptions",
+                TrackKind::Chapters => "chapters",
+                TrackKind::Metadata => "metadata",
+            }
+        )
     }
 }
 
@@ -1474,7 +1494,7 @@ impl InputBuilder {
     pub fn value<S: ToString>(mut self, val: S, updated: bool) -> Self {
         self.raw.value_controlled = true;
         self.raw
-            .attr("value",Attr::Prop(Some(val.to_string())), updated);
+            .attr("value", Attr::Prop(Some(val.to_string())), updated);
         self
     }
 
@@ -1483,7 +1503,7 @@ impl InputBuilder {
         self.raw.attr(
             "checked",
             Attr::Prop(val.then(|| "checked".to_string())),
-            updated
+            updated,
         );
         self
     }

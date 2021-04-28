@@ -1,8 +1,8 @@
 use std::any::Any;
 
+use crate::vdom::VNode;
+use crate::InternalContext;
 use crate::{Component, View};
-use crate::vdom::{VNode};
-use crate::{InternalContext};
 
 /// An opaque handle whose underlying type is determined by the current `Renderer`.
 pub type NativeHandle = Box<dyn Any>;
@@ -10,26 +10,22 @@ pub type NativeHandle = Box<dyn Any>;
 /// The interface through which `avalanche` updates the native UI as described by changes to components.
 /// This allows `avalanche` to be platform-agnostic.
 pub trait Renderer {
-    /// Given a component and its native type, generate its native representation and return 
+    /// Given a component and its native type, generate its native representation and return
     /// an opaque `NativeHandle` to it.
-    fn create_component(
-        &mut self, 
-        native_type: &NativeType, 
-        component: &View,
-    ) -> NativeHandle;
+    fn create_component(&mut self, native_type: &NativeType, component: &View) -> NativeHandle;
 
     /// Appends the component with handle `child_handle` into the component with
     /// handle `parent_handle`'s children.
     fn append_child(
         &mut self,
         parent_type: &NativeType,
-        parent_handle: &mut NativeHandle, 
+        parent_handle: &mut NativeHandle,
         child_type: &NativeType,
-        child_handle: &NativeHandle
+        child_handle: &NativeHandle,
     );
 
     /// Inserts the component with handle `child_handle` into the component with
-    /// handle `parent_handle`'s children at the given `index`, shifting all 
+    /// handle `parent_handle`'s children at the given `index`, shifting all
     /// children after it to the right.
     /// # Panics
     /// Panics if `index > len`, where `len` is the number of children the parent has.
@@ -37,9 +33,9 @@ pub trait Renderer {
         &mut self,
         parent_type: &NativeType,
         parent_handle: &mut NativeHandle,
-        index: usize, 
+        index: usize,
         child_type: &NativeType,
-        child_handle: &NativeHandle
+        child_handle: &NativeHandle,
     );
 
     /// Replaces the component at position `index` with the native component
@@ -51,9 +47,9 @@ pub trait Renderer {
         &mut self,
         parent_type: &NativeType,
         parent_handle: &mut NativeHandle,
-        index: usize, 
+        index: usize,
         child_type: &NativeType,
-        child_handle: &NativeHandle
+        child_handle: &NativeHandle,
     );
 
     /// Swaps the children at indices `a` and `b`.
@@ -64,7 +60,7 @@ pub trait Renderer {
         parent_type: &NativeType,
         parent_handle: &mut NativeHandle,
         a: usize,
-        b: usize
+        b: usize,
     );
 
     /// Moves the child at position `old` to the position `new`.
@@ -75,7 +71,7 @@ pub trait Renderer {
         parent_type: &NativeType,
         parent_handle: &mut NativeHandle,
         old: usize,
-        new: usize
+        new: usize,
     );
 
     /// Removes the component with the given `index` from the component
@@ -84,15 +80,15 @@ pub trait Renderer {
         &mut self,
         parent_type: &NativeType,
         parent_handle: &mut NativeHandle,
-        index: usize
+        index: usize,
     );
-    
+
     /// Updates the `component`'s corresponding native handle so that the representation
     /// and result match.
     fn update_component(
-        &mut self, 
-        native_type: &NativeType, 
-        native_handle: &mut NativeHandle, 
+        &mut self,
+        native_type: &NativeType,
+        native_handle: &mut NativeHandle,
         component: &View,
     );
 
@@ -106,9 +102,7 @@ pub trait Renderer {
     /// Logs the given string to a platform-appropriate destination.
     /// This method is a placeholder, and may either be elaborated or replaced with
     /// the `log` crate
-    fn log(&self, _string: &str) {
-
-    }
+    fn log(&self, _string: &str) {}
 }
 
 /// Describes the native element type a given [`Component`] corresponds to.
@@ -121,7 +115,7 @@ pub struct NativeType {
 
 #[derive(Clone, Default)]
 pub struct HasChildrenMarker {
-    pub children: Vec<View>
+    pub children: Vec<View>,
 }
 
 impl Component for HasChildrenMarker {

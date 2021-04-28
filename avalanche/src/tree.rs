@@ -46,7 +46,7 @@ impl<T> NodeId<T> {
         &tree.nodes[self.idx].as_ref().expect("valid NodeId").data
     }
 
-    /// Gets a mutable reference to the node's corresponding element; `tree` 
+    /// Gets a mutable reference to the node's corresponding element; `tree`
     /// is borrowed for the lifetime of this borrow.
     #[must_use]
     pub fn get_mut(self, tree: &mut Tree<T>) -> &mut T {
@@ -164,7 +164,11 @@ impl<T> NodeId<T> {
     /// Panics if `index` is out of bounds.
     pub fn remove_child(self, child: usize, tree: &mut Tree<T>) -> T {
         // TODO: check for child idx validity
-        let child_node_idx = tree.nodes[self.idx].as_mut().expect("valid self id").children.remove(child);
+        let child_node_idx = tree.nodes[self.idx]
+            .as_mut()
+            .expect("valid self id")
+            .children
+            .remove(child);
         let child_node = tree.nodes[child_node_idx].as_mut().unwrap();
         //remove child nodes recursively
         for child_idx in (0..child_node.children.len()).rev() {
@@ -232,11 +236,14 @@ impl<T> Tree<T> {
     /// Constructs a new `Tree<T>`, with a root node containing the element `data`.
     pub fn new(data: T) -> Self {
         Self {
-            nodes: vec![None, Some(Node {
-                parent: 0,
-                children: Vec::new(),
-                data,
-            })],
+            nodes: vec![
+                None,
+                Some(Node {
+                    parent: 0,
+                    children: Vec::new(),
+                    data,
+                }),
+            ],
             last_open: 0,
         }
     }
@@ -251,7 +258,10 @@ impl<T> Tree<T> {
     /// Panics if `node_id` corresponds to the root node, which cannot be removed.
     pub fn remove(&mut self, node_id: NodeId<T>) -> T {
         assert_ne!(node_id.idx, 0, "cannot remove root node");
-        let parent_idx = self.nodes[node_id.idx].as_ref().expect("valid node_id").parent;
+        let parent_idx = self.nodes[node_id.idx]
+            .as_ref()
+            .expect("valid node_id")
+            .parent;
         let parent_children = &mut self.nodes[parent_idx].as_mut().unwrap().children;
         let children_idx = *parent_children.iter().find(|&&x| x == node_id.idx).unwrap();
 
@@ -279,7 +289,7 @@ impl<T> Tree<T> {
             //this may enable faster searching later
             if let None = x {
                 self.last_open = i;
-                return Some(i)
+                return Some(i);
             }
         }
 

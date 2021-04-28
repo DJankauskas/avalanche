@@ -1,8 +1,8 @@
-use avalanche::{component, reactive_assert, enclose, View};
+use avalanche::{component, enclose, reactive_assert, View};
 #[derive(Default)]
 struct HasFields {
     field_one: u8,
-    field_two: u8
+    field_two: u8,
 }
 
 #[component]
@@ -35,7 +35,6 @@ fn ArrayIndex(a: u8, b: u8, c: u8) -> View {
     reactive_assert!(a => arr2);
     let from2 = arr2[0];
     reactive_assert!(a => from2);
-
 
     let indexed = arr2[*c as usize];
     reactive_assert!(c => indexed);
@@ -95,7 +94,7 @@ fn Block(a: u8, b: u8) -> View {
 fn FnCall(a: u8) -> View {
     let b = std::convert::identity(a);
     reactive_assert!(a => b);
-    
+
     ().into()
 }
 
@@ -103,7 +102,7 @@ fn FnCall(a: u8) -> View {
 fn Cast(a: u8) -> View {
     let ret = *a as u16;
     reactive_assert!(a => ret);
-    
+
     ().into()
 }
 
@@ -145,7 +144,7 @@ fn ForLoop(a: u8, b: u8) -> View {
     for n in 0..1 {
         let n = b;
         x += n;
-    };
+    }
     reactive_assert!(b => x);
 
     ().into()
@@ -153,12 +152,7 @@ fn ForLoop(a: u8, b: u8) -> View {
 
 #[component]
 fn If(a: u8, b: u8, c: u8) -> View {
-    let x = if *a == 0 {
-        b
-    }
-    else {
-        c
-    };
+    let x = if *a == 0 { b } else { c };
     reactive_assert!(a, b, c => x);
 
     ().into()
@@ -169,7 +163,7 @@ fn If(a: u8, b: u8, c: u8) -> View {
 // fn _loop(a: u8, b: u8, c: u8) {
 //     let x = loop {
 //         if *a == 0 {
-//             break b; 
+//             break b;
 //         };
 //         break c;
 //     };
@@ -184,14 +178,14 @@ fn Match(a: u8, b: u8, c: u8, d: u8) -> View {
     let option = Some(a);
     let x = match option {
         Some(var) => var,
-        None => b
+        None => b,
     };
     reactive_assert!(a, b => x);
 
     let y = match x {
         0 => c,
         1 => d,
-        _ => a
+        _ => a,
     };
 
     reactive_assert!(a, b, c, d => y);
@@ -226,7 +220,7 @@ fn While(a: u8, b: u8) -> View {
     let mut x = 0;
     while *a == 0 {
         x = *b;
-    };
+    }
     reactive_assert!(b => x);
 
     ().into()
@@ -248,7 +242,7 @@ fn StdMacros(a: u8, b: u8, c: u8) -> View {
     reactive_assert!(a, b => ab_prime);
 
     // testing format!
-    let formatted = format!("{} {} {d}", a, b, d=c);
+    let formatted = format!("{} {} {d}", a, b, d = c);
     reactive_assert!(a, b, c => formatted);
 
     // testing matches!
@@ -273,6 +267,6 @@ fn StdMacros(a: u8, b: u8, c: u8) -> View {
         Ok(r#try!(a))
     })();
     reactive_assert!(a => ret);
-    
+
     ().into()
 }
