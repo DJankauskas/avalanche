@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use crate::components::{Attr, RawElement, Text};
 use crate::events::Event;
-use gloo::events::{EventListener, EventListenerOptions};
+use gloo_events::{EventListener, EventListenerOptions};
 use wasm_bindgen::JsCast;
 use web_sys::Element;
 
