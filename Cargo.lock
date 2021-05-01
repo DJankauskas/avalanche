@@ -290,6 +290,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "trippy"
+version = "0.1.0"
+dependencies = [
+ "avalanche",
+ "avalanche-web",
+ "console_error_panic_hook",
+ "futures",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-bindgen-test",
+ "web-sys",
+ "wee_alloc",
+]
+
+[[package]]
 name = "unicode-xid"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
