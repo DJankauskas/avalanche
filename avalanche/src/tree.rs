@@ -105,9 +105,17 @@ impl<T> NodeId<T> {
             children: Vec::new(),
         };
 
-        match tree.next_open_site() {
+        let next_open_site = tree.next_open_site().and_then(|site| {
+            if tree.nodes[site].is_some() {
+                tree.last_open = 0;
+                None
+            } else {
+                Some(site)
+            }
+        });
+
+        match next_open_site {
             Some(idx) => {
-                debug_assert!(tree.nodes[idx].is_none(), "overwriting occupied cell");
                 tree.nodes[idx] = Some(node);
                 NodeId::idx(idx)
             }
@@ -285,8 +293,8 @@ impl<T> Tree<T> {
             .skip(self.nodes.len() - self.last_open - 1);
 
         for (i, x) in rev_iter {
-            //if empty site found, we store its position
-            //this may enable faster searching later
+            // if empty site found, we store its position
+            // this may enable faster searching later
             if let None = x {
                 self.last_open = i;
                 return Some(i);
