@@ -96,13 +96,14 @@ pub trait Renderer {
     #[deprecated]
     fn remove_component(&mut self, vnode: &mut VNode);
 
-    /// Schedule the given function to be run on the ui thread in the future.
-    fn schedule_on_ui_thread(&mut self, f: Box<dyn FnOnce()>);
-
     /// Logs the given string to a platform-appropriate destination.
     /// This method is a placeholder, and may either be elaborated or replaced with
     /// the `log` crate
     fn log(&self, _string: &str) {}
+}
+pub trait Scheduler {
+    /// Schedule the given function to be run on the ui thread in the future.
+    fn schedule_on_ui_thread(&mut self, f: Box<dyn FnOnce()>);
 }
 
 /// Describes the native element type a given [`Component`] corresponds to.
