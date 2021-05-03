@@ -1,4 +1,4 @@
-use avalanche::renderer::{NativeHandle, NativeType, Renderer};
+use avalanche::renderer::{NativeHandle, NativeType, Renderer, Scheduler};
 use avalanche::vdom::VNode;
 use avalanche::{Component, View};
 
@@ -33,6 +33,7 @@ pub fn mount<C: Component + Default>(element: Element) {
     };
 
     let renderer = WebRenderer::new();
+    let scheduler = WebScheduler::new();
     let native_parent_handle = WebNativeHandle {
         children_offset: element.child_nodes().length(),
         node: element.into(),
@@ -44,6 +45,7 @@ pub fn mount<C: Component + Default>(element: Element) {
         native_parent.into(),
         Box::new(native_parent_handle),
         renderer,
+        scheduler
     );
 
     // TODO: more elegant solution that leaks less memory?
@@ -61,6 +63,58 @@ pub fn mount_to_body<C: Component + Default>() {
     mount::<C>(body.into());
 }
 
+struct WebScheduler {
+    window: web_sys::Window,
+    queued_fns: Shared<VecDeque<Box<dyn FnOnce()>>>,
+    _listener: EventListener,
+}
+
+impl WebScheduler {
+    fn new() -> Self {
+        let window = web_sys::window().unwrap();
+        let queued_fns = Shared::default();
+        let queued_fns_clone = queued_fns.clone();
+
+        // sets up fast execution of 0ms timeouts
+        // uses approach in https://dbaron.org/log/20100309-faster-timeouts
+        let _listener = EventListener::new(&window, "message", move |e| {
+            let e = e.clone();
+            match e.dyn_into::<web_sys::MessageEvent>() {
+                Ok(event) => {
+                    if event.data() == TIMEOUT_MSG_NAME {
+                        event.stop_propagation();
+                        // f may call schedule_on_ui_thread, so it must be called outside of exec_mut
+                        let f = queued_fns_clone.exec_mut(|queue: &mut VecDeque<Box<dyn FnOnce()>>| {
+                           queue.pop_front()
+                        });
+                        f.map(|f| f());
+                    }
+                }
+                Err(_) => { /*should not be reachable*/ }
+            }
+        });
+
+        WebScheduler {
+            window,
+            queued_fns,
+            _listener,
+        }
+    }
+}
+
+impl Scheduler for WebScheduler {
+    fn schedule_on_ui_thread(&mut self, f: Box<dyn FnOnce()>) {
+        // post message for 0ms timeouts
+        // technique from https://dbaron.org/log/20100309-faster-timeouts
+        self.queued_fns.exec_mut(move |queue| {
+            queue.push_back(f);
+        });
+        self.window
+            .post_message(&TIMEOUT_MSG_NAME.into(), "*")
+            .unwrap();
+    }
+}
+
 struct WebNativeHandle {
     node: web_sys::Node,
     listeners: HashMap<&'static str, EventListener>,
@@ -70,42 +124,13 @@ struct WebNativeHandle {
 }
 
 struct WebRenderer {
-    window: web_sys::Window,
     document: web_sys::Document,
-    _listener: EventListener,
-    queued_fns: Shared<VecDeque<Box<dyn FnOnce()>>>,
 }
 
 impl WebRenderer {
     fn new() -> Self {
-        let window = web_sys::window().unwrap();
-        let queued_fns = Shared::default();
-        let queued_fns_clone = queued_fns.clone();
-
-        // sets up fast execution of 0ms timeouts
-        // uses approach in https://dbaron.org/log/20100309-faster-timeouts
-        let listener = EventListener::new(&window, "message", move |e| {
-            let e = e.clone();
-            match e.dyn_into::<web_sys::MessageEvent>() {
-                Ok(event) => {
-                    if event.data() == TIMEOUT_MSG_NAME {
-                        event.stop_propagation();
-                        queued_fns_clone.exec_mut(|queue: &mut VecDeque<Box<dyn FnOnce()>>| {
-                            match queue.pop_front() {
-                                Some(f) => f(),
-                                None => {}
-                            }
-                        });
-                    }
-                }
-                Err(_) => { /*should not be reachable*/ }
-            }
-        });
         WebRenderer {
-            document: window.document().unwrap(),
-            window,
-            _listener: listener,
-            queued_fns,
+            document: web_sys::window().unwrap().document().unwrap(),
         }
     }
 
@@ -401,17 +426,6 @@ impl Renderer for WebRenderer {
             }
             None => {}
         }
-    }
-
-    fn schedule_on_ui_thread(&mut self, f: Box<dyn FnOnce()>) {
-        // post message for 0ms timeouts
-        // technique from https://dbaron.org/log/20100309-faster-timeouts
-        self.queued_fns.exec_mut(move |queue| {
-            queue.push_back(f);
-        });
-        self.window
-            .post_message(&TIMEOUT_MSG_NAME.into(), "*")
-            .unwrap();
     }
 
     fn append_child(
