@@ -93,7 +93,7 @@ fn Todo() -> View {
                                 type_: "checkbox",
                                 checked: item.completed,
                                 on_click: enclose!(update_items; move |_| {
-                                    update_items.update(|items| items[i].completed = !items[i].completed)
+                                    update_items.update(move |items| items[i].completed = !items[i].completed)
                                 })
                             },
                             Label!{
@@ -105,7 +105,7 @@ fn Todo() -> View {
                             Button!{
                                 class: "destroy",
                                 on_click: enclose!(update_items; move |_| {
-                                    update_items.update(|items| {
+                                    update_items.update(move |items| {
                                         items.remove(i);
                                     })
                                 })
@@ -126,7 +126,7 @@ fn Todo() -> View {
                             }
                         }),
                         on_blur: enclose!(update_items, set_editing; move |e| {
-                            update_items.update(|items| items[i].text = e.current_target().unwrap().value());
+                            update_items.update(move |items| items[i].text = e.current_target().unwrap().value());
                             set_editing.set(None);
                         })
                     }).into()
@@ -152,9 +152,10 @@ fn Todo() -> View {
                         on_key_down: enclose!(update_items; move |e| {
                             if e.which() == ENTER_KEY {
                                 let current_target = e.current_target().unwrap();
-                                update_items.update(|items| {
+                                let value = current_target.value();
+                                update_items.update(move |items| {
                                     let new_item = Item {
-                                        text: current_target.value(),
+                                        text: value,
                                         completed: false,
                                         id: monotonic_id
                                     };
@@ -175,8 +176,8 @@ fn Todo() -> View {
                         class: "toggle-all",
                         type_: "checkbox",
                         on_change: enclose!(update_items; move |e| {
-                            update_items.update(|items| {
-                                let checked = e.current_target().unwrap().checked();
+                            let checked = e.current_target().unwrap().checked();
+                            update_items.update(move |items| {
                                 for item in items.iter_mut() {
                                     item.completed = checked;
                                 }
