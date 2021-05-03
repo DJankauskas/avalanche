@@ -14,6 +14,16 @@ impl<T> Shared<T> {
 }
 
 impl<T: ?Sized> Shared<T> {
+    /// Allows constructing an instance of Shared with a `?Sized T`. 
+    // Note: this leaks implemmentation details, but this is necessary as `CoerceUnsized` is unstable.
+    pub(crate) fn new_dyn(val: Rc<RefCell<T>>) -> Self {
+        Shared {
+            rc: val
+        }
+    }
+}
+
+impl<T: ?Sized> Shared<T> {
     /// Executes the given function with an immutable reference to the wrapped value.
     ///
     /// # Arguments
