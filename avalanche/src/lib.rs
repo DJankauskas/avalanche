@@ -10,7 +10,7 @@ pub mod vdom;
 use downcast_rs::{impl_downcast, Downcast};
 use std::{any::Any, rc::Rc};
 
-use renderer::NativeType;
+use renderer::{NativeType, Scheduler};
 use shared::Shared;
 use tree::NodeId;
 use vdom::{update_vnode, VDom, VNode};
@@ -282,6 +282,7 @@ impl<T: Component> DynComponent for T {
 pub struct InternalContext<'a> {
     pub state: &'a mut Box<dyn Any>,
     pub component_pos: ComponentPos,
+    pub scheduler: &'a Shared<dyn Scheduler>,
 }
 
 #[doc(hidden)]
@@ -353,6 +354,7 @@ impl<T> UseState<T> {
     pub fn hook<'a>(
         &'a mut self,
         component_pos: ComponentPos,
+        scheduler: &Shared<dyn Scheduler>,
         get_self: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
     ) -> (
         impl FnOnce(T) -> (&'a T, UseStateSetter<T>),
@@ -361,6 +363,7 @@ impl<T> UseState<T> {
         let updates = UseStateUpdates {
             update: self.updated,
         };
+        let scheduler = scheduler.clone();
         let closure = move |val| {
             if self.updated {
                 self.updated = false;
@@ -370,7 +373,7 @@ impl<T> UseState<T> {
                 self.updated = true;
             };
             let state_ref = self.state.as_ref().unwrap();
-            let setter = UseStateSetter::new(component_pos, get_self);
+            let setter = UseStateSetter::new(component_pos, scheduler, get_self);
             (state_ref, setter)
         };
         (closure, updates)
@@ -380,6 +383,7 @@ impl<T> UseState<T> {
 /// Provides a setter for a piece of state managed by [UseState<T>](UseState).
 pub struct UseStateSetter<T: 'static> {
     component_pos: ComponentPos,
+    scheduler: Shared<dyn Scheduler>,
     get_mut: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
 }
 
@@ -387,6 +391,7 @@ impl<T: 'static> Clone for UseStateSetter<T> {
     fn clone(&self) -> Self {
         Self {
             component_pos: self.component_pos.clone(),
+            scheduler: self.scheduler.clone(),
             get_mut: self.get_mut,
         }
     }
@@ -395,10 +400,12 @@ impl<T: 'static> Clone for UseStateSetter<T> {
 impl<T: 'static> UseStateSetter<T> {
     fn new(
         component_pos: ComponentPos,
+        scheduler: Shared<dyn Scheduler>,
         get_mut: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
     ) -> Self {
         Self {
             component_pos,
+            scheduler,
             get_mut,
         }
     }
@@ -409,27 +416,28 @@ impl<T: 'static> UseStateSetter<T> {
     /// The update is not performed immediately; its effect will only be accessible
     /// on its component's rerender. Note that `update` always triggers a rerender, and the state value
     /// is marked as updated, even if the given function performs no mutations.
-    pub fn update<F: FnOnce(&mut T)>(&self, f: F) {
+    pub fn update<F: FnOnce(&mut T) + 'static>(&self, f: F) {
         let get_mut = self.get_mut;
         let vdom_clone = self.component_pos.vdom.clone();
         let vdom_clone_2 = vdom_clone.clone();
         let vnode_copy = self.component_pos.vnode;
+        let scheduler_clone = self.scheduler.clone();
 
-        self.component_pos.vdom.exec_mut(move |vdom| {
-            let vnode = vnode_copy.get_mut(&mut vdom.tree);
-            let mut_ref_to_state = get_mut(vnode.state.as_mut().unwrap());
-            f(mut_ref_to_state.state.as_mut().unwrap());
-            mut_ref_to_state.updated = true;
-
-            vdom.renderer.schedule_on_ui_thread(Box::new(move || {
+        self.scheduler.exec_mut(move |scheduler| {
+            scheduler.schedule_on_ui_thread(Box::new(move || {
                 vdom_clone.exec_mut(|vdom| {
-                    vnode_copy.get_mut(&mut vdom.tree).dirty = true;
+                    let vnode = vnode_copy.get_mut(&mut vdom.tree);
+                    vnode.dirty = true;
+                    let mut_ref_to_state = get_mut(vnode.state.as_mut().unwrap());
+                    f(mut_ref_to_state.state.as_mut().unwrap());
+                    mut_ref_to_state.updated = true;
                     update_vnode(
                         None,
                         vnode_copy,
                         &mut vdom.tree,
                         &mut vdom.renderer,
                         vdom_clone_2,
+                        &scheduler_clone
                     );
                 })
             }));
