@@ -327,7 +327,7 @@ pub(crate) fn update_vnode(
     }
 
     if in_place_components.len() != vnode_children_len {
-        panic!(DYNAMIC_CHILDREN_ERR);
+        panic!("{}", DYNAMIC_CHILDREN_ERR);
     }
 
     let children_ids: Vec<_> = children
@@ -337,7 +337,7 @@ pub(crate) fn update_vnode(
 
     let check_duplicates: HashSet<_> = children_ids.iter().collect();
     if check_duplicates.len() != children_ids.len() {
-        panic!(DYNAMIC_CHILDREN_ERR)
+        panic!("{}", DYNAMIC_CHILDREN_ERR);
     }
 
     let mut children: Vec<_> = children.into_iter().map(|c| Some(c)).collect();
