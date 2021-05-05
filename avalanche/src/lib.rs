@@ -281,7 +281,7 @@ impl<T: Component> DynComponent for T {
 /// to provide hooks access to component state and other data.
 pub struct InternalContext<'a> {
     pub state: &'a mut Box<dyn Any>,
-    pub component_pos: ComponentPos,
+    pub component_pos: ComponentPos<'a>,
     pub scheduler: &'a Shared<dyn Scheduler>,
 }
 
@@ -289,13 +289,13 @@ pub struct InternalContext<'a> {
 #[derive(Clone)]
 /// Internal data structure that stores what tree a component
 /// belongs to, and its position within it
-pub struct ComponentPos {
+pub struct ComponentPos<'a> {
     /// Shared value ONLY for passing to UseState
     /// within the render function this value is mutably borrowed,
     /// so exec and exec_mut will panic
     pub vnode: NodeId<VNode>,
     /// Shared container to the VDom of which the [`vnode`] is a part.
-    pub vdom: Shared<VDom>,
+    pub vdom: &'a Shared<VDom>,
 }
 
 /// A hook that allows a component to keep persistent state across renders.
@@ -353,7 +353,7 @@ impl<T> UseState<T> {
     #[doc(hidden)]
     pub fn hook<'a>(
         &'a mut self,
-        component_pos: ComponentPos,
+        component_pos: ComponentPos<'a>,
         scheduler: &Shared<dyn Scheduler>,
         get_self: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
     ) -> (
@@ -382,7 +382,8 @@ impl<T> UseState<T> {
 
 /// Provides a setter for a piece of state managed by [UseState<T>](UseState).
 pub struct UseStateSetter<T: 'static> {
-    component_pos: ComponentPos,
+    vdom: Shared<VDom>,
+    vnode: NodeId<VNode>,
     scheduler: Shared<dyn Scheduler>,
     get_mut: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
 }
@@ -390,7 +391,8 @@ pub struct UseStateSetter<T: 'static> {
 impl<T: 'static> Clone for UseStateSetter<T> {
     fn clone(&self) -> Self {
         Self {
-            component_pos: self.component_pos.clone(),
+            vdom: self.vdom.clone(),
+            vnode: self.vnode,
             scheduler: self.scheduler.clone(),
             get_mut: self.get_mut,
         }
@@ -404,7 +406,8 @@ impl<T: 'static> UseStateSetter<T> {
         get_mut: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
     ) -> Self {
         Self {
-            component_pos,
+            vdom: component_pos.vdom.clone(),
+            vnode: component_pos.vnode,
             scheduler,
             get_mut,
         }
@@ -418,9 +421,9 @@ impl<T: 'static> UseStateSetter<T> {
     /// is marked as updated, even if the given function performs no mutations.
     pub fn update<F: FnOnce(&mut T) + 'static>(&self, f: F) {
         let get_mut = self.get_mut;
-        let vdom_clone = self.component_pos.vdom.clone();
+        let vdom_clone = self.vdom.clone();
         let vdom_clone_2 = vdom_clone.clone();
-        let vnode_copy = self.component_pos.vnode;
+        let vnode_copy = self.vnode;
         let scheduler_clone = self.scheduler.clone();
 
         self.scheduler.exec_mut(move |scheduler| {
@@ -436,7 +439,7 @@ impl<T: 'static> UseStateSetter<T> {
                         vnode_copy,
                         &mut vdom.tree,
                         &mut vdom.renderer,
-                        vdom_clone_2,
+                        &vdom_clone_2,
                         &scheduler_clone
                     );
                 })

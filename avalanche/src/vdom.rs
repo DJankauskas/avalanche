@@ -88,7 +88,7 @@ impl Root {
         vdom.exec_mut(|vdom| {
             let root = vdom.tree.root();
             let child = root.push(VNode::component(child), &mut vdom.tree);
-            generate_vnode(child, &mut vdom.tree, &mut vdom.renderer, vdom_clone, &scheduler);
+            generate_vnode(child, &mut vdom.tree, &mut vdom.renderer, &vdom_clone, &scheduler);
             native_append_child(root, child, &mut vdom.tree, &mut vdom.renderer);
         });
 
@@ -122,7 +122,7 @@ pub(crate) fn generate_vnode(
     node: NodeId<VNode>,
     tree: &mut Tree<VNode>,
     renderer: &mut Box<dyn Renderer>,
-    vdom: Shared<VDom>,
+    vdom: &Shared<VDom>,
     scheduler: &Shared<dyn Scheduler>
 ) {
     let vnode = node.get_mut(tree);
@@ -137,7 +137,7 @@ pub(crate) fn generate_vnode(
         state: vnode.state.as_mut().unwrap(),
         component_pos: ComponentPos {
             vnode: node,
-            vdom: vdom.clone(),
+            vdom: vdom,
         },
         scheduler,
     };
@@ -162,7 +162,7 @@ pub(crate) fn generate_vnode(
         Some(marker) => {
             for child in marker.children.iter() {
                 let child = node.push(VNode::component(child.clone()), tree);
-                generate_vnode(child, tree, renderer, vdom.clone(), scheduler);
+                generate_vnode(child, tree, renderer, vdom, scheduler);
                 if is_native {
                     native_append_child(node, child, tree, renderer);
                 }
@@ -248,7 +248,7 @@ pub(crate) fn update_vnode(
     node: NodeId<VNode>,
     tree: &mut Tree<VNode>,
     renderer: &mut Box<dyn Renderer>,
-    vdom: Shared<VDom>,
+    vdom: &Shared<VDom>,
     scheduler: &Shared<dyn Scheduler>
 ) {
     let props_updated = match new_component {
@@ -282,7 +282,7 @@ pub(crate) fn update_vnode(
         state: vnode.state.as_mut().unwrap(),
         component_pos: ComponentPos {
             vnode: node,
-            vdom: vdom.clone(),
+            vdom: vdom,
         },
         scheduler
     };
@@ -310,7 +310,7 @@ pub(crate) fn update_vnode(
                     let vnode_mut = node.get_mut(tree);
                     std::mem::swap(&mut vnode_mut.component, &mut old_component);
                 }
-                update_vnode(None, native_parent, tree, renderer, vdom.clone(), scheduler);
+                update_vnode(None, native_parent, tree, renderer, vdom, scheduler);
                 return;
             }
         }
@@ -355,7 +355,7 @@ pub(crate) fn update_vnode(
             let vnode = VNode::component(child.take().unwrap());
             let new_child = node.push(vnode, tree);
             in_place_components.insert(id.clone(), (new_child, node.len(tree) - 1));
-            generate_vnode(new_child, tree, renderer, vdom.clone(), scheduler);
+            generate_vnode(new_child, tree, renderer, vdom, scheduler);
             if is_native {
                 native_append_child(node, new_child, tree, renderer);
             }
@@ -442,7 +442,7 @@ pub(crate) fn update_vnode(
                     child_vnode,
                     tree,
                     renderer,
-                    vdom.clone(),
+                    vdom,
                     scheduler
                 );
             }
@@ -518,7 +518,7 @@ fn native_update_vnode(
     child: NodeId<VNode>,
     tree: &mut Tree<VNode>,
     renderer: &mut Box<dyn Renderer>,
-    vdom: Shared<VDom>,
+    vdom: &Shared<VDom>,
     scheduler: &Shared<dyn Scheduler>
 ) {
     let old_native_child = if is_native {
