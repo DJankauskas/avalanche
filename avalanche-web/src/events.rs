@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, ops::Deref};
+use std::ops::Deref;
 use wasm_bindgen::JsCast;
 
 pub(crate) use web_sys::AnimationEvent;
@@ -19,24 +19,24 @@ pub(crate) use web_sys::WheelEvent;
 /// event `E`.
 pub struct TypedEvent<E: JsCast + Clone + Into<Event>, C: JsCast> {
     event: E,
-    phantom: PhantomData<C>,
+    current_target: Option<C>,
 }
 
-impl<E: JsCast + Clone + Into<Event>, C: JsCast> TypedEvent<E, C> {
+impl<E: JsCast + Clone + Into<Event>, C: JsCast + Clone> TypedEvent<E, C> {
     /// Constructs a new [`TypedEvent`] using the given event. It is the caller's
     /// responsibility to ensure the component type `C` is correct in context.
     pub(crate) fn new(event: E) -> Self {
+        let event_clone: Event = event.clone().into();
         Self {
             event,
-            phantom: PhantomData,
+            current_target: event_clone.current_target().and_then(|ct| ct.dyn_into::<C>().ok()),
         }
     }
 
     /// Returns the event's current target, or [`None`](Option::None) if not available or the type of the
     /// current target does not match type `C`.
     pub fn current_target(&self) -> Option<C> {
-        let event: Event = self.event.clone().into();
-        Some(event.current_target()?.dyn_into::<C>().ok()?)
+        self.current_target.clone()
     }
 }
 
