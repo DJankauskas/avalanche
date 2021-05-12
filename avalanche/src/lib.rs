@@ -138,7 +138,7 @@ macro_rules! enclose {
 /// A hack used to work around a seeming syn limitation
 /// syn will interpret some macro calls as items rather than expressions
 /// syn expects an item to be replaced by another, so when parsing Component! type macros,
-/// `#[reactive]` will replace that call with an expression within this macro
+/// `#[component]` will replace that call with an expression within this macro
 /// to syn, this is replacing one macro item with another
 #[doc(hidden)]
 #[macro_export]
@@ -440,7 +440,7 @@ impl<T: 'static> UseStateSetter<T> {
                         &mut vdom.tree,
                         &mut vdom.renderer,
                         &vdom_clone_2,
-                        &scheduler_clone
+                        &scheduler_clone,
                     );
                 })
             }));

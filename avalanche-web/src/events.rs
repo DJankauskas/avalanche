@@ -29,7 +29,9 @@ impl<E: JsCast + Clone + Into<Event>, C: JsCast + Clone> TypedEvent<E, C> {
         let event_clone: Event = event.clone().into();
         Self {
             event,
-            current_target: event_clone.current_target().and_then(|ct| ct.dyn_into::<C>().ok()),
+            current_target: event_clone
+                .current_target()
+                .and_then(|ct| ct.dyn_into::<C>().ok()),
         }
     }
 
