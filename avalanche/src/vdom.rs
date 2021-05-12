@@ -8,17 +8,17 @@ use crate::{
 use crate::{shared::Shared, InternalContext};
 use std::{
     any::Any,
+    cell::RefCell,
     collections::{HashMap, HashSet},
     hash::Hash,
     rc::Rc,
-    cell::RefCell
 };
 
 const DYNAMIC_CHILDREN_ERR: &'static str = "Dynamic components must be provided keys.";
 
 pub struct VDom {
     pub(crate) tree: Tree<VNode>,
-    pub renderer: Box<dyn Renderer>
+    pub renderer: Box<dyn Renderer>,
 }
 
 // TODO: possibly make pub(crate)
@@ -68,7 +68,7 @@ impl Root {
         native_parent: View,
         native_handle: NativeHandle,
         renderer: R,
-        scheduler: S
+        scheduler: S,
     ) -> Self {
         let native_type = native_parent
             .native_type()
@@ -81,14 +81,20 @@ impl Root {
         let scheduler: Shared<dyn Scheduler> = Shared::new_dyn(Rc::new(RefCell::new(scheduler)));
         let vdom = VDom {
             tree: Tree::new(vnode),
-            renderer: Box::new(renderer)
+            renderer: Box::new(renderer),
         };
         let vdom = Shared::new(vdom);
         let vdom_clone = vdom.clone();
         vdom.exec_mut(|vdom| {
             let root = vdom.tree.root();
             let child = root.push(VNode::component(child), &mut vdom.tree);
-            generate_vnode(child, &mut vdom.tree, &mut vdom.renderer, &vdom_clone, &scheduler);
+            generate_vnode(
+                child,
+                &mut vdom.tree,
+                &mut vdom.renderer,
+                &vdom_clone,
+                &scheduler,
+            );
             native_append_child(root, child, &mut vdom.tree, &mut vdom.renderer);
         });
 
@@ -123,7 +129,7 @@ pub(crate) fn generate_vnode(
     tree: &mut Tree<VNode>,
     renderer: &mut Box<dyn Renderer>,
     vdom: &Shared<VDom>,
-    scheduler: &Shared<dyn Scheduler>
+    scheduler: &Shared<dyn Scheduler>,
 ) {
     let vnode = node.get_mut(tree);
 
@@ -249,7 +255,7 @@ pub(crate) fn update_vnode(
     tree: &mut Tree<VNode>,
     renderer: &mut Box<dyn Renderer>,
     vdom: &Shared<VDom>,
-    scheduler: &Shared<dyn Scheduler>
+    scheduler: &Shared<dyn Scheduler>,
 ) {
     let props_updated = match new_component {
         Some(ref new) => new.updated(),
@@ -284,7 +290,7 @@ pub(crate) fn update_vnode(
             vnode: node,
             vdom: vdom,
         },
-        scheduler
+        scheduler,
     };
 
     let child = vnode.component.render(context);
@@ -443,7 +449,7 @@ pub(crate) fn update_vnode(
                     tree,
                     renderer,
                     vdom,
-                    scheduler
+                    scheduler,
                 );
             }
             None => {
@@ -519,7 +525,7 @@ fn native_update_vnode(
     tree: &mut Tree<VNode>,
     renderer: &mut Box<dyn Renderer>,
     vdom: &Shared<VDom>,
-    scheduler: &Shared<dyn Scheduler>
+    scheduler: &Shared<dyn Scheduler>,
 ) {
     let old_native_child = if is_native {
         child_with_native_handle(child, tree)

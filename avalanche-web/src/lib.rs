@@ -45,7 +45,7 @@ pub fn mount<C: Component + Default>(element: Element) {
         native_parent.into(),
         Box::new(native_parent_handle),
         renderer,
-        scheduler
+        scheduler,
     );
 
     // TODO: more elegant solution that leaks less memory?
@@ -84,9 +84,8 @@ impl WebScheduler {
                     if event.data() == TIMEOUT_MSG_NAME {
                         event.stop_propagation();
                         // f may call schedule_on_ui_thread, so it must be called outside of exec_mut
-                        let f = queued_fns_clone.exec_mut(|queue: &mut VecDeque<Box<dyn FnOnce()>>| {
-                           queue.pop_front()
-                        });
+                        let f = queued_fns_clone
+                            .exec_mut(|queue: &mut VecDeque<Box<dyn FnOnce()>>| queue.pop_front());
                         f.map(|f| f());
                     }
                 }
