@@ -1,4 +1,4 @@
-mod analyze;
+mod transform;
 mod macro_expr;
 
 use proc_macro::TokenStream;
@@ -7,7 +7,7 @@ use proc_macro_error::{abort, emit_error, proc_macro_error};
 use quote::{format_ident, quote};
 use syn::{parse_macro_input, punctuated::Punctuated, Item, Pat, ReturnType};
 
-use analyze::{Dependencies, DependencyInfo, ExprType, Function, HookInfo, Scope, Var};
+use transform::{Dependencies, DependencyInfo, ExprType, Function, HookInfo, Scope, Var};
 use macro_expr::Hooks;
 
 #[proc_macro_error]
