@@ -1,8 +1,8 @@
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use syn::parse::{Parse, ParseStream};
+use syn::parse::{discouraged::Speculative, Parse, ParseStream};
 use syn::{punctuated::Punctuated, Type};
-use syn::{Expr, FieldValue, Ident, Result, Token};
+use syn::{Expr, Ident, Result, Token};
 
 pub(crate) struct ReactiveAssert {
     pub asserts: Punctuated<Assert, Token![;]>,
@@ -62,19 +62,6 @@ impl ToTokens for Assert {
         self.dependencies.to_tokens(tokens);
         self.fat_arrow_token.to_tokens(tokens);
         self.dependent.to_tokens(tokens);
-    }
-}
-
-pub(crate) struct ComponentInit {
-    pub(crate) fields: Punctuated<FieldValue, Token![,]>,
-}
-
-impl Parse for ComponentInit {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let fields = Punctuated::parse_terminated(input)?;
-        let comp = ComponentInit { fields };
-
-        Ok(comp)
     }
 }
 
@@ -239,5 +226,69 @@ impl Parse for Try {
         };
 
         Ok(try_)
+    }
+}
+
+pub(crate) struct ComponentFieldValue {
+    pub name: Ident,
+    pub colon_token: Token![:],
+    pub value: Expr,
+}
+
+impl Parse for ComponentFieldValue {
+    fn parse(input: ParseStream) -> Result<Self> {
+        Ok(ComponentFieldValue {
+            name: input.parse()?,
+            colon_token: input.parse()?,
+            value: input.parse()?,
+        })
+    }
+}
+
+pub(crate) struct ComponentBuilder {
+    pub named_init: Punctuated<ComponentFieldValue, Token![,]>,
+    pub trailing_init: Option<Expr>,
+    pub trailing_comma_token: Option<Token![,]>,
+}
+
+impl Parse for ComponentBuilder {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let mut named_init = Punctuated::new();
+        while !input.is_empty() {
+            let fork = input.fork();
+            let value = fork.parse::<ComponentFieldValue>();
+            if let Ok(value) = value {
+                input.advance_to(&fork);
+                named_init.push(value);
+                match input.parse() {
+                    Ok(comma_token) => named_init.push_punct(comma_token),
+                    Err(_) => {
+                        if input.is_empty() {
+                            return Ok(ComponentBuilder {
+                                named_init,
+                                trailing_init: None,
+                                trailing_comma_token: None,
+                            });
+                        } else {
+                            return Err(input.error("expected , or )"));
+                        }
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+        let trailing_init = input.parse().ok();
+        let trailing_comma_token = input.parse().ok();
+
+        if !input.is_empty() {
+            return Err(input.error("expected end of input"));
+        }
+
+        Ok(ComponentBuilder {
+            named_init,
+            trailing_init,
+            trailing_comma_token,
+        })
     }
 }

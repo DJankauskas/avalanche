@@ -99,7 +99,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
     let mut param_attributes = Vec::with_capacity(inputs_len);
     let mut flag = Vec::with_capacity(inputs_len);
 
-    //process render code
+    // process render code
     for (i, param) in item_fn.sig.inputs.iter().enumerate() {
         let update_bit_pattern = 2u64.pow(i as u32);
         match param {
@@ -130,6 +130,12 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
     }
+
+    // info for generating __last setter for last prop
+    let last_param_ident = param_ident.last().into_iter();
+    let last_param_type = param_type.last().into_iter();
+    let last_param_attributes = param_attributes.last().into_iter();
+    let last_flag = flag.last();
 
     function.scopes.push(param_scope);
 
@@ -195,6 +201,17 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                         self.__internal_updates |= #flag;
                     }
                     self.#param_ident = ::std::option::Option::Some(val);
+                    self
+                }
+            )*
+
+            #(
+                #(#last_param_attributes)*
+                fn __last(mut self, val: #last_param_type, updated: ::std::primitive::bool) -> Self {
+                    if updated {
+                        self.__internal_updates |= #last_flag;
+                    }
+                    self.#last_param_ident = ::std::option::Option::Some(val);
                     self
                 }
             )*

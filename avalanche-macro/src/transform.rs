@@ -1,4 +1,5 @@
 use std::{collections::HashMap, ops::Deref, ops::DerefMut};
+use proc_macro2::Span;
 use syn::{parse::Parse, parse_quote, Block, Expr, Ident, Lit, Pat, Stmt};
 
 // Span line and column information with proc macros is not available on stable
@@ -8,9 +9,7 @@ use proc_macro_error::abort;
 use quote::quote;
 use rand::random;
 
-use crate::macro_expr::{
-    ComponentInit, EncloseBody, ExprList, MatchesBody, ReactiveAssert, Try, VecBody,
-};
+use crate::macro_expr::{ComponentBuilder, ComponentFieldValue, EncloseBody, ExprList, MatchesBody, ReactiveAssert, Try, VecBody};
 
 #[derive(Debug, Clone)]
 pub(crate) enum DependencyInfo {
@@ -420,24 +419,27 @@ impl Function {
             }
             _ => {
                 if name.chars().next().unwrap().is_ascii_uppercase() {
-                    match mac.parse_body::<ComponentInit>() {
+                    match mac.parse_body::<ComponentBuilder>() {
                         Ok(mut init) => {
+                            if let Some(trailing_init) = init.trailing_init {
+                                init.named_init.push(ComponentFieldValue {
+                                    name: Ident::new("__last", Span::call_site()),
+                                    colon_token: Default::default(),
+                                    value: trailing_init,
+                                })
+                            }
                             let mut macro_dependencies =
                                 UnitDeps::duplicated(ExprType::Opaque(Dependencies::new()));
-                            let mut field_ident = Vec::with_capacity(init.fields.len());
-                            let mut init_expr = Vec::with_capacity(init.fields.len());
-                            let mut is_field_updated = Vec::with_capacity(init.fields.len());
-                            for field in init.fields.iter_mut() {
-                                let ident = match &field.member {
-                                    syn::Member::Named(ident) => ident,
-                                    syn::Member::Unnamed(u) => abort!(u, "expected named field"),
-                                };
-                                field_ident.push(ident);
-                                let dependencies = self.expr(&mut field.expr);
+                            let mut field_ident = Vec::with_capacity(init.named_init.len());
+                            let mut init_expr = Vec::with_capacity(init.named_init.len());
+                            let mut is_field_updated = Vec::with_capacity(init.named_init.len());
+                            for field in init.named_init.iter_mut() {
+                                field_ident.push(&field.name);
+                                let dependencies = self.expr(&mut field.value);
                                 macro_dependencies.extend(dependencies.clone());
                                 // TODO: unify value_deps or use effect_deps?
                                 let dependencies = dependencies.effect_deps;
-                                init_expr.push(&field.expr);
+                                init_expr.push(&field.value);
                                 let mut dependency_update = Vec::with_capacity(dependencies.len());
                                 for dependency_info in dependencies.values() {
                                     match dependency_info {
