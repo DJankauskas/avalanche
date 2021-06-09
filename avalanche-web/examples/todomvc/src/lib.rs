@@ -69,7 +69,7 @@ fn Todo() -> View {
         .map(|(i, item)| {
             reactive_assert!(items => i);
             let id = item.id;
-            Li! {
+            Li!(
                 class: format!(
                     "{} {}",
                     if item.completed {
@@ -84,35 +84,35 @@ fn Todo() -> View {
                     }
                 ),
                 key: item.id,
-                children: [
-                    Div!{
+                [
+                    Div!(
                         class: "view",
-                        children: [
-                            Input!{
+                        [
+                            Input!(
                                 class: "toggle",
                                 type_: "checkbox",
                                 checked: item.completed,
                                 on_click: enclose!(update_items; move |_| {
                                     update_items.update(move |items| items[i].completed = !items[i].completed)
                                 })
-                            },
-                            Label!{
-                                child: Text!{text: item.text.clone()},
+                            ),
+                            Label!(
+                                child: Text!(item.text.clone()),
                                 on_double_click: enclose!(set_editing; move |_| {
                                     set_editing.set(Some(id))
                                 })
-                            },
-                            Button!{
+                            ),
+                            Button!(
                                 class: "destroy",
                                 on_click: enclose!(update_items; move |_| {
                                     update_items.update(move |items| {
                                         items.remove(i);
                                     })
                                 })
-                            }
+                            )
                         ]
-                    },
-                    (*editing == Some(item.id)).then(|| Input!{
+                    ),
+                    (*editing == Some(item.id)).then(|| Input!(
                         class: "edit",
                         id: "edit",
                         auto_focus: true,
@@ -129,23 +129,23 @@ fn Todo() -> View {
                             update_items.update(move |items| items[i].text = e.current_target().unwrap().value());
                             set_editing.set(None);
                         })
-                    }).into()
+                    )).into()
                 ]
-            }
+            )
         })
         .collect::<Vec<_>>();
 
     reactive_assert!(items => children);
 
-    Div! {
-        children: [
-            Header!{
+    Div!(
+        [
+            Header!(
                 class: "header",
                 children: [
-                    H1!{
-                        child: Text!{text: "todos"}
-                    },
-                    Input!{
+                    H1!(
+                        child: Text!("todos")
+                    ),
+                    Input!(
                         class: "new-todo",
                         placeholder: "What needs to be done?",
                         auto_focus: true,
@@ -165,13 +165,13 @@ fn Todo() -> View {
                                 current_target.set_value("");
                             }
                         })
-                    }
+                    )
                 ]
-            },
-            (items.len() > 0).then(|| Section!{
+            ),
+            (items.len() > 0).then(|| Section!(
                 class: "main",
-                children: [
-                    Input!{
+                [
+                    Input!(
                         id: "toggle-all",
                         class: "toggle-all",
                         type_: "checkbox",
@@ -183,77 +183,74 @@ fn Todo() -> View {
                                 }
                             })
                         })
-                    },
-                    Label!{
+                    ),
+                    Label!(
                         for_: "toggle-all",
-                        child: Text!{text: "Mark all as complete"}
-                    },
-
-                    Ul!{
+                        child: Text!("Mark all as complete")
+                    ),
+                    Ul!(
                         class: "todo-list",
                         children
-                    },
-
-                    Footer!{
+                    ),
+                    Footer!(
                         class: "footer",
-                        children: [
-                            Span!{
+                        [
+                            Span!(
                                 class: "todo-count",
-                                children: [
-                                    Strong! {
-                                        child: Text!{text: num_active}
-                                    },
-                                    Text!{text: if num_active == 1 { " item" } else { " items" }}
+                                [
+                                    Strong! (
+                                        child: Text!(num_active)
+                                    ),
+                                    Text!(if num_active == 1 { " item" } else { " items" })
                                 ]
-                            },
-
-                            Ul! {
+                            ),
+                            Ul!(
                                 class: "filters",
-                                children: [
-                                    Li! {
-                                        child: A! {
+                                [
+                                    Li!(
+                                        child: A!(
                                             class: filter.selected(Filter::All),
                                             href: "#/",
-                                            child: Text!{text: "All"},
+                                            child: Text!("All"),
                                             on_click: enclose!(set_filter; move |_| {
                                                 set_filter.set(Filter::All);
                                             })
-                                        }
-                                    },
-                                    Li! {
-                                        child: A! {
+                                        )
+                                    ),
+                                    Li!(
+                                        child: A!(
                                             class: filter.selected(Filter::Active),
                                             href: "#/active",
-                                            child: Text!{text: "Active"},
+                                            child: Text!("Active"),
                                             on_click: enclose!(set_filter; move |_| {
                                                 set_filter.set(Filter::Active);
                                             })
-                                        }
-                                    },
-                                    Li! {
-                                        child: A! {
+                                        )
+                                    ),
+                                    Li!(
+                                        child: A!(
                                             class: filter.selected(Filter::Completed),
                                             href: "#/completed",
-                                            child: Text!{text: "Completed"},
+                                            child: Text!("Completed"),
                                             on_click: enclose!(set_filter; move |_| {
                                                 set_filter.set(Filter::Completed);
                                             })
-                                        }
-                                    }
+                                        )
+                                    )
                                 ]
-                            },
+                            ),
 
-                            (num_completed > 0).then(|| Button!{
+                            (num_completed > 0).then(|| Button!(
                                 class: "clear-completed",
                                 on_click: clear_completed,
-                                child: Text!{text: "Clear completed"}
-                            }).into()
+                                child: Text!("Clear completed")
+                            )).into()
                         ]
-                    }
+                    )
                 ]
-            }).into()
+            )).into()
         ]
-    }
+    )
 }
 
 // This is like the `main` function, except for JavaScript.

@@ -13,18 +13,16 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 #[component(count = UseState<u64>)]
 fn Counter() -> View {
     let (count, set_count) = count(0);
-    Div! {
-        children: [
-            H2!{
-                child: Text!{text: "Counter!"},
-            },
-            Button!{
-                on_click: move |_| set_count.update(|count| *count += 1),
-                child: Text!{text: "+"}
-            },
-            Text!{text: count}
-        ]
-    }
+    Div!([
+        H2!(
+            child: Text!("Counter!"),
+        ),
+        Button!(
+            on_click: move |_| set_count.update(|count| *count += 1),
+            child: Text!("+")
+        ),
+        Text!(count)
+    ])
 }
 
 // This is like the `main` function, except for JavaScript.
