@@ -34,6 +34,12 @@ impl TextBuilder {
         self
     }
 
+    pub fn __last<T: ToString>(mut self, text: T, updated: bool) -> Self {
+        self.text = Some(text.to_string());
+        self.updated = updated;
+        self
+    }
+
     pub fn key<T: ToString>(mut self, key: T, _updated: bool) -> Self {
         self.key = Some(key.to_string());
         self
@@ -242,6 +248,11 @@ macro_rules! def_component {
             }
 
             pub fn children<T: Into<Vec<View>>>(mut self, children: T, updated: bool) -> Self {
+                self.raw.children(children.into(), updated);
+                self
+            }
+
+            pub fn __last<T: Into<Vec<View>>>(mut self, children: T, updated: bool) -> Self {
                 self.raw.children(children.into(), updated);
                 self
             }
