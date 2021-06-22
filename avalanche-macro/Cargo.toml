@@ -14,5 +14,5 @@ proc-macro-error = "1.0.3"
 rand = "0.7"
 
 [dependencies.syn]
-version = "1.0.31"
+version = "1.0.72"
 features = ["full"]
