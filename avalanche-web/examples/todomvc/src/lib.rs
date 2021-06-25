@@ -1,4 +1,4 @@
-use avalanche::{component, enclose, reactive_assert, UseState, View};
+use avalanche::{component, enclose, reactive_assert, UseState, View, tracked};
 use avalanche_web::components::{
     Button, Div, Footer, Header, Input, Label, Li, Section, Span, Strong, Text, Ul, A, H1,
 };
@@ -45,10 +45,10 @@ fn Todo() -> View {
     let (filter, set_filter) = filter(Filter::All);
     let (items, update_items) = items(Vec::new());
     let (monotonic_id, update_monotonic_id) = monotonic_id(0);
-    let monotonic_id = *monotonic_id;
+    let monotonic_id = *tracked!(monotonic_id);
 
-    let num_completed = items.iter().filter(|item| item.completed).count();
-    let num_active = items.len() - num_completed;
+    let num_completed = tracked!(items).iter().filter(|item| item.completed).count();
+    let num_active = tracked!(items).len() - tracked!(num_completed);
 
     let clear_completed = enclose!(update_items; move |_| {
         update_items.update(|items| {
@@ -56,11 +56,11 @@ fn Todo() -> View {
         })
     });
 
-    let children = items
+    let children = tracked!(items)
         .iter()
         .enumerate()
         .filter(|(_, item)| {
-            match filter {
+            match tracked!(filter) {
                 Filter::All => true,
                 Filter::Completed => item.completed,
                 Filter::Active => !item.completed
@@ -77,7 +77,7 @@ fn Todo() -> View {
                     } else {
                         ""
                     },
-                    if *editing == Some(item.id) {
+                    if *tracked!(editing) == Some(item.id) {
                         "editing"
                     } else {
                         ""
@@ -112,7 +112,7 @@ fn Todo() -> View {
                             )
                         ]
                     ),
-                    (*editing == Some(item.id)).then(|| Input!(
+                    (*tracked!(editing) == Some(item.id)).then(|| Input!(
                         class: "edit",
                         id: "edit",
                         auto_focus: true,
@@ -157,9 +157,9 @@ fn Todo() -> View {
                                     let new_item = Item {
                                         text: value,
                                         completed: false,
-                                        id: monotonic_id
+                                        id: tracked!(monotonic_id)
                                     };
-                                    items.push(new_item);
+                                    items.push(tracked!(new_item));
                                 });
                                 update_monotonic_id.update(|id| *id += 1);
                                 current_target.set_value("");
@@ -168,7 +168,7 @@ fn Todo() -> View {
                     )
                 ]
             ),
-            (items.len() > 0).then(|| Section!(
+            (tracked!(items).len() > 0).then(|| Section!(
                 class: "main",
                 [
                     Input!(
@@ -190,7 +190,7 @@ fn Todo() -> View {
                     ),
                     Ul!(
                         class: "todo-list",
-                        children
+                        tracked!(children)
                     ),
                     Footer!(
                         class: "footer",
@@ -199,9 +199,9 @@ fn Todo() -> View {
                                 class: "todo-count",
                                 [
                                     Strong! (
-                                        child: Text!(num_active)
+                                        child: Text!(tracked!(num_active))
                                     ),
-                                    Text!(if num_active == 1 { " item" } else { " items" })
+                                    Text!(if tracked!(num_active) == 1 { " item" } else { " items" })
                                 ]
                             ),
                             Ul!(
@@ -209,7 +209,7 @@ fn Todo() -> View {
                                 [
                                     Li!(
                                         child: A!(
-                                            class: filter.selected(Filter::All),
+                                            class: tracked!(filter).selected(Filter::All),
                                             href: "#/",
                                             child: Text!("All"),
                                             on_click: enclose!(set_filter; move |_| {
@@ -219,7 +219,7 @@ fn Todo() -> View {
                                     ),
                                     Li!(
                                         child: A!(
-                                            class: filter.selected(Filter::Active),
+                                            class: tracked!(filter).selected(Filter::Active),
                                             href: "#/active",
                                             child: Text!("Active"),
                                             on_click: enclose!(set_filter; move |_| {
@@ -229,7 +229,7 @@ fn Todo() -> View {
                                     ),
                                     Li!(
                                         child: A!(
-                                            class: filter.selected(Filter::Completed),
+                                            class: tracked!(filter).selected(Filter::Completed),
                                             href: "#/completed",
                                             child: Text!("Completed"),
                                             on_click: enclose!(set_filter; move |_| {
@@ -240,7 +240,7 @@ fn Todo() -> View {
                                 ]
                             ),
 
-                            (num_completed > 0).then(|| Button!(
+                            (tracked!(num_completed) > 0).then(|| Button!(
                                 class: "clear-completed",
                                 on_click: clear_completed,
                                 child: Text!("Clear completed")
@@ -252,6 +252,13 @@ fn Todo() -> View {
         ]
     )
 }
+
+// #[component(state = UseState<u8>)]
+// fn Todo() -> View {
+//     let (dummy, _) = state(0);
+//     let _unused = Text!(format!("{}", tracked!(dummy)));
+//     ().into()
+// }
 
 // This is like the `main` function, except for JavaScript.
 #[wasm_bindgen(start)]
