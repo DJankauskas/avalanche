@@ -121,6 +121,14 @@ impl Parse for EncloseBody {
     }
 }
 
+impl ToTokens for EncloseBody {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.idents.to_tokens(tokens);
+        self.semicolon.to_tokens(tokens);
+        self.expr.to_tokens(tokens);
+    }
+}
+
 /// A type representing a comma-delineated series of expressions.
 pub(crate) struct ExprList {
     pub exprs: Punctuated<Expr, Token![,]>,
@@ -133,6 +141,12 @@ impl Parse for ExprList {
         let dbg = ExprList { exprs };
 
         Ok(dbg)
+    }
+}
+
+impl ToTokens for ExprList {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.exprs.to_tokens(tokens);
     }
 }
 
@@ -167,6 +181,17 @@ impl Parse for MatchesBody {
     }
 }
 
+impl ToTokens for MatchesBody {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.expr.to_tokens(tokens);
+        self.comma_token.to_tokens(tokens);
+        self.pats.to_tokens(tokens);
+        self.if_token.to_tokens(tokens);
+        self.if_expr.to_tokens(tokens);
+        self.trailing_comma_token.to_tokens(tokens);
+    }
+}
+
 /// This is an incomplete representation of the body of
 /// a [`vec!`] macro, consisting of its expressions.
 pub(crate) enum VecBody {
@@ -178,6 +203,14 @@ pub(crate) struct VecRepeat {
     pub expr: Expr,
     pub semicolon_token: Token![;],
     pub n_expr: Expr,
+}
+
+impl ToTokens for VecRepeat {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.expr.to_tokens(tokens);
+        self.semicolon_token.to_tokens(tokens);
+        self.n_expr.to_tokens(tokens);
+    }
 }
 
 impl Parse for VecBody {
@@ -210,6 +243,15 @@ impl Parse for VecBody {
     }
 }
 
+impl ToTokens for VecBody {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        match self {
+            VecBody::Repeat(repeat) => repeat.to_tokens(tokens),
+            VecBody::Literal(literal) => literal.to_tokens(tokens),
+        }
+    }
+}
+
 pub(crate) struct Try {
     pub expr: Expr,
     pub trailing_comma_token: Option<Token![,]>,
@@ -226,6 +268,13 @@ impl Parse for Try {
         };
 
         Ok(try_)
+    }
+}
+
+impl ToTokens for Try {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.expr.to_tokens(tokens);
+        self.trailing_comma_token.to_tokens(tokens);
     }
 }
 
@@ -290,5 +339,25 @@ impl Parse for ComponentBuilder {
             trailing_init,
             trailing_comma_token,
         })
+    }
+}
+
+pub(crate) enum Tracked {
+    Named(Ident),
+    Unnamed(Expr),
+}
+
+impl Parse for Tracked {
+    fn parse(input: ParseStream) -> Result<Self> {
+        if input.fork().parse::<Ident>().is_ok() {
+            let ident = input.parse()?;
+            let tracked = Tracked::Named(ident);
+            println!("Succeeded returning ident");
+            return Ok(tracked);
+        }
+        let expr = input.parse()?;
+
+        let tracked = Tracked::Unnamed(expr);
+        Ok(tracked)
     }
 }

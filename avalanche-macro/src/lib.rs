@@ -1,5 +1,5 @@
-mod transform;
 mod macro_expr;
+mod transform;
 
 use proc_macro::TokenStream;
 
@@ -7,8 +7,8 @@ use proc_macro_error::{abort, emit_error, proc_macro_error};
 use quote::{format_ident, quote};
 use syn::{parse_macro_input, punctuated::Punctuated, Item, Pat, ReturnType};
 
-use transform::{Dependencies, DependencyInfo, ExprType, Function, HookInfo, Scope, Var};
 use macro_expr::Hooks;
+use transform::{Dependencies, Function, Scope, Var};
 
 #[proc_macro_error]
 #[proc_macro_attribute]
@@ -79,14 +79,8 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
             name: hook.name.to_string(),
             dependencies: {
                 let mut deps = Dependencies::new();
-                deps.insert(
-                    hook.name.to_owned(),
-                    DependencyInfo::Hook(HookInfo {
-                        sub: Vec::new(),
-                        hook_update_ident,
-                    }),
-                );
-                ExprType::Opaque(deps)
+                deps.insert(hook.name.to_owned());
+                deps.into()
             },
         };
         param_scope.vars.push(var);
@@ -109,14 +103,10 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
             syn::FnArg::Typed(param) => {
                 let ident = if let Pat::Ident(ident) = &*param.pat {
                     let mut dependencies = Dependencies::default();
-                    dependencies.insert(
-                        ident.ident.to_owned(),
-                        DependencyInfo::Prop(update_bit_pattern),
-                    );
-                    let dependencies = ExprType::Opaque(dependencies);
+                    dependencies.insert(ident.ident.to_owned());
                     param_scope.vars.push(Var {
                         name: ident.ident.to_string(),
-                        dependencies,
+                        dependencies: dependencies.into(),
                     });
                     ident
                 } else {
@@ -258,6 +248,8 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                 let _ = context;
 
                 let #name { #(#param_ident,)* .. } = self;
+
+                let mut __avalanche_internal_updated = false;
 
                 #render_body
             }
