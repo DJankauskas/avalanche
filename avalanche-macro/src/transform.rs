@@ -116,17 +116,6 @@ impl Function {
         Default::default()
     }
 
-    pub(crate) fn get_var(&self, name: &str) -> Option<&Var> {
-        for scope in self.scopes.iter().rev() {
-            match scope.vars.iter().rev().find(|item| item.name == name) {
-                Some(var) => return Some(var),
-                None => continue,
-            }
-        }
-
-        None
-    }
-
     pub(crate) fn get_var_mut(&mut self, name: &str) -> Option<&mut Var> {
         for scope in self.scopes.iter_mut().rev() {
             match scope.vars.iter_mut().rev().find(|item| item.name == name) {
@@ -319,16 +308,17 @@ impl Function {
                             expr
                         }
                     };
+                    let tracked_path = &mac.path;
                     let transformed = if nested_tracked {
                         parse_quote! {
-                            { #expr }.__avalanche_internal_value
+                            #tracked_path!(#expr)
                         }
                     } else {
                         parse_quote! {
                             {
                                 let value = #expr;
                                 __avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::Tracked::updated(&value);
-                                value.__avalanche_internal_value
+                                #tracked_path!(value)
                             }
                         }
                     };
