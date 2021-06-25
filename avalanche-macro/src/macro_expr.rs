@@ -352,7 +352,6 @@ impl Parse for Tracked {
         if input.fork().parse::<Ident>().is_ok() {
             let ident = input.parse()?;
             let tracked = Tracked::Named(ident);
-            println!("Succeeded returning ident");
             return Ok(tracked);
         }
         let expr = input.parse()?;
