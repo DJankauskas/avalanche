@@ -357,7 +357,7 @@ impl<T> UseState<T> {
         scheduler: &Shared<dyn Scheduler>,
         get_self: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
     ) -> (
-        impl FnOnce(T) -> (&'a T, UseStateSetter<T>),
+        impl FnOnce(T) -> (Tracked<&'a T>, UseStateSetter<T>),
         UseStateUpdates,
     ) {
         let updates = UseStateUpdates {
@@ -365,6 +365,7 @@ impl<T> UseState<T> {
         };
         let scheduler = scheduler.clone();
         let closure = move |val| {
+            let updated = self.updated;
             if self.updated {
                 self.updated = false;
             }
@@ -372,7 +373,7 @@ impl<T> UseState<T> {
                 self.state = Some(val);
                 self.updated = true;
             };
-            let state_ref = self.state.as_ref().unwrap();
+            let state_ref = Tracked::new(self.state.as_ref().unwrap(), updated);
             let setter = UseStateSetter::new(component_pos, scheduler, get_self);
             (state_ref, setter)
         };
@@ -486,5 +487,43 @@ impl UseStateUpdates {
             }
         }
         false
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct Tracked<T> {
+    /// The value of the tracked value
+    /// Public due to implementation of [tracked!] macro,
+    /// but not semver stable and must only be used internally 
+    #[doc(hidden)]
+    pub __avalanche_internal_value: T,
+    /// Whether the tracked value has been updated since the last render
+    updated: bool
+}
+
+impl<T> Tracked<T> {
+    // TODO: should this be a public api?
+    pub fn new(value: T, updated: bool) -> Self {
+        Self {
+            __avalanche_internal_value: value,
+            updated
+        }
+    } 
+
+    /// Returns whether the tracked value has been updated since the last render.
+    pub fn updated(&self) -> bool {
+        self.updated
+    }
+}
+
+// TODO: revise description, and add examples.
+/// Unwraps a [Tracked] value, and wraps the expression containing it in a [Tracked] instance maintaining 
+/// whether any of the `tracked!()` values were updated.
+/// This macro may only be invoked inside a `#[component]` or `#[hook]` function. Otherwise, a compile time 
+/// error is emitted.
+#[macro_export]
+macro_rules! tracked {
+    ($_e:expr) => {
+        ::std::compile_error("this can only be used within a #[component] or #[hook] context")
     }
 }
