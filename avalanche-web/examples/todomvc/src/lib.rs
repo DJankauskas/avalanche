@@ -1,4 +1,4 @@
-use avalanche::{component, enclose, reactive_assert, UseState, View, tracked};
+use avalanche::{component, enclose, reactive_assert, tracked, UseState, View};
 use avalanche_web::components::{
     Button, Div, Footer, Header, Input, Label, Li, Section, Span, Strong, Text, Ul, A, H1,
 };
