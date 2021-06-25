@@ -516,14 +516,14 @@ impl<T> Tracked<T> {
     }
 }
 
-// TODO: revise description, and add examples.
-/// Unwraps a [Tracked] value, and wraps the expression containing it in a [Tracked] instance maintaining 
+// TODO: Add examples.
+/// Unwraps a [Tracked] value. 
+/// Within a `#[component]` or `#[hook]` context, wraps the expression containing it in a [Tracked] instance maintaining 
 /// whether any of the `tracked!()` values were updated.
-/// This macro may only be invoked inside a `#[component]` or `#[hook]` function. Otherwise, a compile time 
-/// error is emitted.
+/// Otherwise, provides access to the tracked value without rewrapping the containing expression.
 #[macro_export]
 macro_rules! tracked {
-    ($_e:expr) => {
-        ::std::compile_error("this can only be used within a #[component] or #[hook] context")
+    ($e:expr) => {
+        $e.__avalanche_internal_value
     }
 }
