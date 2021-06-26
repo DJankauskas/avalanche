@@ -249,6 +249,8 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
 
                 let #name { #(#param_ident,)* .. } = self;
 
+                #(let #param_ident = ::avalanche::Tracked::new(#param_ident, (&self.__internal_updates & #flag) != 0);)*
+
                 let mut __avalanche_internal_updated = false;
 
                 #render_body
