@@ -43,18 +43,18 @@ use vdom::{update_vnode, VDom, VNode};
 /// to render more complex components. Components are invoked with the same syntax as `struct` init expressions, except with
 /// the macro `!` after the type name:
 /// ```rust
-/// use avalanche::{component, View};
+/// use avalanche::{component, tracked, View};
 /// use avalanche_web::components::{H1, Text};
 ///
 /// const class: &str = "hello-world";
 ///
 /// #[component]
 /// pub fn HelloWorld(name: String) -> View {
-///     H1! {
+///     H1!(
 ///         id: class,
-///         class,
-///         child: Text! {text: format!("Hi there, {}!", name)}
-///     }
+///         class: class,
+///         child: Text!(text: format!("Hi there, {}!", tracked!(name)))
+///     )
 /// }
 /// ```
 /// `id`, `class`, and `child` are all parameters of the `H1` component provided by the `avalanche_web` crate.
@@ -311,24 +311,24 @@ pub struct ComponentPos<'a> {
 ///
 /// # Example
 /// ```rust
-/// use avalanche::{component, View, UseState};
+/// use avalanche::{component, tracked, View, UseState};
 /// use avalanche_web::components::{Div, H2, Button, Text};
 ///
 /// #[component(count = UseState<u64>)]
 /// fn Counter() -> View {
 ///     let (count, set_count) = count(0);
-///     Div! {
+///     Div!(
 ///         children: [
-///             H2!{
-///                 child: Text!{text: "Counter!"},
-///             },
-///             Button!{
+///             H2!(
+///                 child: Text!("Counter!"),
+///             ),
+///             Button!(
 ///                 on_click: move |_| set_count.update(|count| *count += 1),
-///                 child: Text!{text: "+"}
-///             },
-///             Text!{text: count}
+///                 child: Text!("+")
+///             ),
+///             Text!(tracked!(count))
 ///         ]
-///     }
+///     )
 /// }
 /// ```
 /// __Adapted from the `avalanche_web`
