@@ -138,7 +138,27 @@ impl Function {
 
         self.scopes.push(Scope::new());
         for stmt in &mut block.stmts {
-            let mut stmt_deps = self.stmt(stmt);
+            // don't include non-value deps, as only expr deps contribute to the dependencies of the block
+            let mut stmt_deps = self.stmt(stmt, false);
+            // remove variables internal to the block from the dependencies list, as they are not external dependencies
+            // TODO: fix let a = tracked!(a); currently this would not report a as a dependency
+            stmt_deps
+                .tracked_deps
+                .retain(|dep| self.get_var_immediate_scope(&dep.to_string()).is_none());
+            deps.extend(stmt_deps);
+        }
+
+        self.scopes.pop();
+        deps
+    }
+
+    pub(crate) fn closure_block(&mut self, block: &mut Block) -> UnitDeps {
+        let mut deps = UnitDeps::new();
+
+        self.scopes.push(Scope::new());
+        for stmt in &mut block.stmts {
+            // include non value deps, as they are relevant to the value of the closure
+            let mut stmt_deps = self.stmt(stmt, true);
             // remove variables internal to the block from the dependencies list, as they are not external dependencies
             // TODO: fix let a = tracked!(a); currently this would not report a as a dependency
             stmt_deps
@@ -152,10 +172,13 @@ impl Function {
         deps
     }
 
-    fn stmt(&mut self, stmt: &mut Stmt) -> UnitDeps {
-        let mut deps = match stmt {
+    /// Statements with a ; have value (), which has no dependencies, but 
+    /// if `include_non_value_deps` is true `tracked!` dependencies will be included.
+    /// This is useful for closures.
+    fn stmt(&mut self, stmt: &mut Stmt, include_non_value_deps: bool) -> UnitDeps {
+        let deps = match stmt {
             Stmt::Local(local) => {
-                let init_dependencies = match &mut local.init {
+                let mut init_dependencies = match &mut local.init {
                     Some(expr) => {
                         let deps = self.expr(&mut expr.1, false);
                         enable_expr_tracking(&mut expr.1, &deps);
@@ -167,15 +190,22 @@ impl Function {
                 let vars = from_pat(&local.pat, init_dependencies.clone());
                 scope.vars.extend(vars);
 
+                if !include_non_value_deps {
+                    init_dependencies.has_tracked = false;
+                }
+
                 init_dependencies
             }
             Stmt::Item(item) => match item {
                 syn::Item::Macro(macro_item) => {
-                    let (deps, transformed) = self.mac(&mut macro_item.mac, false);
+                    let (mut deps, transformed) = self.mac(&mut macro_item.mac, false);
                     if let Some(transformed) = transformed {
                         *stmt = Stmt::Semi(transformed, Semi(Span::call_site()));
                     }
-                    deps
+                    if !include_non_value_deps {
+                        deps.has_tracked = false;
+                    }
+                   deps
                 }
                 _ => UnitDeps::new(),
             },
@@ -184,16 +214,16 @@ impl Function {
                 deps
             }
             Stmt::Semi(expr, _) => {
-                let escape_expr = self.escape_expr(expr, false);
-                enable_expr_tracking(expr, &escape_expr.dependencies);
-                if escape_expr.escape {
-                    escape_expr.dependencies
-                } else {
-                    UnitDeps::new()
+                let mut escape_expr = self.escape_expr(expr, false);
+                if !escape_expr.escape {
+                    enable_expr_tracking(expr, &escape_expr.dependencies);
                 }
+                if !(include_non_value_deps || escape_expr.escape) {
+                    escape_expr.dependencies.has_tracked = false;
+                }
+                escape_expr.dependencies
             }
         };
-        deps.has_tracked = false;
         deps
     }
 
@@ -405,7 +435,10 @@ impl Function {
 
         self.scopes.push(closure_scope);
         // TODO: correct nested tracked arg?
-        let deps = self.expr(&mut closure.body, false);
+        let deps = match &mut *closure.body {
+            Expr::Block(expr) => self.closure_block(&mut expr.block),
+            _ => self.expr(&mut closure.body, false),
+        };
         let closure_body = &closure.body;
         closure.body = parse_quote! {
             {
