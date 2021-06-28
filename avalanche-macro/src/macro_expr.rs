@@ -4,27 +4,6 @@ use syn::parse::{discouraged::Speculative, Parse, ParseStream};
 use syn::{punctuated::Punctuated, Type};
 use syn::{Expr, Ident, Result, Token};
 
-pub(crate) struct ReactiveAssert {
-    pub asserts: Punctuated<Assert, Token![;]>,
-}
-
-impl Parse for ReactiveAssert {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let mut asserts = Punctuated::new();
-        while !input.is_empty() {
-            let assert = input.parse::<Assert>()?;
-            asserts.push_value(assert);
-
-            //remove separator, except if the stream has no more to process
-            if !input.is_empty() {
-                asserts.push_punct(input.parse::<Token![;]>()?);
-            }
-        }
-
-        Ok(ReactiveAssert { asserts })
-    }
-}
-
 pub(crate) struct Assert {
     pub dependencies: Punctuated<Ident, Token![,]>,
     pub dependent: Ident,

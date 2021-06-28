@@ -1,4 +1,4 @@
-use avalanche::{component, enclose, reactive_assert, tracked, UseState, View};
+use avalanche::{component, enclose, tracked, UseState, View};
 use avalanche_web::components::{
     Button, Div, Footer, Header, Input, Label, Li, Section, Span, Strong, Text, Ul, A, H1,
 };
@@ -67,7 +67,6 @@ fn Todo() -> View {
             }
         })
         .map(|(i, item)| {
-            reactive_assert!(items => i);
             let id = item.id;
             Li!(
                 class: format!(
@@ -134,8 +133,6 @@ fn Todo() -> View {
             )
         })
         .collect::<Vec<_>>();
-
-    reactive_assert!(items => children);
 
     Div!(
         [

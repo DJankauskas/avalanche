@@ -100,17 +100,8 @@ use vdom::{update_vnode, VDom, VNode};
 /// Unfortunately, macros have custom syntaxes and `component` cannot calculate the dependencies of most of them.
 /// All `std` macros (like [vec!](std::vec!()) and [format!](std::format!())) and `avalanche` macros (like [enclose!()])
 /// work well, but any others may lead to parameters being incorrectly marked as not updated.
-///
-/// If a component's parameter seems not to be update when it should, first check you're following these rules.
-/// If you are, then use the [reactive_assert!()] macro to check your assumptions.
-/// If you find a bug where a value's dependencies are incorrectly calculated, please let us know!
 #[doc(inline)]
 pub use avalanche_macro::component;
-
-#[macro_export]
-macro_rules! reactive_assert {
-    ( $( $($dept:ident),+ => $rec:ident );* ) => {};
-}
 
 /// Takes a list of identifiers terminated by a semicolon and expression. Each identifier is
 /// cloned, and made available to the expression. The macro evaluates to that expression.

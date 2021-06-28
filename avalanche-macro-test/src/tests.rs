@@ -1,6 +1,6 @@
 use avalanche::renderer::{HasChildrenMarker, NativeHandle, NativeType, Renderer, Scheduler};
 use avalanche::vdom::Root;
-use avalanche::{Component, Tracked, View, component, enclose, reactive_assert, tracked};
+use avalanche::{Component, Tracked, View, component, enclose, tracked};
 
 /// A renderer that does nothing, to test render functions only
 struct TestRenderer;
@@ -144,7 +144,8 @@ fn Test() -> View {
         Match!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
         Unary!(a: tracked!(a)),
         Tuple!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
-        StdMacros!(a: tracked!(a), b: tracked!(b), c: tracked!(c))
+        StdMacros!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
+        Nested!(a: tracked!(a))
 
     ] }.into()
 }
@@ -333,14 +334,14 @@ fn Unary(a: u8) -> View {
 
 #[component]
 fn Tuple(a: u8, b: u8, c: u8) -> View {
-    let tuple = (a, b, c);
-    reactive_assert!(a, b, c => tuple);
-    {
-        let first = tuple.0;
-        let second = tuple.1;
-        let third = tuple.2;
-        reactive_assert!(a => first; b => second; c => third);
-    }
+    let tuple = (tracked!(a), tracked!(b));
+    assert!(tuple.updated());
+
+    let tuple = (tracked!(b), tracked!(c));
+    assert!(tuple.updated());
+
+    let tuple = (tracked!(b), tracked!(b));
+    assert!(!tuple.updated());
 
     ().into()
 }
@@ -395,7 +396,34 @@ fn StdMacros(a: u8, b: u8, c: u8) -> View {
     //     let a = Ok(*tracked!(a));
     //     Ok(r#try!(tracked!(a)))
     // })();
-    // reactive_assert!(a => ret);
+
+    ().into()
+}
+
+#[component]
+fn Nested(a: u8) -> View {
+    let x = loop {
+        break loop {
+            break tracked!(a);
+        }
+    };
+    assert!(x.updated());
+
+    // Check assignment within nesting
+    let y = loop {
+        let y = loop {
+            break tracked!(a);
+        };
+        break y;
+    };
+    assert!(y.updated());
+
+    let closure = || {
+        loop {
+            break tracked!(a);
+        }
+    };
+    assert!(closure.updated());
 
     ().into()
 }
