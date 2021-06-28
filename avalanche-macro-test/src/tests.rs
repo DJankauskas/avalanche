@@ -139,13 +139,11 @@ fn Test() -> View {
         Cast!(a: tracked!(a)),
         Closure!(a: tracked!(a), b: tracked!(b)),
         Field!(a: (tracked!(a), tracked!(a)), b: tracked!(b)),
-        ForLoop!(a: tracked!(a), b: tracked!(b)),
         If!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
         Loop!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
         Match!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
         Unary!(a: tracked!(a)),
         Tuple!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
-        Enclose!(a: tracked!(a)),
         StdMacros!(a: tracked!(a), b: tracked!(b), c: tracked!(c))
 
     ] }.into()
@@ -207,12 +205,6 @@ fn ArrayIndex(a: u8, b: u8, c: u8) -> View {
     ().into()
 }
 
-// TODO: does this need more testing?
-// #[component]
-// fn Assign(a: u8, b: u8) -> View {
-//     ().into()
-// }
-
 #[component]
 fn Binary(a: u8, b: u8, c: u8) -> View {
     let x = tracked!(a) ^ tracked!(b);
@@ -233,8 +225,7 @@ fn Block(a: u8, b: u8) -> View {
         let x = tracked!(a) + tracked!(b);
         x
     };
-    // TODO: fix
-    // assert!(x.updated());
+    assert!(x.updated());
 
     ().into()
 }
@@ -262,11 +253,10 @@ fn Closure(a: u8, b: u8) -> View {
     };
     assert!(closure1.updated());
 
-    // TODO: fix
-    // let closure2 = || {
-    //     tracked!(b);
-    // };
-    // assert!(!closure2.updated());
+    let closure2 = || {
+        tracked!(b);
+    };
+    assert!(!closure2.updated());
 
     ().into()
 }
@@ -276,13 +266,6 @@ fn Field(a: (u8, u8), b: u8) -> View {
     let ret = tracked!(a).0;
     assert!(ret.updated());
 
-    ().into()
-}
-
-
-#[component]
-// TODO: should anything go here?
-fn ForLoop(a: u8, b: u8) -> View {
     ().into()
 }
 
@@ -297,24 +280,22 @@ fn If(a: u8, b: u8, c: u8) -> View {
     ().into()
 }
 
-//TODO: fix body processing
-// #[component]
-// fn Loop(a: u8, b: u8, c: u8) -> View {
-//     let x = loop {
-//         break tracked!(a);
-//     };
-//     assert!(x.updated());
+#[component]
+fn Loop(a: u8, b: u8, c: u8) -> View {
+    let x = loop {
+        break tracked!(a);
+    };
+    assert!(x.updated());
 
-//     // TODO: fix body processing
-//     // let y = loop {
-//     //     if tracked!(c) {
-//     //         break 0;
-//     //     }
-//     // };
-//     // assert!(y.updated());
+    let y = loop {
+        if *tracked!(c) == 0 {
+            break 0;
+        }
+    };
+    assert!(y.updated());
 
-//     ().into()
-// }
+    ().into()
+}
 
 #[component]
 fn Match(a: u8, b: u8, c: u8) -> View {
@@ -364,19 +345,6 @@ fn Tuple(a: u8, b: u8, c: u8) -> View {
     ().into()
 }
 
-// TODO: is while necessary to test?
-// #[component]
-// fn While(a: u8, b: u8) -> View {
-//     ().into()
-// }
-
-#[component]
-fn Enclose(a: u8) -> View {
-    let b = enclose!(a; a);
-    reactive_assert!(a => b);
-    ().into()
-}
-
 #[component]
 fn StdMacros(a: u8, b: u8, c: u8) -> View {
     // testing dbg!
@@ -385,6 +353,13 @@ fn StdMacros(a: u8, b: u8, c: u8) -> View {
 
     let ab_prime = dbg!(tracked!(b));
     assert!(!b.updated());
+
+    // testing enclose!
+    let cloned_a = enclose!(a; tracked!(a));
+    assert!(cloned_a.updated());
+
+    let cloned_a = enclose!(a; a);
+    assert!(cloned_a.updated());
 
     // testing format!
     let formatted = format!("{} {}", tracked!(a), tracked!(b));
