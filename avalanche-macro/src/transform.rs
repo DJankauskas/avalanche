@@ -1,18 +1,20 @@
-use proc_macro2::Span;
+use proc_macro2::{Span, TokenStream};
 use std::{collections::HashSet, ops::Deref, ops::DerefMut};
-use syn::{parse_quote, token::Semi, Block, Expr, ExprPath, Ident, Lit, Pat, Stmt};
+use syn::{Block, Expr, ExprPath, Ident, Lit, Pat, Stmt, parse2, parse_quote, spanned::Spanned, token::Semi};
 
 // Span line and column information with proc macros is not available on stable
 // To emulate unique identities for given component instantiations,
 // we currently instead generate random line and column numbers
 use proc_macro_error::abort;
-use quote::ToTokens;
+use quote::{ToTokens, quote_spanned};
 use rand::random;
 
 use crate::macro_expr::{
     ComponentBuilder, ComponentFieldValue, EncloseBody, ExprList, MatchesBody, Tracked, Try,
     VecBody,
 };
+
+const EXPR_CONVERSION_ERROR: &str = "internal error: unable to process Expr within tracked";
 
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Dependencies(HashSet<Ident>);
@@ -95,14 +97,20 @@ impl From<Dependencies> for UnitDeps {
     }
 }
 
+fn parse_expr(stream: TokenStream) -> Expr {
+    parse2(stream).unwrap_or(parse_quote!{::std::compile_error!(#EXPR_CONVERSION_ERROR)})
+}
+
 fn enable_expr_tracking(expr: &mut Expr, deps: &UnitDeps) {
     if deps.has_tracked {
-        *expr = parse_quote! {
+        let expr_span = expr.span();
+        let transformed = quote_spanned! { expr_span=>
             {
                 let mut __avalanche_internal_updated = false;
                 ::avalanche::Tracked::new(#expr, __avalanche_internal_updated)
             }
-        }
+        };
+        *expr = parse_expr(transformed);
     }
 }
 
@@ -339,12 +347,11 @@ impl Function {
                         }
                     };
                     let tracked_path = &mac.path;
+                    let expr_span = expr.span();
                     let transformed = if nested_tracked {
-                        parse_quote! {
-                            #tracked_path!(#expr)
-                        }
+                        quote_spanned! {expr_span=> #tracked_path!(#expr)}
                     } else {
-                        parse_quote! {
+                        quote_spanned! {expr_span=>
                             {
                                 let value = #expr;
                                 __avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::Tracked::updated(&value);
@@ -352,6 +359,7 @@ impl Function {
                             }
                         }
                     };
+                    let transformed = parse_expr(transformed);
                     unit_deps.has_tracked = true;
                     return (unit_deps, Some(transformed));
                 }
@@ -374,8 +382,9 @@ impl Function {
                                 let dependencies = self.expr(&mut field.value, nested_tracked);
                                 let field_ident = &field.name;
                                 let init_expr = &field.value;
-                                let construct_expr: Expr = if dependencies.has_tracked {
-                                    parse_quote! {
+                                let field_span = field.span();
+                                let construct_expr = if dependencies.has_tracked {
+                                    quote_spanned! { field_span=>
                                         {
                                             let __avalanche_internal_outer_updated = &mut __avalanche_internal_updated;
                                             let mut __avalanche_internal_updated = false;
@@ -385,10 +394,11 @@ impl Function {
                                         }
                                     }
                                 } else {
-                                    parse_quote! {
+                                    quote_spanned! { field_span=>
                                         __avalanche_internal_built.#field_ident(#init_expr, false)
                                     }
                                 };
+                                let construct_expr = parse_expr(construct_expr);
                                 prop_construct_expr.push(construct_expr);
                                 macro_dependencies.extend(dependencies.clone());
                             }

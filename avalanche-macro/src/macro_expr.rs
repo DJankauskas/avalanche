@@ -273,6 +273,14 @@ impl Parse for ComponentFieldValue {
     }
 }
 
+impl ToTokens for ComponentFieldValue {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.name.to_tokens(tokens);
+        self.colon_token.to_tokens(tokens);
+        self.value.to_tokens(tokens);
+    }
+}
+
 pub(crate) struct ComponentBuilder {
     pub named_init: Punctuated<ComponentFieldValue, Token![,]>,
     pub trailing_init: Option<Expr>,
