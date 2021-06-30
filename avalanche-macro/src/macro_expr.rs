@@ -336,7 +336,8 @@ pub(crate) enum Tracked {
 
 impl Parse for Tracked {
     fn parse(input: ParseStream) -> Result<Self> {
-        if input.fork().parse::<Ident>().is_ok() {
+        let fork = input.fork();
+        if fork.parse::<Ident>().is_ok() && fork.is_empty() {
             let ident = input.parse()?;
             let tracked = Tracked::Named(ident);
             return Ok(tracked);
