@@ -145,8 +145,8 @@ fn Test() -> View {
         Unary!(a: tracked!(a)),
         Tuple!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
         StdMacros!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
-        Nested!(a: tracked!(a))
-
+        NestedBlocks!(a: tracked!(a)),
+        NestedTracked!(a: tracked!(a), b: tracked!(b))
     ] }.into()
 }
 
@@ -401,7 +401,7 @@ fn StdMacros(a: u8, b: u8, c: u8) -> View {
 }
 
 #[component]
-fn Nested(a: u8) -> View {
+fn NestedBlocks(a: u8) -> View {
     let x = loop {
         break loop {
             break tracked!(a);
@@ -424,6 +424,21 @@ fn Nested(a: u8) -> View {
         }
     };
     assert!(closure.updated());
+
+    ().into()
+}
+
+#[component]
+fn NestedTracked(a: u8, b: u8) -> View {
+    let nested = Tracked::new(a, true);
+    let nested_val = tracked!(tracked!(nested));
+    assert!(nested_val.updated());
+
+    // if a non updated value is nested within an updated one, accessing the non updated value
+    // should report an updated value of false
+    let nested = Tracked::new(b, true);
+    let nested_val = tracked!(tracked!(nested));
+    assert!(!nested_val.updated());
 
     ().into()
 }
