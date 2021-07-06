@@ -502,7 +502,8 @@ impl<T> Tracked<T> {
     } 
 
     /// Returns whether the tracked value has been updated since the last render.
-    pub fn updated(&self) -> bool {
+    #[doc(hidden)]
+    pub fn internal_updated(&self) -> bool {
         self.updated
     }
 }
@@ -516,5 +517,17 @@ impl<T> Tracked<T> {
 macro_rules! tracked {
     ($e:expr) => {
         $e.__avalanche_internal_value
+    }
+}
+
+// TODO: Add examples.
+/// Yields whether a [Tracked] value has been updated. 
+/// Within a `#[component]` or `#[hook]` context, wraps the expression containing it in a [Tracked] instance maintaining 
+/// whether any of the `tracked!()` or `updated!()` values were updated. 
+/// Otherwise, returns a `bool`.
+#[macro_export]
+macro_rules! updated {
+    ($e:expr) => {
+        ::avalanche::Tracked::internal_updated(&$e)
     }
 }

@@ -1,6 +1,6 @@
 use avalanche::renderer::{HasChildrenMarker, NativeHandle, NativeType, Renderer, Scheduler};
 use avalanche::vdom::Root;
-use avalanche::{Component, Tracked, View, component, enclose, tracked};
+use avalanche::{Component, Tracked, View, component, enclose, tracked, updated};
 
 /// A renderer that does nothing, to test render functions only
 struct TestRenderer;
@@ -163,45 +163,41 @@ fn Bare() -> View {
 
 #[component]
 fn Identity(a: u8) -> View {
-    assert!(a.updated());
+    assert!(updated!(a));
     let a = tracked!(a);
-    assert!(a.updated());
+    assert!(updated!(a));
     
     ().into()
 }
 
 #[component]
 fn ArrayIndex(a: u8, b: u8, c: u8) -> View {
-    assert!(a.updated());
-    assert!(!b.updated());
-    assert!(c.updated());
-
     let arr = [tracked!(b)];
-    assert!(!arr.updated());
+    assert!(!updated!(arr));
     
     let arr = [tracked!(a), tracked!(b)];
-    assert!(arr.updated());
+    assert!(updated!(arr));
 
     let arr = [tracked!(c), tracked!(b)];
-    assert!(arr.updated());
+    assert!(updated!(arr));
 
     let arr = [tracked!(a), tracked!(b), tracked!(c)];
-    assert!(arr.updated());
+    assert!(updated!(arr));
 
     {
         let second = tracked!(arr)[1];
-        assert!(second.updated());
+        assert!(updated!(second));
     }
 
     let arr2 = [tracked!(a); 3];
-    assert!(arr2.updated());
+    assert!(updated!(arr2));
     let from2 = tracked!(arr2)[0];
-    assert!(from2.updated());
+    assert!(updated!(from2));
 
     let arr3 = [1u8];
 
     let indexed = arr3[*tracked!(c) as usize];
-    assert!(indexed.updated());
+    assert!(updated!(indexed));
 
     ().into()
 }
@@ -209,13 +205,13 @@ fn ArrayIndex(a: u8, b: u8, c: u8) -> View {
 #[component]
 fn Binary(a: u8, b: u8, c: u8) -> View {
     let x = tracked!(a) ^ tracked!(b);
-    assert!(x.updated());
+    assert!(updated!(x));
 
     let y = tracked!(b) & tracked!(c);
-    assert!(y.updated());
+    assert!(updated!(y));
 
     let z = tracked!(b) * tracked!(b);
-    assert!(!z.updated());
+    assert!(!updated!(z));
 
     ().into()
 }
@@ -226,7 +222,7 @@ fn Block(a: u8, b: u8) -> View {
         let x = tracked!(a) + tracked!(b);
         x
     };
-    assert!(x.updated());
+    assert!(updated!(x));
 
     ().into()
 }
@@ -234,7 +230,7 @@ fn Block(a: u8, b: u8) -> View {
 #[component]
 fn FnCall(a: u8) -> View {
     let b = std::convert::identity(tracked!(a));
-    assert!(b.updated());
+    assert!(updated!(b));
 
     ().into()
 }
@@ -242,7 +238,7 @@ fn FnCall(a: u8) -> View {
 #[component]
 fn Cast(a: u8) -> View {
     let ret = *tracked!(a) as u16;
-    assert!(ret.updated());
+    assert!(updated!(ret));
 
     ().into()
 }
@@ -252,12 +248,12 @@ fn Closure(a: u8, b: u8) -> View {
     let closure1 = || {
         let _ = (*tracked!(a), *tracked!(b));
     };
-    assert!(closure1.updated());
+    assert!(updated!(closure1));
 
     let closure2 = || {
         tracked!(b);
     };
-    assert!(!closure2.updated());
+    assert!(!updated!(closure2));
 
     ().into()
 }
@@ -265,7 +261,7 @@ fn Closure(a: u8, b: u8) -> View {
 #[component]
 fn Field(a: (u8, u8), b: u8) -> View {
     let ret = tracked!(a).0;
-    assert!(ret.updated());
+    assert!(updated!(ret));
 
     ().into()
 }
@@ -273,10 +269,10 @@ fn Field(a: (u8, u8), b: u8) -> View {
 #[component]
 fn If(a: u8, b: u8, c: u8) -> View {
     let x = if *tracked!(a) == 0 { tracked!(b) } else { &5 };
-    assert!(x.updated());
+    assert!(updated!(x));
 
     let y = if *tracked!(b) == 0 { tracked!(a) } else {tracked!(c)};
-    assert!(y.updated());
+    assert!(updated!(y));
 
     ().into()
 }
@@ -286,14 +282,14 @@ fn Loop(a: u8, b: u8, c: u8) -> View {
     let x = loop {
         break tracked!(a);
     };
-    assert!(x.updated());
+    assert!(updated!(x));
 
     let y = loop {
         if *tracked!(c) == 0 {
             break 0;
         }
     };
-    assert!(y.updated());
+    assert!(updated!(y));
 
     ().into()
 }
@@ -305,7 +301,7 @@ fn Match(a: u8, b: u8, c: u8) -> View {
         Some(var) => var,
         None => tracked!(b),
     };
-    assert!(option.updated());
+    assert!(updated!(option));
 
 
     let y = match *tracked!(b) {
@@ -313,12 +309,13 @@ fn Match(a: u8, b: u8, c: u8) -> View {
         1 => "one",
         _ => "other",
     };
-    assert!(!y.updated());
+    assert!(!updated!(y));
     
     let z = match tracked!(b) {
         0 if *tracked!(c) == 0 => "zero",
         _ => "other"
     };
+    // assert!(updated!(z));
 
     ().into()
 }
@@ -327,7 +324,7 @@ fn Match(a: u8, b: u8, c: u8) -> View {
 fn Unary(a: u8) -> View {
     let b = !*tracked!(a);
     
-    assert!(b.updated());
+    assert!(updated!(b));
 
     ().into()
 }
@@ -335,13 +332,13 @@ fn Unary(a: u8) -> View {
 #[component]
 fn Tuple(a: u8, b: u8, c: u8) -> View {
     let tuple = (tracked!(a), tracked!(b));
-    assert!(tuple.updated());
+    assert!(updated!(tuple));
 
     let tuple = (tracked!(b), tracked!(c));
-    assert!(tuple.updated());
+    assert!(updated!(tuple));
 
     let tuple = (tracked!(b), tracked!(b));
-    assert!(!tuple.updated());
+    assert!(!updated!(tuple));
 
     ().into()
 }
@@ -350,45 +347,45 @@ fn Tuple(a: u8, b: u8, c: u8) -> View {
 fn StdMacros(a: u8, b: u8, c: u8) -> View {
     // testing dbg!
     let a_prime = dbg!(tracked!(a));
-    assert!(a.updated());
+    assert!(updated!(a));
 
     let ab_prime = dbg!(tracked!(b));
-    assert!(!b.updated());
+    assert!(!updated!(b));
 
     // testing enclose!
     let cloned_a = enclose!(a; tracked!(a));
-    assert!(cloned_a.updated());
+    assert!(updated!(cloned_a));
 
     let cloned_a = enclose!(a; a);
-    assert!(cloned_a.updated());
+    assert!(updated!(cloned_a));
 
     // testing format!
     let formatted = format!("{} {}", tracked!(a), tracked!(b));
-    assert!(formatted.updated());
+    assert!(updated!(formatted));
 
     let formatted2 = format!("{} {d}", tracked!(b), d=tracked!(c));
-    assert!(formatted2.updated());
+    assert!(updated!(formatted2));
 
     // testing matches!
     let matched = matches!(tracked!(a), 1);
-    assert!(matched.updated());
+    assert!(updated!(matched));
 
     let matched = matches!(tracked!(b), 1 | 2);
-    assert!(!matched.updated());
+    assert!(!updated!(matched));
 
     let matched = matches!(tracked!(b), 0 | 1 if *tracked!(c) > 2,);
-    assert!(matched.updated());
+    assert!(updated!(matched));
 
 
     // testing vec!
     let vec = vec![tracked!(a)];
-    assert!(vec.updated());
+    assert!(updated!(vec));
 
     let vec = vec![tracked!(b), tracked!(c)];
-    assert!(vec.updated());
+    assert!(updated!(vec));
 
     let vec = vec![5; *tracked!(c) as usize];
-    assert!(vec.updated());
+    assert!(updated!(vec));
 
     // testing try!
     // TODO: adjust closure handling or remove this test
@@ -407,7 +404,7 @@ fn NestedBlocks(a: u8) -> View {
             break tracked!(a);
         }
     };
-    assert!(x.updated());
+    assert!(updated!(x));
 
     // Check assignment within nesting
     let y = loop {
@@ -416,14 +413,14 @@ fn NestedBlocks(a: u8) -> View {
         };
         break y;
     };
-    assert!(y.updated());
+    assert!(updated!(y));
 
     let closure = || {
         loop {
             break tracked!(a);
         }
     };
-    assert!(closure.updated());
+    assert!(updated!(closure));
 
     ().into()
 }
@@ -432,13 +429,35 @@ fn NestedBlocks(a: u8) -> View {
 fn NestedTracked(a: u8, b: u8) -> View {
     let nested = Tracked::new(a, true);
     let nested_val = tracked!(tracked!(nested));
-    assert!(nested_val.updated());
+    assert!(updated!(nested_val));
 
     // if a non updated value is nested within an updated one, accessing the non updated value
     // should report an updated value of false
     let nested = Tracked::new(b, true);
     let nested_val = tracked!(tracked!(nested));
-    assert!(!nested_val.updated());
+    assert!(!updated!(nested_val));
+
+    ().into()
+}
+
+#[component]
+fn Updated(a: u8, b: u8, c: u8) -> View {
+    assert!(updated!(a));
+    assert!(!updated!(b));
+    assert!(updated!(c));
+
+    let a = updated!(a);
+    let b = updated!(b);
+    let c = updated!(c);
+
+    assert!(updated!(a));
+    assert!(!updated!(b));
+    assert!(updated!(c));
+
+    let x = updated!(a) && updated!(b);
+    let y = updated!(b) || updated!(b);
+    assert!(updated!(x));
+    assert!(!updated!(y));
 
     ().into()
 }

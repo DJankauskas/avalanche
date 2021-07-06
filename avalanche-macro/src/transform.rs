@@ -329,7 +329,7 @@ impl Function {
                     return (unit_deps, None);
                 }
             }
-            "tracked" => {
+            "tracked" | "updated" => {
                 if let Ok(tracked) = mac.parse_body::<Tracked>() {
                     let mut unit_deps = UnitDeps::new();
                     let expr = match tracked {
@@ -354,7 +354,7 @@ impl Function {
                         quote_spanned! {expr_span=>
                             {
                                 let value = #expr;
-                                __avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::Tracked::updated(&value);
+                                __avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::Tracked::internal_updated(&value);
                                 #tracked_path!(value)
                             }
                         }
@@ -459,7 +459,7 @@ impl Function {
         let ident_dep = deps.tracked_deps.iter();
         let output = parse_quote! {
             {
-                #(__avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::Tracked::updated(&#ident_dep);)*
+                #(__avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::Tracked::internal_updated(&#ident_dep);)*
                 #closure
             }
         };
