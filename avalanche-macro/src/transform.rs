@@ -649,9 +649,10 @@ impl Function {
             Expr::Match(match_expr) => {
                 let mut deps = self.expr(&mut match_expr.expr, nested_tracked);
                 for arm in match_expr.arms.iter_mut() {
-                    //note: identifiers in match patterns are not processed
-                    //because those only contain dependencies already added
                     deps.extend(self.expr(&mut arm.body, nested_tracked));
+                    if let Some(if_guard) = &mut arm.guard {
+                        deps.extend(self.expr(&mut *if_guard.1, nested_tracked));
+                    }
                 }
                 dependencies = Some(deps);
             }
@@ -661,8 +662,6 @@ impl Function {
                     deps.extend(self.expr(arg, nested_tracked));
                 }
                 dependencies = Some(deps)
-
-                //TODO: handle lhs dependency updates?
             }
             Expr::Paren(paren) => {
                 dependencies = Some(self.expr(&mut paren.expr, nested_tracked));

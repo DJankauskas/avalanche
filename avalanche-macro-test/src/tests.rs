@@ -146,7 +146,8 @@ fn Test() -> View {
         Tuple!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
         StdMacros!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
         NestedBlocks!(a: tracked!(a)),
-        NestedTracked!(a: tracked!(a), b: tracked!(b))
+        NestedTracked!(a: tracked!(a), b: tracked!(b)),
+        Updated!(a: tracked!(a), b: tracked!(b), c: tracked!(c))
     ] }.into()
 }
 
@@ -315,7 +316,7 @@ fn Match(a: u8, b: u8, c: u8) -> View {
         0 if *tracked!(c) == 0 => "zero",
         _ => "other"
     };
-    // assert!(updated!(z));
+    assert!(updated!(z));
 
     ().into()
 }
