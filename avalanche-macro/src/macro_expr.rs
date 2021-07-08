@@ -4,46 +4,6 @@ use syn::parse::{discouraged::Speculative, Parse, ParseStream};
 use syn::{punctuated::Punctuated, Type};
 use syn::{Expr, Ident, Result, Token};
 
-pub(crate) struct Assert {
-    pub dependencies: Punctuated<Ident, Token![,]>,
-    pub dependent: Ident,
-    pub fat_arrow_token: Token![=>],
-}
-
-impl Parse for Assert {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let mut dependencies = Punctuated::new();
-
-        while !input.lookahead1().peek(Token![=>]) {
-            let ident = input.parse::<Ident>()?;
-            dependencies.push_value(ident);
-
-            //remove separator, except if the stream has no more to process
-            if !input.lookahead1().peek(Token![=>]) {
-                dependencies.push_punct(input.parse::<Token![,]>()?);
-            }
-        }
-
-        let fat_arrow_token = input.parse()?;
-
-        let dependent = input.parse::<Ident>()?;
-
-        Ok(Assert {
-            dependencies,
-            dependent,
-            fat_arrow_token,
-        })
-    }
-}
-
-impl ToTokens for Assert {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        self.dependencies.to_tokens(tokens);
-        self.fat_arrow_token.to_tokens(tokens);
-        self.dependent.to_tokens(tokens);
-    }
-}
-
 pub(crate) struct Hooks {
     pub hooks: Punctuated<Hook, Token![,]>,
 }

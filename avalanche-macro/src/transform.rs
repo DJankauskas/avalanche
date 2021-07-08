@@ -1,12 +1,15 @@
 use proc_macro2::{Span, TokenStream};
 use std::{collections::HashSet, ops::Deref, ops::DerefMut};
-use syn::{Block, Expr, ExprPath, Ident, Lit, Pat, Stmt, parse2, parse_quote, spanned::Spanned, token::Semi};
+use syn::{
+    parse2, parse_quote, spanned::Spanned, token::Semi, Block, Expr, ExprPath, Ident, Lit, Pat,
+    Stmt,
+};
 
 // Span line and column information with proc macros is not available on stable
 // To emulate unique identities for given component instantiations,
 // we currently instead generate random line and column numbers
 use proc_macro_error::abort;
-use quote::{ToTokens, quote_spanned};
+use quote::{quote_spanned, ToTokens};
 use rand::random;
 
 use crate::macro_expr::{
@@ -98,7 +101,7 @@ impl From<Dependencies> for UnitDeps {
 }
 
 fn parse_expr(stream: TokenStream) -> Expr {
-    parse2(stream).unwrap_or(parse_quote!{::std::compile_error!(#EXPR_CONVERSION_ERROR)})
+    parse2(stream).unwrap_or(parse_quote! {::std::compile_error!(#EXPR_CONVERSION_ERROR)})
 }
 
 fn enable_expr_tracking(expr: &mut Expr, deps: &UnitDeps) {
@@ -180,7 +183,7 @@ impl Function {
         deps
     }
 
-    /// Statements with a ; have value (), which has no dependencies, but 
+    /// Statements with a ; have value (), which has no dependencies, but
     /// if `include_non_value_deps` is true `tracked!` dependencies will be included.
     /// This is useful for closures.
     fn stmt(&mut self, stmt: &mut Stmt, include_non_value_deps: bool) -> UnitDeps {
@@ -213,7 +216,7 @@ impl Function {
                     if !include_non_value_deps {
                         deps.has_tracked = false;
                     }
-                   deps
+                    deps
                 }
                 _ => UnitDeps::new(),
             },
@@ -239,11 +242,29 @@ impl Function {
     fn mac(&mut self, mac: &mut syn::Macro, nested_tracked: bool) -> (UnitDeps, Option<Expr>) {
         let name = mac.path.segments.last().unwrap().ident.to_string();
         match &*name {
-            "enclose" => {
-                if let Ok(mut enclose) = mac.parse_body::<EncloseBody>() {
-                    let deps = self.expr(&mut enclose.expr, nested_tracked);
-                    mac.tokens = enclose.into_token_stream();
+            "addr_of" | "addr_of_mut" => {
+                if let Ok(mut expr) = mac.parse_body::<Expr>() {
+                    let deps = self.expr(&mut expr, nested_tracked);
+                    mac.tokens = expr.into_token_stream();
                     return (deps, None);
+                }
+            }
+            // formatting macros
+            "assert" | "assert_eq" | "assert_ne" | "debug_assert" | "debug_assert_eq"
+            | "debug_assert_ne" | "eprint" | "eprintln" | "format" | "format_args" | "panic"
+            | "print" | "println" => {
+                if let Ok(mut format) = mac.parse_body::<ExprList>() {
+                    let mut unit_deps = UnitDeps::new();
+                    for expr in format.exprs.iter_mut().skip(1) {
+                        // interpret assignment as providing named parameter
+                        if let Expr::Assign(assign) = expr {
+                            unit_deps.extend(self.expr(&mut assign.right, nested_tracked));
+                        } else {
+                            unit_deps.extend(self.expr(expr, nested_tracked));
+                        }
+                    }
+                    mac.tokens = format.into_token_stream();
+                    return (unit_deps, None);
                 }
             }
             "dbg" => {
@@ -262,19 +283,11 @@ impl Function {
                     }
                 }
             }
-            "format" | "format_args" => {
-                if let Ok(mut format) = mac.parse_body::<ExprList>() {
-                    let mut unit_deps = UnitDeps::new();
-                    for expr in format.exprs.iter_mut().skip(1) {
-                        // interpret assignment as providing named parameter
-                        if let Expr::Assign(assign) = expr {
-                            unit_deps.extend(self.expr(&mut assign.right, nested_tracked));
-                        } else {
-                            unit_deps.extend(self.expr(expr, nested_tracked));
-                        }
-                    }
-                    mac.tokens = format.into_token_stream();
-                    return (unit_deps, None);
+            "enclose" => {
+                if let Ok(mut enclose) = mac.parse_body::<EncloseBody>() {
+                    let deps = self.expr(&mut enclose.expr, nested_tracked);
+                    mac.tokens = enclose.into_token_stream();
+                    return (deps, None);
                 }
             }
             "matches" => {
@@ -315,7 +328,6 @@ impl Function {
                 }
             }
             "write" | "writeln" => {
-                // TODO: update dependencies of last write parameter
                 if let Ok(mut write) = mac.parse_body::<ExprList>() {
                     let mut unit_deps = UnitDeps::new();
                     for expr in write.exprs.iter_mut().skip(1) {
