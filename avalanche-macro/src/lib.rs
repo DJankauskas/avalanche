@@ -237,7 +237,7 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
                     };
                 )*
                 let state = ::std::option::Option::unwrap(::std::any::Any::downcast_mut::<#state_name>(&mut **context.state));
-                #( let (#hook_name, #hook_updates_name) = <#hook_type>::hook(
+                #( let #hook_name = <#hook_type>::hook(
                     &mut state.#hook_name,
                     ::std::clone::Clone::clone(&context.component_pos),
                     context.scheduler,

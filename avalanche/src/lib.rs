@@ -347,13 +347,7 @@ impl<T> UseState<T> {
         component_pos: ComponentPos<'a>,
         scheduler: &Shared<dyn Scheduler>,
         get_self: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
-    ) -> (
-        impl FnOnce(T) -> (Tracked<&'a T>, UseStateSetter<T>),
-        UseStateUpdates,
-    ) {
-        let updates = UseStateUpdates {
-            update: self.updated,
-        };
+    ) -> impl FnOnce(T) -> (Tracked<&'a T>, UseStateSetter<T>) {
         let scheduler = scheduler.clone();
         let closure = move |val| {
             let updated = self.updated;
@@ -368,7 +362,7 @@ impl<T> UseState<T> {
             let setter = UseStateSetter::new(component_pos, scheduler, get_self);
             (state_ref, setter)
         };
-        (closure, updates)
+        closure
     }
 }
 
@@ -449,47 +443,15 @@ impl<T: 'static> UseStateSetter<T> {
     }
 }
 
-#[doc(hidden)]
-pub struct UseStateUpdates {
-    update: bool,
-}
-
-impl UseStateUpdates {
-    #[doc(hidden)]
-    /// Used to get the status of a portion of returned state
-    /// Usage: if the return type is an array or tuple, passing a &[num] will
-    /// yield whether that element has been updated. If that element is also
-    /// a tuple or array, this logic applies recursively.
-    // TODO: actually use this model!
-    // Or replace it with something else!
-    // For now, each element corresponds to an index within
-    pub fn index(&self, idx: &[usize]) -> bool {
-        // match idx {
-        //     //corresponds to &'a T in hook()
-        //     [0, ..] => self.update,
-        //     //corresponds to UseStateSetter
-        //     //this never meaningfully changes
-        //     [1, ..] => false,
-        //     _ => self.update,
-        // }
-        for elem in idx {
-            if *elem == 0 && self.update {
-                return true;
-            }
-        }
-        false
-    }
-}
-
 #[derive(Copy, Clone)]
 pub struct Tracked<T> {
     /// The value of the tracked value
     /// Public due to implementation of [tracked!] macro,
-    /// but not semver stable and must only be used internally 
+    /// but not semver stable and must only be used internally
     #[doc(hidden)]
     pub __avalanche_internal_value: T,
     /// Whether the tracked value has been updated since the last render
-    updated: bool
+    updated: bool,
 }
 
 impl<T> Tracked<T> {
@@ -497,9 +459,9 @@ impl<T> Tracked<T> {
     pub fn new(value: T, updated: bool) -> Self {
         Self {
             __avalanche_internal_value: value,
-            updated
+            updated,
         }
-    } 
+    }
 
     /// Returns whether the tracked value has been updated since the last render.
     #[doc(hidden)]
@@ -509,25 +471,25 @@ impl<T> Tracked<T> {
 }
 
 // TODO: Add examples.
-/// Unwraps a [Tracked] value. 
-/// Within a `#[component]` or `#[hook]` context, wraps the expression containing it in a [Tracked] instance maintaining 
+/// Unwraps a [Tracked] value.
+/// Within a `#[component]` or `#[hook]` context, wraps the expression containing it in a [Tracked] instance maintaining
 /// whether any of the `tracked!()` values were updated.
 /// Otherwise, provides access to the tracked value without rewrapping the containing expression.
 #[macro_export]
 macro_rules! tracked {
     ($e:expr) => {
         $e.__avalanche_internal_value
-    }
+    };
 }
 
 // TODO: Add examples.
-/// Yields whether a [Tracked] value has been updated. 
-/// Within a `#[component]` or `#[hook]` context, wraps the expression containing it in a [Tracked] instance maintaining 
-/// whether any of the `tracked!()` or `updated!()` values were updated. 
+/// Yields whether a [Tracked] value has been updated.
+/// Within a `#[component]` or `#[hook]` context, wraps the expression containing it in a [Tracked] instance maintaining
+/// whether any of the `tracked!()` or `updated!()` values were updated.
 /// Otherwise, returns a `bool`.
 #[macro_export]
 macro_rules! updated {
     ($e:expr) => {
         ::avalanche::Tracked::internal_updated(&$e)
-    }
+    };
 }
