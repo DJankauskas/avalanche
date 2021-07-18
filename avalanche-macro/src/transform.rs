@@ -61,11 +61,20 @@ struct Closure {
 #[derive(Default, Debug)]
 pub(crate) struct Scope {
     pub(crate) vars: Vec<Var>,
+    /// Whether the scope is that of a function or closure
+    pub(crate) function: bool
 }
 
 impl Scope {
     pub(crate) fn new() -> Self {
         Default::default()
+    }
+
+    pub(crate) fn function() -> Self {
+        Self {
+            vars: Vec::new(),
+            function: true
+        }
     }
 }
 
@@ -138,10 +147,17 @@ impl Function {
         None
     }
 
-    pub(crate) fn get_var_immediate_scope(&self, name: &str) -> Option<&Var> {
-        self.scopes
-            .last()
-            .and_then(|scope| scope.vars.iter().rev().find(|item| item.name == name))
+    pub(crate) fn get_var_function_scope(&self, name: &str) -> Option<&Var> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(var) = scope.vars.iter().rev().find(|item| item.name == name) {
+                return Some(var);
+            }
+            // if we have reached a function scope and found nothing, abort search
+            else if scope.function {
+                break;
+            }
+        }
+        None
     }
 
     pub(crate) fn block(&mut self, block: &mut Block) -> UnitDeps {
@@ -155,7 +171,7 @@ impl Function {
             // TODO: fix let a = tracked!(a); currently this would not report a as a dependency
             stmt_deps
                 .tracked_deps
-                .retain(|dep| self.get_var_immediate_scope(&dep.to_string()).is_none());
+                .retain(|dep| self.get_var_function_scope(&dep.to_string()).is_none());
             deps.extend(stmt_deps);
         }
 
@@ -174,7 +190,7 @@ impl Function {
             // TODO: fix let a = tracked!(a); currently this would not report a as a dependency
             stmt_deps
                 .tracked_deps
-                .retain(|dep| self.get_var_immediate_scope(&dep.to_string()).is_none());
+                .retain(|dep| self.get_var_function_scope(&dep.to_string()).is_none());
             deps.extend(stmt_deps);
         }
 
@@ -448,7 +464,7 @@ impl Function {
     /// Returns trabsformed closure expr, which handles marking a closure as updated
     /// TODO: fix this limitation
     fn closure(&mut self, closure: &mut syn::ExprClosure, args_deps: UnitDeps) -> (UnitDeps, Expr) {
-        let mut closure_scope = Scope::new();
+        let mut closure_scope = Scope::function();
 
         for input in closure.inputs.iter() {
             let vars = from_pat(&input, args_deps.clone());
@@ -459,7 +475,11 @@ impl Function {
         // TODO: correct nested tracked arg?
         let deps = match &mut *closure.body {
             Expr::Block(expr) => self.closure_block(&mut expr.block),
-            _ => self.expr(&mut closure.body, false),
+            _ => {
+                let mut deps = self.expr(&mut closure.body, false);
+                deps.tracked_deps.retain(|dep| self.get_var_function_scope(&dep.to_string()).is_none());
+                deps
+            },
         };
         let closure_body = &closure.body;
         closure.body = parse_quote! {
