@@ -73,6 +73,7 @@ version = "0.0.0"
 dependencies = [
  "avalanche",
  "avalanche-web",
+ "console_error_panic_hook",
  "futures",
  "js-sys",
  "wasm-bindgen",
@@ -280,6 +281,7 @@ version = "0.1.0"
 dependencies = [
  "avalanche",
  "avalanche-web",
+ "console_error_panic_hook",
  "futures",
  "js-sys",
  "wasm-bindgen",

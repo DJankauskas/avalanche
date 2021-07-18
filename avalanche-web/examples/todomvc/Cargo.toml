@@ -31,6 +31,8 @@ avalanche-web = {path = "../../../avalanche-web"}
 # allocator, so it's not enabled by default.
 wee_alloc = { version = "0.4", optional = true }
 
+console_error_panic_hook = "0.1.6"
+
 # These crates are used for running unit tests.
 [dev-dependencies]
 wasm-bindgen-test = "0.2"
