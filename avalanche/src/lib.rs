@@ -6,6 +6,7 @@ pub mod shared;
 pub(crate) mod tree;
 /// An in-memory representation of the current component tree.
 pub mod vdom;
+pub mod tracked;
 
 use downcast_rs::{impl_downcast, Downcast};
 use std::{any::Any, rc::Rc};
@@ -14,6 +15,9 @@ use renderer::{NativeType, Scheduler};
 use shared::Shared;
 use tree::NodeId;
 use vdom::{update_vnode, VDom, VNode};
+
+pub use tracked::Tracked;
+pub use tracked::UseVec;
 
 /// An attribute macro used to define [Component](Component)s.
 ///
@@ -359,7 +363,7 @@ impl<T> UseState<T> {
                 self.updated = true;
             };
             let state_ref = Tracked::new(self.state.as_ref().unwrap(), updated);
-            let setter = UseStateSetter::new(component_pos, scheduler, get_self);
+            let setter = UseStateSetter::new(component_pos, scheduler, Rc::new(get_self));
             (state_ref, setter)
         };
         closure
@@ -371,7 +375,7 @@ pub struct UseStateSetter<T: 'static> {
     vdom: Shared<VDom>,
     vnode: NodeId<VNode>,
     scheduler: Shared<dyn Scheduler>,
-    get_mut: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
+    get_mut: Rc<dyn Fn(&mut Box<dyn Any>) -> &mut UseState<T>>,
 }
 
 impl<T: 'static> Clone for UseStateSetter<T> {
@@ -380,7 +384,7 @@ impl<T: 'static> Clone for UseStateSetter<T> {
             vdom: self.vdom.clone(),
             vnode: self.vnode,
             scheduler: self.scheduler.clone(),
-            get_mut: self.get_mut,
+            get_mut: self.get_mut.clone(),
         }
     }
 }
@@ -389,7 +393,7 @@ impl<T: 'static> UseStateSetter<T> {
     fn new(
         component_pos: ComponentPos,
         scheduler: Shared<dyn Scheduler>,
-        get_mut: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
+        get_mut: Rc<dyn Fn(&mut Box<dyn Any>) -> &mut UseState<T>>,
     ) -> Self {
         Self {
             vdom: component_pos.vdom.clone(),
@@ -406,7 +410,7 @@ impl<T: 'static> UseStateSetter<T> {
     /// on its component's rerender. Note that `update` always triggers a rerender, and the state value
     /// is marked as updated, even if the given function performs no mutations.
     pub fn update<F: FnOnce(&mut T) + 'static>(&self, f: F) {
-        let get_mut = self.get_mut;
+        let get_mut = self.get_mut.clone();
         let vdom_clone = self.vdom.clone();
         let vdom_clone_2 = vdom_clone.clone();
         let vnode_copy = self.vnode;
@@ -441,55 +445,4 @@ impl<T: 'static> UseStateSetter<T> {
     pub fn set(&self, val: T) {
         self.update(move |state| *state = val);
     }
-}
-
-#[derive(Copy, Clone)]
-pub struct Tracked<T> {
-    /// The value of the tracked value
-    /// Public due to implementation of [tracked!] macro,
-    /// but not semver stable and must only be used internally
-    #[doc(hidden)]
-    pub __avalanche_internal_value: T,
-    /// Whether the tracked value has been updated since the last render
-    updated: bool,
-}
-
-impl<T> Tracked<T> {
-    // TODO: should this be a public api?
-    pub fn new(value: T, updated: bool) -> Self {
-        Self {
-            __avalanche_internal_value: value,
-            updated,
-        }
-    }
-
-    /// Returns whether the tracked value has been updated since the last render.
-    #[doc(hidden)]
-    pub fn internal_updated(&self) -> bool {
-        self.updated
-    }
-}
-
-// TODO: Add examples.
-/// Unwraps a [Tracked] value.
-/// Within a `#[component]` or `#[hook]` context, wraps the expression containing it in a [Tracked] instance maintaining
-/// whether any of the `tracked!()` values were updated.
-/// Otherwise, provides access to the tracked value without rewrapping the containing expression.
-#[macro_export]
-macro_rules! tracked {
-    ($e:expr) => {
-        $e.__avalanche_internal_value
-    };
-}
-
-// TODO: Add examples.
-/// Yields whether a [Tracked] value has been updated.
-/// Within a `#[component]` or `#[hook]` context, wraps the expression containing it in a [Tracked] instance maintaining
-/// whether any of the `tracked!()` or `updated!()` values were updated.
-/// Otherwise, returns a `bool`.
-#[macro_export]
-macro_rules! updated {
-    ($e:expr) => {
-        ::avalanche::Tracked::internal_updated(&$e)
-    };
 }

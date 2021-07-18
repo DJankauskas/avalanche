@@ -1,4 +1,4 @@
-use avalanche::{component, enclose, tracked, UseState, View};
+use avalanche::{component, enclose, tracked, updated, View, UseState, UseVec};
 use avalanche_web::components::{
     Button, Div, Footer, Header, Input, Label, Li, Section, Span, Strong, Text, Ul, A, H1,
 };
@@ -39,15 +39,16 @@ impl Filter {
     }
 }
 
-#[component(items = UseState<Vec<Item>>, monotonic_id = UseState<u32>, editing = UseState<Option<u32>>, filter = UseState<Filter>)]
+#[component(items = UseVec<Item>, monotonic_id = UseState<u32>, editing = UseState<Option<u32>>, filter = UseState<Filter>)]
 fn Todo() -> View {
     let (editing, set_editing) = editing(None);
     let (filter, set_filter) = filter(Filter::All);
-    let (items, update_items) = items(Vec::new());
+    let (items, update_items) = items();
     let (monotonic_id, update_monotonic_id) = monotonic_id(0);
     let monotonic_id = *tracked!(monotonic_id);
+    let items_updated = updated!(items);
 
-    let num_completed = tracked!(items).iter().filter(|item| item.completed).count();
+    let num_completed = tracked!(items).iter().filter(|item| tracked!(item).completed).count();
     let num_active = tracked!(items).len() - tracked!(num_completed);
 
     let clear_completed = enclose!(update_items; move |_| {
@@ -62,27 +63,27 @@ fn Todo() -> View {
         .filter(|(_, item)| {
             match tracked!(filter) {
                 Filter::All => true,
-                Filter::Completed => item.completed,
-                Filter::Active => !item.completed
+                Filter::Completed => tracked!(item).completed,
+                Filter::Active => !tracked!(item).completed
             }
         })
         .map(|(i, item)| {
-            let id = item.id;
+            let id = tracked!(item).id;
             Li!(
                 class: format!(
                     "{} {}",
-                    if item.completed {
+                    if tracked!(item).completed {
                         "completed"
                     } else {
                         ""
                     },
-                    if *tracked!(editing) == Some(item.id) {
+                    if *tracked!(editing) == Some(tracked!(item).id) {
                         "editing"
                     } else {
                         ""
                     }
                 ),
-                key: item.id,
+                key: tracked!(item).id,
                 [
                     Div!(
                         class: "view",
@@ -90,20 +91,22 @@ fn Todo() -> View {
                             Input!(
                                 class: "toggle",
                                 type_: "checkbox",
-                                checked: item.completed,
+                                checked: tracked!(item).completed,
                                 on_click: enclose!(update_items; move |_| {
+                                    tracked!(items_updated);
                                     update_items.update(move |items| items[i].completed = !items[i].completed)
                                 })
                             ),
                             Label!(
-                                child: Text!(item.text.clone()),
+                                child: Text!(tracked!(item).text.clone()),
                                 on_double_click: enclose!(set_editing; move |_| {
-                                    set_editing.set(Some(id))
+                                    set_editing.set(Some(tracked!(id)))
                                 })
                             ),
                             Button!(
                                 class: "destroy",
                                 on_click: enclose!(update_items; move |_| {
+                                    tracked!(items_updated);
                                     update_items.update(move |items| {
                                         items.remove(i);
                                     })
@@ -111,11 +114,11 @@ fn Todo() -> View {
                             )
                         ]
                     ),
-                    (*tracked!(editing) == Some(item.id)).then(|| Input!(
+                    (*tracked!(editing) == Some(tracked!(item).id)).then(|| Input!(
                         class: "edit",
                         id: "edit",
                         auto_focus: true,
-                        value: item.text.clone(),
+                        value: tracked!(item).text.clone(),
                         on_key_down: enclose!(set_editing; move |e| {
                             let which = e.which();
                             if which == ENTER_KEY {
@@ -125,6 +128,7 @@ fn Todo() -> View {
                             }
                         }),
                         on_blur: enclose!(update_items, set_editing; move |e| {
+                            tracked!(items_updated);
                             update_items.update(move |items| items[i].text = e.current_target().unwrap().value());
                             set_editing.set(None);
                         })
@@ -148,6 +152,7 @@ fn Todo() -> View {
                         auto_focus: true,
                         on_key_down: enclose!(update_items; move |e| {
                             if e.which() == ENTER_KEY {
+                                tracked!(items_updated);
                                 let current_target = e.current_target().unwrap();
                                 let value = current_target.value();
                                 update_items.update(move |items| {
@@ -175,7 +180,7 @@ fn Todo() -> View {
                         on_change: enclose!(update_items; move |e| {
                             let checked = e.current_target().unwrap().checked();
                             update_items.update(move |items| {
-                                for item in items.iter_mut() {
+                                for item in items.as_raw_vec().iter_mut() {
                                     item.completed = checked;
                                 }
                             })
@@ -250,16 +255,14 @@ fn Todo() -> View {
     )
 }
 
-// #[component(state = UseState<u8>)]
-// fn Todo() -> View {
-//     let (dummy, _) = state(0);
-//     let _unused = Text!(format!("{}", tracked!(dummy)));
-//     ().into()
-// }
-
 // This is like the `main` function, except for JavaScript.
 #[wasm_bindgen(start)]
 pub fn main_js() {
+    // This provides better error messages in debug mode.
+    // It's disabled in release mode so it doesn't bloat up the file size.
+    #[cfg(debug_assertions)]
+    console_error_panic_hook::set_once();
+
     avalanche_web::mount::<Todo>(
         web_sys::window()
             .expect("window")
