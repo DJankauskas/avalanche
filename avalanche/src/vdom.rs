@@ -25,7 +25,7 @@ pub struct VDom {
 /// A "virtual node" in the UI hierarchy. Contains the node's component,
 /// native information, and associated state.
 #[doc(hidden)]
-pub struct VNode {
+pub(crate) struct VNode {
     pub component: View,
     pub native_handle: Option<NativeHandle>,
     pub native_type: Option<NativeType>,
@@ -142,7 +142,7 @@ pub(crate) fn generate_vnode(
     let context = InternalContext {
         state: vnode.state.as_mut().unwrap(),
         component_pos: ComponentPos {
-            vnode: node,
+            node_id: node.into(),
             vdom: vdom,
         },
         scheduler,
@@ -287,7 +287,7 @@ pub(crate) fn update_vnode(
     let context = InternalContext {
         state: vnode.state.as_mut().unwrap(),
         component_pos: ComponentPos {
-            vnode: node,
+            node_id: node.into(),
             vdom: vdom,
         },
         scheduler,

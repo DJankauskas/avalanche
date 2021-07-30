@@ -1,5 +1,4 @@
 use avalanche::renderer::{NativeHandle, NativeType, Renderer, Scheduler};
-use avalanche::vdom::VNode;
 use avalanche::{Component, View};
 
 use avalanche::shared::Shared;
@@ -409,22 +408,6 @@ impl Renderer for WebRenderer {
             }
             _ => panic!("Custom handlers not implemented yet."),
         };
-    }
-
-    // TODO: check for custom handler
-    fn remove_component(&mut self, vnode: &mut VNode) {
-        match &vnode.native_handle {
-            Some(handle) => {
-                let node = &handle.downcast_ref::<WebNativeHandle>().unwrap().node;
-                match node.parent_node() {
-                    Some(parent) => {
-                        parent.remove_child(node).expect("Remove from parent");
-                    }
-                    None => {}
-                }
-            }
-            None => {}
-        }
     }
 
     fn append_child(

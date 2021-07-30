@@ -1,6 +1,5 @@
 use std::any::Any;
 
-use crate::vdom::VNode;
 use crate::InternalContext;
 use crate::{Component, View};
 
@@ -91,10 +90,6 @@ pub trait Renderer {
         native_handle: &mut NativeHandle,
         component: &View,
     );
-
-    /// Destroy the native component corresponding to the `VNode`. This method will probably be removed.
-    #[deprecated]
-    fn remove_component(&mut self, vnode: &mut VNode);
 
     /// Logs the given string to a platform-appropriate destination.
     /// This method is a placeholder, and may either be elaborated or replaced with

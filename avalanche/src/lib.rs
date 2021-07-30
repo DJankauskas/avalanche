@@ -282,13 +282,27 @@ pub struct InternalContext<'a> {
 
 #[doc(hidden)]
 #[derive(Clone)]
+pub struct ComponentNodeId {
+    pub(crate) id: NodeId<VNode>
+}
+
+impl From<NodeId<VNode>> for ComponentNodeId {
+    fn from(node: NodeId<VNode>) -> Self {
+        Self {
+            id: node
+        }
+    }
+}
+
+#[doc(hidden)]
+#[derive(Clone)]
 /// Internal data structure that stores what tree a component
 /// belongs to, and its position within it
 pub struct ComponentPos<'a> {
     /// Shared value ONLY for passing to UseState
     /// within the render function this value is mutably borrowed,
     /// so exec and exec_mut will panic
-    pub vnode: NodeId<VNode>,
+    pub node_id: ComponentNodeId,
     /// Shared container to the VDom of which the [`vnode`] is a part.
     pub vdom: &'a Shared<VDom>,
 }
@@ -397,7 +411,7 @@ impl<T: 'static> UseStateSetter<T> {
     ) -> Self {
         Self {
             vdom: component_pos.vdom.clone(),
-            vnode: component_pos.vnode,
+            vnode: component_pos.node_id.id,
             scheduler,
             get_mut,
         }
