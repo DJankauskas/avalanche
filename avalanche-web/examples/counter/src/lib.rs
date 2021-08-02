@@ -1,4 +1,4 @@
-use avalanche::{component, UseState, View, tracked};
+use avalanche::{component, View, tracked, state};
 use avalanche_web::components::{Button, Div, Text, H2};
 use wasm_bindgen::prelude::*;
 
@@ -10,9 +10,9 @@ use wasm_bindgen::prelude::*;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-#[component(count = UseState<u64>)]
+#[component]
 fn Counter() -> View {
-    let (count, set_count) = count(0);
+    let (count, set_count) = state(self, || 0);
     Div!([
         H2!(
             child: Text!("Counter!"),

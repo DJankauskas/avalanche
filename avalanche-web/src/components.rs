@@ -6,7 +6,7 @@ use wasm_bindgen::JsCast;
 
 use crate::events::*;
 use avalanche::renderer::{HasChildrenMarker, NativeType};
-use avalanche::{Component, InternalContext, View};
+use avalanche::{Component, Context, View};
 
 /// Represents a text node.
 #[derive(Clone, PartialEq)]
@@ -58,7 +58,7 @@ impl TextBuilder {
 impl Component for Text {
     type Builder = TextBuilder;
 
-    fn render(&self, _: InternalContext) -> View {
+    fn render(&self, _: Context) -> View {
         ().into()
     }
     fn native_type(&self) -> Option<NativeType> {
@@ -117,7 +117,7 @@ impl RawElement {
 impl Component for RawElement {
     type Builder = ();
 
-    fn render(&self, _context: InternalContext) -> View {
+    fn render(&self, _: Context) -> View {
         HasChildrenMarker {
             children: self.children.clone(),
         }
@@ -211,7 +211,7 @@ macro_rules! def_component {
         impl ::avalanche::Component for $tag {
             type Builder = $tag_builder;
 
-            fn render(&self, _: InternalContext) -> View {
+            fn render(&self, _: Context) -> View {
                 unreachable!()
             }
 

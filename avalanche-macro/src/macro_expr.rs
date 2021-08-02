@@ -1,42 +1,8 @@
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 use syn::parse::{discouraged::Speculative, Parse, ParseStream};
-use syn::{punctuated::Punctuated, Type};
+use syn::{punctuated::Punctuated};
 use syn::{Expr, Ident, Result, Token};
-
-pub(crate) struct Hooks {
-    pub hooks: Punctuated<Hook, Token![,]>,
-}
-
-impl Parse for Hooks {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let hooks = Punctuated::parse_terminated(input)?;
-        let ret = Hooks { hooks };
-
-        Ok(ret)
-    }
-}
-
-pub(crate) struct Hook {
-    pub name: Ident,
-    pub ty: Type,
-    pub equal_token: Token![=],
-}
-
-impl Parse for Hook {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let name = input.parse()?;
-        let equal_token = input.parse()?;
-        let ty = input.parse()?;
-        let hook = Hook {
-            name,
-            ty,
-            equal_token,
-        };
-
-        Ok(hook)
-    }
-}
 
 pub(crate) struct EncloseBody {
     pub idents: Punctuated<Ident, Token![,]>,
@@ -244,7 +210,7 @@ impl ToTokens for ComponentFieldValue {
 pub(crate) struct ComponentBuilder {
     pub named_init: Punctuated<ComponentFieldValue, Token![,]>,
     pub trailing_init: Option<Expr>,
-    pub trailing_comma_token: Option<Token![,]>,
+    _trailing_comma_token: Option<Token![,]>,
 }
 
 impl Parse for ComponentBuilder {
@@ -263,7 +229,7 @@ impl Parse for ComponentBuilder {
                             return Ok(ComponentBuilder {
                                 named_init,
                                 trailing_init: None,
-                                trailing_comma_token: None,
+                                _trailing_comma_token: None,
                             });
                         } else {
                             return Err(input.error("expected , or )"));
@@ -284,7 +250,7 @@ impl Parse for ComponentBuilder {
         Ok(ComponentBuilder {
             named_init,
             trailing_init,
-            trailing_comma_token,
+            _trailing_comma_token: trailing_comma_token,
         })
     }
 }

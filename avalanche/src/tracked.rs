@@ -1,6 +1,6 @@
-use std::{any::Any, iter::FusedIterator, ops::{Bound, Deref, DerefMut, Index, IndexMut}, rc::Rc};
+use std::{cell::Cell, iter::FusedIterator, ops::{Bound, Deref, DerefMut, Index, IndexMut}};
 
-use crate::{renderer::Scheduler, shared::Shared, ComponentPos, UseState, UseStateSetter};
+use crate::hooks::Gen;
 
 #[derive(Copy, Clone)]
 pub struct Tracked<T> {
@@ -53,61 +53,14 @@ macro_rules! updated {
     };
 }
 
-pub struct UseVec<T: 'static> {
-    state: UseState<Vec<T>>,
-}
-
-impl<T> UseVec<T> {
-    /// This function is called by the framework. Users gain access to a reference to the
-    /// state type and a setter when they call it.
-    #[doc(hidden)]
-    pub fn hook<'a>(
-        &'a mut self,
-        component_pos: ComponentPos<'a>,
-        scheduler: &Shared<dyn Scheduler>,
-        get_self: fn(&mut Box<dyn Any>) -> &mut UseVec<T>,
-    ) -> impl FnOnce() -> (Tracked<&'a Vec<T>>, UseStateSetter<Vec<T>>) {
-        let scheduler = scheduler.clone();
-        let closure = move || {
-            let updated = self.state.updated;
-            if self.state.updated {
-                self.state.updated = false;
-            }
-            if let None = self.state.state {
-                self.state.state = Some(Vec::new());
-                self.state.updated = true;
-            };
-            if updated {
-                self.state.state.as_mut().unwrap().current_gen += 1;
-            }
-            let state_ref = Tracked::new(self.state.state.as_ref().unwrap(), updated);
-            let setter = UseStateSetter::new(
-                component_pos,
-                scheduler,
-                Rc::new(move |val| &mut get_self(val).state),
-            );
-            (state_ref, setter)
-        };
-        closure
-    }
-}
-
-impl<T> Default for UseVec<T> {
-    fn default() -> Self {
-        Self {
-            state: Default::default(),
-        }
-    }
-}
-
 pub struct Vec<T> {
     /// The elements being tracked by the data structure.
-    data: std::vec::Vec<T>,
+    pub(crate) data: std::vec::Vec<T>,
     /// The generation during which corresponding elements of `data` (by index)
     /// were last created or modified. This value can never be 0.
-    gens: std::vec::Vec<u32>,
+    pub(crate) gens: std::vec::Vec<Gen>,
     /// The current generation of data modification of the data structure.
-    current_gen: u32,
+    pub(crate) curr_gen: Cell<Gen>,
 }
 
 pub struct VecMutRef<'a, T> {
@@ -134,23 +87,23 @@ impl<'a, T> Drop for VecMutRef<'a, T> {
     /// updated.
     fn drop(&mut self) {
         let data_len = self.vec.data.len();
-        let new_gen = self.vec.current_gen + 1;
+        let curr_gen = self.vec.curr_gen.get();
         if data_len > self.vec.gens.len() {
-            self.vec.gens.fill(new_gen);
-            self.vec.gens.resize(data_len, new_gen);
+            self.vec.gens.fill(curr_gen);
+            self.vec.gens.resize(data_len, curr_gen);
         } else {
-            self.vec.gens.resize(data_len, new_gen);
-            self.vec.gens.fill(new_gen);
+            self.vec.gens.resize(data_len, curr_gen);
+            self.vec.gens.fill(curr_gen);
         }
     }
 }
 
 impl<T> Vec<T> {
-    fn new() -> Self {
+    pub(crate) fn new(data: std::vec::Vec<T>, gen: Gen) -> Self {
         Self {
-            data: std::vec::Vec::new(),
-            gens: std::vec::Vec::new(),
-            current_gen: 0,
+            gens: vec![gen.new(); data.len()],
+            data,
+            curr_gen: Cell::new(gen),
         }
     }
 
@@ -172,7 +125,7 @@ impl<T> Vec<T> {
             .zip(self.gens.iter())
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                updated: *gen >= self.current_gen,
+                updated: gen.updated(self.curr_gen.get()),
             })
     }
 
@@ -186,7 +139,7 @@ impl<T> Vec<T> {
             .zip(self.gens.windows(size))
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                updated: gen.iter().any(|&val| val >= self.current_gen),
+                updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
             })
     }
 
@@ -200,7 +153,7 @@ impl<T> Vec<T> {
             .zip(self.gens.chunks(chunk_size))
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                updated: gen.iter().any(|&val| val >= self.current_gen),
+                updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
             })
     }
 
@@ -214,7 +167,7 @@ impl<T> Vec<T> {
             .zip(self.gens.chunks_exact(chunk_size))
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                updated: gen.iter().any(|&val| val >= self.current_gen),
+                updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
             })
     }
 
@@ -228,7 +181,7 @@ impl<T> Vec<T> {
             .zip(self.gens.rchunks(chunk_size))
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                updated: gen.iter().any(|&val| val >= self.current_gen),
+                updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
             })
     }
 
@@ -242,13 +195,13 @@ impl<T> Vec<T> {
             .zip(self.gens.rchunks_exact(chunk_size))
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                updated: gen.iter().any(|&val| val >= self.current_gen),
+                updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
             })
     }
 
     pub fn push(&mut self, value: T) {
         self.data.push(value);
-        self.gens.push(self.current_gen + 1);
+        self.gens.push(self.curr_gen.get().new());
     }
 
     pub fn pop(&mut self) -> Option<T> {
@@ -258,7 +211,7 @@ impl<T> Vec<T> {
 
     pub fn insert(&mut self, index: usize, element: T) {
         self.data.insert(index, element);
-        self.gens.insert(index, self.current_gen + 1);
+        self.gens.insert(index, self.curr_gen.get().new());
     }
 
     pub fn remove(&mut self, index: usize) -> T {
@@ -282,12 +235,12 @@ impl<T> Vec<T> {
         self.data.retain(|val| {
             let retain = f(val);
             if !retain {
-                gens_mut[gens_idx] = 0;
+                gens_mut[gens_idx] = Gen { gen: 0 };
             }
             gens_idx += 1;
             retain
         });
-        self.gens.retain(|&gen| gen != 0);
+        self.gens.retain(|&gen| gen != Gen { gen: 0 });
     }
 
     pub fn reserve(&mut self, additional: usize) {
@@ -324,7 +277,7 @@ impl<T, Idx: TrackedVecIndex<T>> Index<Idx> for Vec<T> {
 
 impl<T, Idx: TrackedVecIndex<T>> IndexMut<Idx> for Vec<T> {
     fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
-        self.gens[index.span()].fill(self.current_gen + 1);
+        self.gens[index.span()].fill(self.curr_gen.get().new());
         index.get_mut(self)
     }
 }

@@ -1,23 +1,24 @@
+pub mod hooks;
 /// A trait providing platform-specific rendering code.
 pub mod renderer;
 /// A reference-counted interior-mutable type designed to reduce runtime borrow rule violations.
 pub mod shared;
+pub mod tracked;
 /// A `Vec`-backed implementation of a tree, with a relatively friendly mutation api.
 pub(crate) mod tree;
 /// An in-memory representation of the current component tree.
 pub mod vdom;
-pub mod tracked;
 
 use downcast_rs::{impl_downcast, Downcast};
 use std::{any::Any, rc::Rc};
 
-use renderer::{NativeType, Scheduler};
+use renderer::NativeType;
 use shared::Shared;
 use tree::NodeId;
-use vdom::{update_vnode, VDom, VNode};
+use vdom::{VDom, VNode};
 
+pub use hooks::{state, vec, Context};
 pub use tracked::Tracked;
-pub use tracked::UseVec;
 
 /// An attribute macro used to define [Component](Component)s.
 ///
@@ -197,7 +198,7 @@ pub trait Component: 'static {
         Box::new(())
     }
 
-    fn render(&self, context: InternalContext) -> View;
+    fn render(&self, ctx: Context) -> View;
 
     fn updated(&self) -> bool;
 
@@ -218,7 +219,7 @@ impl Component for () {
     // TODO: make ! when never stabilizes
     type Builder = ();
 
-    fn render(&self, _: InternalContext) -> View {
+    fn render(&self, _: Context) -> View {
         unreachable!()
     }
     fn updated(&self) -> bool {
@@ -232,7 +233,7 @@ impl Component for () {
 pub trait DynComponent: Downcast + 'static {
     fn init_state(&self) -> Box<dyn Any>;
 
-    fn render(&self, context: InternalContext) -> View;
+    fn render(&self, ctx: Context) -> View;
 
     fn native_type(&self) -> Option<NativeType>;
 
@@ -250,8 +251,8 @@ impl<T: Component> DynComponent for T {
         Component::init_state(self)
     }
 
-    fn render(&self, context: InternalContext) -> View {
-        Component::render(self, context)
+    fn render(&self, ctx: Context) -> View {
+        Component::render(self, ctx)
     }
 
     fn native_type(&self) -> Option<NativeType> {
@@ -272,30 +273,19 @@ impl<T: Component> DynComponent for T {
 }
 
 #[doc(hidden)]
-/// Provided as an argument to the [`Component::render`] method
-/// to provide hooks access to component state and other data.
-pub struct InternalContext<'a> {
-    pub state: &'a mut Box<dyn Any>,
-    pub component_pos: ComponentPos<'a>,
-    pub scheduler: &'a Shared<dyn Scheduler>,
-}
-
-#[doc(hidden)]
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct ComponentNodeId {
-    pub(crate) id: NodeId<VNode>
+    pub(crate) id: NodeId<VNode>,
 }
 
 impl From<NodeId<VNode>> for ComponentNodeId {
     fn from(node: NodeId<VNode>) -> Self {
-        Self {
-            id: node
-        }
+        Self { id: node }
     }
 }
 
 #[doc(hidden)]
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 /// Internal data structure that stores what tree a component
 /// belongs to, and its position within it
 pub struct ComponentPos<'a> {
@@ -305,158 +295,4 @@ pub struct ComponentPos<'a> {
     pub node_id: ComponentNodeId,
     /// Shared container to the VDom of which the [`vnode`] is a part.
     pub vdom: &'a Shared<VDom>,
-}
-
-/// A hook that allows a component to keep persistent state across renders.
-///
-/// [UseState<T>](UseState) takes a type parameter specifying the type of the state variable the hook manages.
-/// This hook injects a function `impl FnOnce(T) -> (&T, UseStateSetter)` into a component.
-/// To use it, call the function with your desired default value for `T`. If the function has not been called before,
-/// then the state will be initialized to this value. The return value contains a reference to the current state,
-/// and the setter [UseStateSetter<T>](UseStateSetter). `&T`'s lifetime is only valid within the component's render
-/// function, but [UseStateSetter<T>](UseStateSetter) may be freely moved and cloned.
-///
-/// To update the state, use the [set](UseStateSetter::set) or [update](UseStateSetter::update) methods on the setter variable.
-///
-/// # Example
-/// ```rust
-/// use avalanche::{component, tracked, View, UseState};
-/// use avalanche_web::components::{Div, H2, Button, Text};
-///
-/// #[component(count = UseState<u64>)]
-/// fn Counter() -> View {
-///     let (count, set_count) = count(0);
-///     Div!(
-///         children: [
-///             H2!(
-///                 child: Text!("Counter!"),
-///             ),
-///             Button!(
-///                 on_click: move |_| set_count.update(|count| *count += 1),
-///                 child: Text!("+")
-///             ),
-///             Text!(tracked!(count))
-///         ]
-///     )
-/// }
-/// ```
-/// __Adapted from the `avalanche_web`
-/// [counter example.](https://github.com/DJankauskas/avalanche/blob/38ec4ccb83f93550c7d444351fa395708505d053/avalanche-web/examples/counter/src/lib.rs)__
-pub struct UseState<T: 'static> {
-    state: Option<T>,
-    updated: bool,
-}
-
-impl<T> Default for UseState<T> {
-    fn default() -> Self {
-        Self {
-            state: None,
-            updated: false,
-        }
-    }
-}
-
-impl<T> UseState<T> {
-    /// This function is called by the framework. Users gain access to a reference to the
-    /// state type and a setter when they call it.
-    #[doc(hidden)]
-    pub fn hook<'a>(
-        &'a mut self,
-        component_pos: ComponentPos<'a>,
-        scheduler: &Shared<dyn Scheduler>,
-        get_self: fn(&mut Box<dyn Any>) -> &mut UseState<T>,
-    ) -> impl FnOnce(T) -> (Tracked<&'a T>, UseStateSetter<T>) {
-        let scheduler = scheduler.clone();
-        let closure = move |val| {
-            let updated = self.updated;
-            if self.updated {
-                self.updated = false;
-            }
-            if let None = self.state {
-                self.state = Some(val);
-                self.updated = true;
-            };
-            let state_ref = Tracked::new(self.state.as_ref().unwrap(), updated);
-            let setter = UseStateSetter::new(component_pos, scheduler, Rc::new(get_self));
-            (state_ref, setter)
-        };
-        closure
-    }
-}
-
-/// Provides a setter for a piece of state managed by [UseState<T>](UseState).
-pub struct UseStateSetter<T: 'static> {
-    vdom: Shared<VDom>,
-    vnode: NodeId<VNode>,
-    scheduler: Shared<dyn Scheduler>,
-    get_mut: Rc<dyn Fn(&mut Box<dyn Any>) -> &mut UseState<T>>,
-}
-
-impl<T: 'static> Clone for UseStateSetter<T> {
-    fn clone(&self) -> Self {
-        Self {
-            vdom: self.vdom.clone(),
-            vnode: self.vnode,
-            scheduler: self.scheduler.clone(),
-            get_mut: self.get_mut.clone(),
-        }
-    }
-}
-
-impl<T: 'static> UseStateSetter<T> {
-    fn new(
-        component_pos: ComponentPos,
-        scheduler: Shared<dyn Scheduler>,
-        get_mut: Rc<dyn Fn(&mut Box<dyn Any>) -> &mut UseState<T>>,
-    ) -> Self {
-        Self {
-            vdom: component_pos.vdom.clone(),
-            vnode: component_pos.node_id.id,
-            scheduler,
-            get_mut,
-        }
-    }
-
-    /// Takes a function that modifies the state associated with [UseStateSetter] and
-    /// triggers a rerender of its associated component.
-    ///
-    /// The update is not performed immediately; its effect will only be accessible
-    /// on its component's rerender. Note that `update` always triggers a rerender, and the state value
-    /// is marked as updated, even if the given function performs no mutations.
-    pub fn update<F: FnOnce(&mut T) + 'static>(&self, f: F) {
-        let get_mut = self.get_mut.clone();
-        let vdom_clone = self.vdom.clone();
-        let vdom_clone_2 = vdom_clone.clone();
-        let vnode_copy = self.vnode;
-        let scheduler_clone = self.scheduler.clone();
-
-        self.scheduler.exec_mut(move |scheduler| {
-            scheduler.schedule_on_ui_thread(Box::new(move || {
-                vdom_clone.exec_mut(|vdom| {
-                    let vnode = vnode_copy.get_mut(&mut vdom.tree);
-                    vnode.dirty = true;
-                    let mut_ref_to_state = get_mut(vnode.state.as_mut().unwrap());
-                    f(mut_ref_to_state.state.as_mut().unwrap());
-                    mut_ref_to_state.updated = true;
-                    update_vnode(
-                        None,
-                        vnode_copy,
-                        &mut vdom.tree,
-                        &mut vdom.renderer,
-                        &vdom_clone_2,
-                        &scheduler_clone,
-                    );
-                })
-            }));
-        });
-    }
-
-    /// Sets the state to the given value.
-    ///
-    /// The update is not performed immediately; its effect will only be accessible
-    /// on its component's rerender. Note that `set` always triggers a rerender, and the state value
-    /// is marked as updated, even if the new state is equal to the old.
-    pub fn set(&self, val: T) {
-        self.update(move |state| *state = val);
-    }
 }

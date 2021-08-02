@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use crate::InternalContext;
+use crate::hooks::Context;
 use crate::{Component, View};
 
 /// An opaque handle whose underlying type is determined by the current `Renderer`.
@@ -115,9 +115,9 @@ pub struct HasChildrenMarker {
 }
 
 impl Component for HasChildrenMarker {
-    //TODO: make ! when never stabilizes
+    // TODO: make ! when never stabilizes
     type Builder = ();
-    fn render(&self, _: InternalContext) -> View {
+    fn render(&self, _: Context) -> View {
         unreachable!()
     }
     fn updated(&self) -> bool {

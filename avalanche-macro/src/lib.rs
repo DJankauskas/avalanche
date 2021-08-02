@@ -5,14 +5,13 @@ use proc_macro::TokenStream;
 
 use proc_macro_error::{abort, emit_error, proc_macro_error};
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, punctuated::Punctuated, Item, Pat, ReturnType};
+use syn::{parse_macro_input, Item, Pat, ReturnType};
 
-use macro_expr::Hooks;
 use transform::{Dependencies, Function, Scope, Var};
 
 #[proc_macro_error]
 #[proc_macro_attribute]
-pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
+pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     let mut item = parse_macro_input!(input as Item);
 
     let item_fn = match item {
@@ -55,36 +54,6 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
     if let Some(token) = &item_fn.sig.variadic {
         abort!(token, "variadic components unsupported");
     };
-
-    let hooks = if !metadata.is_empty() {
-        let hooks = parse_macro_input!(metadata as Hooks);
-        hooks.hooks
-    } else {
-        Punctuated::new()
-    };
-
-    let mut hook_name = Vec::with_capacity(hooks.len());
-    let mut hook_type = Vec::with_capacity(hooks.len());
-    let mut hook_get_fn_name = Vec::with_capacity(hooks.len());
-    let mut hook_updates_name = Vec::with_capacity(hooks.len());
-
-    for (i, hook) in hooks.iter().enumerate() {
-        hook_name.push(&hook.name);
-        hook_type.push(&hook.ty);
-        hook_get_fn_name.push(format_ident!("get_{}_{}", hook.name, i));
-        let hook_update_ident = format_ident!("__avalanche_internal_{}_update", i);
-        hook_updates_name.push(hook_update_ident.clone());
-
-        let var = Var {
-            name: hook.name.to_string(),
-            dependencies: {
-                let mut deps = Dependencies::new();
-                deps.insert(hook.name.to_owned());
-                deps.into()
-            },
-        };
-        param_scope.vars.push(var);
-    }
 
     let inputs_len = item_fn.sig.inputs.len();
 
@@ -134,7 +103,6 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
 
     let name = &item_fn.sig.ident;
     let builder_name = format_ident!("{}Builder", name);
-    let state_name = format_ident!("{}State", name);
 
     let render_body = &item_fn.block;
     let render_body_attributes = &item_fn.attrs;
@@ -207,11 +175,6 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
             )*
         }
 
-        #[derive(::std::default::Default)]
-        #visibility struct #state_name {
-            #( #hook_name: #hook_type ),*
-        }
-
         #visibility struct #name {
             __internal_updates: ::std::primitive::u64,
             __key: std::option::Option<::std::string::String>,
@@ -225,27 +188,12 @@ pub fn component(metadata: TokenStream, input: TokenStream) -> TokenStream {
             type Builder = #builder_name;
 
             fn init_state(&self) -> ::std::boxed::Box<dyn std::any::Any> {
-                std::boxed::Box::new(<#state_name as ::std::default::Default>::default())
+                std::boxed::Box::new(())
             }
 
             #( #render_body_attributes )*
-            fn render(&self, context: avalanche::InternalContext) -> #return_type {
-                #(
-                    fn #hook_get_fn_name(state: &mut ::std::boxed::Box<::std::any::Any>) -> &mut #hook_type {
-                        let state = ::std::option::Option::unwrap(::std::any::Any::downcast_mut::<#state_name>(&mut **state));
-                        &mut state.#hook_name
-                    };
-                )*
-                let state = ::std::option::Option::unwrap(::std::any::Any::downcast_mut::<#state_name>(&mut **context.state));
-                #( let #hook_name = <#hook_type>::hook(
-                    &mut state.#hook_name,
-                    ::std::clone::Clone::clone(&context.component_pos),
-                    context.scheduler,
-                    #hook_get_fn_name
-                ); );*
-
-                let _ = state;
-                let _ = context;
+            fn render(&self, __avalanche_context: ::avalanche::Context) -> #return_type {
+                // let state = ::std::option::Option::unwrap(::std::any::Any::downcast_mut::<#state_name>(&mut **__avalanche_context.state));
 
                 let #name { #(#param_ident,)* .. } = self;
 

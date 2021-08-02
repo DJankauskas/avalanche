@@ -1,4 +1,4 @@
-use avalanche::{component, enclose, tracked, updated, View, UseState, UseVec};
+use avalanche::{component, enclose, state, tracked, updated, vec, View};
 use avalanche_web::components::{
     Button, Div, Footer, Header, Input, Label, Li, Section, Span, Strong, Text, Ul, A, H1,
 };
@@ -39,16 +39,20 @@ impl Filter {
     }
 }
 
-#[component(items = UseVec<Item>, monotonic_id = UseState<u32>, editing = UseState<Option<u32>>, filter = UseState<Filter>)]
+#[component]
 fn Todo() -> View {
-    let (editing, set_editing) = editing(None);
-    let (filter, set_filter) = filter(Filter::All);
-    let (items, update_items) = items();
-    let (monotonic_id, update_monotonic_id) = monotonic_id(0);
+    let (editing, set_editing) = state::<Option<u32>, _>(self, || None);
+    let (filter, set_filter) = state(self, || Filter::All);
+    let (items, update_items) = vec::<Item, _>(self, || vec![]);
+    let (monotonic_id, update_monotonic_id) = state(self, || 0);
+
     let monotonic_id = *tracked!(monotonic_id);
     let items_updated = updated!(items);
 
-    let num_completed = tracked!(items).iter().filter(|item| tracked!(item).completed).count();
+    let num_completed = tracked!(items)
+        .iter()
+        .filter(|item| tracked!(item).completed)
+        .count();
     let num_active = tracked!(items).len() - tracked!(num_completed);
 
     let clear_completed = enclose!(update_items; move |_| {
@@ -61,7 +65,7 @@ fn Todo() -> View {
         .iter()
         .enumerate()
         .filter(|(_, item)| {
-            match tracked!(filter) {
+            match *tracked!(filter) {
                 Filter::All => true,
                 Filter::Completed => tracked!(item).completed,
                 Filter::Active => !tracked!(item).completed

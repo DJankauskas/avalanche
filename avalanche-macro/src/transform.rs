@@ -1,9 +1,6 @@
 use proc_macro2::{Span, TokenStream};
 use std::{collections::HashSet, ops::Deref, ops::DerefMut};
-use syn::{
-    parse2, parse_quote, spanned::Spanned, token::Semi, Block, Expr, ExprPath, Ident, Lit, Pat,
-    Stmt,
-};
+use syn::{Block, Expr, ExprPath, Ident, Lit, Pat, Stmt, parse2, parse_quote, spanned::Spanned, token::Semi};
 
 // Span line and column information with proc macros is not available on stable
 // To emulate unique identities for given component instantiations,
@@ -698,9 +695,13 @@ impl Function {
             Expr::Paren(paren) => {
                 dependencies = Some(self.expr(&mut paren.expr, nested_tracked));
             }
-            Expr::Path(_) => {
+            Expr::Path(path) => {
                 // No dependencies; dependencies are only created by tracked!()
                 // macro
+
+                if path.path.is_ident("self") {
+                    path.path = Ident::new("__avalanche_context", path.path.span()).into()
+                }
             }
             Expr::Range(range) => {
                 // range.from.as_ref().map(|r| dependencies.extend(self.expr(&r).drain()));
