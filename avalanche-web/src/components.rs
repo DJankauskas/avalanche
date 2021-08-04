@@ -128,10 +128,6 @@ impl Component for RawElement {
         self.attrs_updated || self.children_updated
     }
 
-    fn init_state(&self) -> Box<dyn std::any::Any> {
-        Box::new(())
-    }
-
     fn native_type(&self) -> Option<NativeType> {
         Some(NativeType {
             handler: "oak_web",

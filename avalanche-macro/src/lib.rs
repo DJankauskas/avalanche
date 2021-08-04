@@ -187,10 +187,6 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
         impl avalanche::Component for #name {
             type Builder = #builder_name;
 
-            fn init_state(&self) -> ::std::boxed::Box<dyn std::any::Any> {
-                std::boxed::Box::new(())
-            }
-
             #( #render_body_attributes )*
             fn render(&self, __avalanche_context: ::avalanche::Context) -> #return_type {
                 // let state = ::std::option::Option::unwrap(::std::any::Any::downcast_mut::<#state_name>(&mut **__avalanche_context.state));

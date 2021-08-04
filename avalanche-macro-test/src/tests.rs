@@ -72,8 +72,6 @@ impl Renderer for TestRenderer {
         _component: &View,
     ) {
     }
-
-    fn remove_component(&mut self, _vnode: &mut avalanche::vdom::VNode) {}
 }
 
 /// A scheduler that does nothing, used for testing only
@@ -90,7 +88,7 @@ struct TestChildren {
 impl Component for TestChildren {
     type Builder = ();
 
-    fn render(&self, context: avalanche::InternalContext) -> View {
+    fn render(&self, context: avalanche::Context) -> View {
         HasChildrenMarker {
             children: self.children.clone(),
         }

@@ -10,7 +10,7 @@ pub(crate) mod tree;
 pub mod vdom;
 
 use downcast_rs::{impl_downcast, Downcast};
-use std::{any::Any, rc::Rc};
+use std::rc::Rc;
 
 use renderer::NativeType;
 use shared::Shared;
@@ -194,10 +194,6 @@ impl From<Option<View>> for View {
 pub trait Component: 'static {
     type Builder;
 
-    fn init_state(&self) -> Box<dyn Any> {
-        Box::new(())
-    }
-
     fn render(&self, ctx: Context) -> View;
 
     fn updated(&self) -> bool;
@@ -231,8 +227,6 @@ impl Component for () {
 /// implemented manually.
 #[doc(hidden)]
 pub trait DynComponent: Downcast + 'static {
-    fn init_state(&self) -> Box<dyn Any>;
-
     fn render(&self, ctx: Context) -> View;
 
     fn native_type(&self) -> Option<NativeType>;
@@ -247,10 +241,6 @@ pub trait DynComponent: Downcast + 'static {
 impl_downcast!(DynComponent);
 
 impl<T: Component> DynComponent for T {
-    fn init_state(&self) -> Box<dyn Any> {
-        Component::init_state(self)
-    }
-
     fn render(&self, ctx: Context) -> View {
         Component::render(self, ctx)
     }
