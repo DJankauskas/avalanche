@@ -125,11 +125,20 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let component = quote! {
-        #[derive(::std::default::Default)]
         #visibility struct #builder_name {
             __internal_updates: ::std::primitive::u64,
             __key: ::std::option::Option<::std::string::String>,
             #(#param_ident: ::std::option::Option<#param_type>),*
+        }
+
+        impl ::std::default::Default for #builder_name {
+            fn default() -> Self {
+                Self {
+                    __internal_updates: 0,
+                    __key: ::std::option::Option::None,
+                    #(#param_ident: ::std::option::Option::None),*
+                }
+            }
         }
 
         impl #builder_name {
@@ -175,6 +184,7 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
             )*
         }
 
+        #[derive(::std::clone::Clone)]
         #visibility struct #name {
             __internal_updates: ::std::primitive::u64,
             __key: std::option::Option<::std::string::String>,
@@ -184,14 +194,14 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
 
         #component_default_impl
 
-        impl avalanche::Component for #name {
+        impl avalanche::Component for #name where #( #param_type: ::std::clone::Clone ),* {
             type Builder = #builder_name;
 
             #( #render_body_attributes )*
             fn render(&self, __avalanche_context: ::avalanche::Context) -> #return_type {
                 // let state = ::std::option::Option::unwrap(::std::any::Any::downcast_mut::<#state_name>(&mut **__avalanche_context.state));
 
-                let #name { #(#param_ident,)* .. } = self;
+                let #name { #(#param_ident,)* .. } = ::std::clone::Clone::clone(self);
 
                 #(let #param_ident = ::avalanche::Tracked::new(#param_ident, (&self.__internal_updates & #flag) != 0);)*
 

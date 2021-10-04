@@ -195,7 +195,7 @@ fn ArrayIndex(a: u8, b: u8, c: u8) -> View {
 
     let arr3 = [1u8];
 
-    let indexed = arr3[*tracked!(c) as usize];
+    let indexed = arr3[tracked!(c) as usize];
     assert!(updated!(indexed));
 
     ().into()
@@ -236,7 +236,7 @@ fn FnCall(a: u8) -> View {
 
 #[component]
 fn Cast(a: u8) -> View {
-    let ret = *tracked!(a) as u16;
+    let ret = tracked!(a) as u16;
     assert!(updated!(ret));
 
     ().into()
@@ -245,7 +245,7 @@ fn Cast(a: u8) -> View {
 #[component]
 fn Closure(a: u8, b: u8) -> View {
     let closure1 = || {
-        let _ = (*tracked!(a), *tracked!(b));
+        let _ = (tracked!(a), tracked!(b));
     };
     assert!(updated!(closure1));
 
@@ -267,10 +267,10 @@ fn Field(a: (u8, u8), b: u8) -> View {
 
 #[component]
 fn If(a: u8, b: u8, c: u8) -> View {
-    let x = if *tracked!(a) == 0 { tracked!(b) } else { &5 };
+    let x = if tracked!(a) == 0 { tracked!(b) } else { 5 };
     assert!(updated!(x));
 
-    let y = if *tracked!(b) == 0 { tracked!(a) } else {tracked!(c)};
+    let y = if tracked!(b) == 0 { tracked!(a) } else {tracked!(c)};
     assert!(updated!(y));
 
     ().into()
@@ -284,7 +284,7 @@ fn Loop(a: u8, b: u8, c: u8) -> View {
     assert!(updated!(x));
 
     let y = loop {
-        if *tracked!(c) == 0 {
+        if tracked!(c) == 0 {
             break 0;
         }
     };
@@ -303,7 +303,7 @@ fn Match(a: u8, b: u8, c: u8) -> View {
     assert!(updated!(option));
 
 
-    let y = match *tracked!(b) {
+    let y = match tracked!(b) {
         0 => "zero",
         1 => "one",
         _ => "other",
@@ -311,7 +311,7 @@ fn Match(a: u8, b: u8, c: u8) -> View {
     assert!(!updated!(y));
     
     let z = match tracked!(b) {
-        0 if *tracked!(c) == 0 => "zero",
+        0 if tracked!(c) == 0 => "zero",
         _ => "other"
     };
     assert!(updated!(z));
@@ -321,7 +321,7 @@ fn Match(a: u8, b: u8, c: u8) -> View {
 
 #[component]
 fn Unary(a: u8) -> View {
-    let b = !*tracked!(a);
+    let b = !tracked!(a);
     
     assert!(updated!(b));
 
@@ -372,7 +372,7 @@ fn StdMacros(a: u8, b: u8, c: u8) -> View {
     let matched = matches!(tracked!(b), 1 | 2);
     assert!(!updated!(matched));
 
-    let matched = matches!(tracked!(b), 0 | 1 if *tracked!(c) > 2,);
+    let matched = matches!(tracked!(b), 0 | 1 if tracked!(c) > 2,);
     assert!(updated!(matched));
 
 
@@ -383,7 +383,7 @@ fn StdMacros(a: u8, b: u8, c: u8) -> View {
     let vec = vec![tracked!(b), tracked!(c)];
     assert!(updated!(vec));
 
-    let vec = vec![5; *tracked!(c) as usize];
+    let vec = vec![5; tracked!(c) as usize];
     assert!(updated!(vec));
 
     // testing try!
