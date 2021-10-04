@@ -1,4 +1,8 @@
-use std::{cell::Cell, iter::FusedIterator, ops::{Bound, Deref, DerefMut, Index, IndexMut}};
+use std::{
+    cell::Cell,
+    iter::FusedIterator,
+    ops::{Bound, Deref, DerefMut, Index, IndexMut},
+};
 
 use crate::hooks::Gen;
 
@@ -114,6 +118,20 @@ impl<T> Vec<T> {
     /// of what actions were performed on it, if any.
     pub fn as_raw_vec(&mut self) -> VecMutRef<T> {
         VecMutRef { vec: self }
+    }
+
+    pub fn into_iter(
+        self,
+    ) -> impl Iterator<Item = Tracked<T>> + DoubleEndedIterator + FusedIterator + ExactSizeIterator
+    {
+        let curr_gen = self.curr_gen.get();
+        self.data
+            .into_iter()
+            .zip(self.gens.into_iter())
+            .map(move |(val, gen)| Tracked {
+                __avalanche_internal_value: val,
+                updated: gen.updated(curr_gen),
+            })
     }
 
     pub fn iter<'a>(
