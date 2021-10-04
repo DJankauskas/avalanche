@@ -1,6 +1,9 @@
 use proc_macro2::{Span, TokenStream};
 use std::{collections::HashSet, ops::Deref, ops::DerefMut};
-use syn::{Block, Expr, ExprPath, Ident, Lit, Pat, Stmt, parse2, parse_quote, spanned::Spanned, token::Semi};
+use syn::{
+    parse2, parse_quote, spanned::Spanned, token::Semi, Block, Expr, ExprPath, Ident, Lit, Pat,
+    Stmt,
+};
 
 // Span line and column information with proc macros is not available on stable
 // To emulate unique identities for given component instantiations,
@@ -59,7 +62,7 @@ struct Closure {
 pub(crate) struct Scope {
     pub(crate) vars: Vec<Var>,
     /// Whether the scope is that of a function or closure
-    pub(crate) function: bool
+    pub(crate) function: bool,
 }
 
 impl Scope {
@@ -70,7 +73,7 @@ impl Scope {
     pub(crate) fn function() -> Self {
         Self {
             vars: Vec::new(),
-            function: true
+            function: true,
         }
     }
 }
@@ -357,6 +360,10 @@ impl Function {
             "tracked" | "updated" => {
                 if let Ok(tracked) = mac.parse_body::<Tracked>() {
                     let mut unit_deps = UnitDeps::new();
+                    let is_expr_trivial = matches!(
+                        tracked,
+                        Tracked::Named(_) | Tracked::Unnamed(Expr::Reference(_))
+                    );
                     let expr = match tracked {
                         Tracked::Named(ident) => {
                             unit_deps.tracked_deps.0.insert(ident.clone());
@@ -375,13 +382,20 @@ impl Function {
                     let expr_span = expr.span();
                     let transformed = if nested_tracked {
                         quote_spanned! {expr_span=> #tracked_path!(#expr)}
+                    } else if is_expr_trivial {
+                        quote_spanned! {expr_span=>
+                            #tracked_path!({
+                                __avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::Tracked::internal_updated(&#expr);
+                                #expr
+                            })
+                        }
                     } else {
                         quote_spanned! {expr_span=>
-                            {
+                            #tracked_path!({
                                 let value = #expr;
                                 __avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::Tracked::internal_updated(&value);
-                                #tracked_path!(value)
-                            }
+                                value
+                            })
                         }
                     };
                     let transformed = parse_expr(transformed);
@@ -474,9 +488,10 @@ impl Function {
             Expr::Block(expr) => self.closure_block(&mut expr.block),
             _ => {
                 let mut deps = self.expr(&mut closure.body, false);
-                deps.tracked_deps.retain(|dep| self.get_var_function_scope(&dep.to_string()).is_none());
+                deps.tracked_deps
+                    .retain(|dep| self.get_var_function_scope(&dep.to_string()).is_none());
                 deps
-            },
+            }
         };
         let closure_body = &closure.body;
         closure.body = parse_quote! {
@@ -735,7 +750,10 @@ impl Function {
             },
             // TODO: handle rest
             Expr::Struct(struct_expr) => {
-                let mut deps: Option<UnitDeps> = None;
+                let mut deps = struct_expr
+                    .rest
+                    .as_mut()
+                    .map(|mut rest| self.expr(&mut rest, nested_tracked));
                 for field in struct_expr.fields.iter_mut() {
                     match &mut deps {
                         Some(deps) => {
