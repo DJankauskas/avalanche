@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use avalanche::{component, enclose, state, tracked, updated, vec, View};
 use avalanche_web::components::{
     Button, Div, Footer, Header, Input, Label, Li, Section, Span, Strong, Text, Ul, A, H1,
@@ -73,71 +75,29 @@ fn Todo() -> View {
         })
         .map(|(i, item)| {
             let id = tracked!(item).id;
-            Li!(
-                class: format!(
-                    "{} {}",
-                    if tracked!(item).completed {
-                        "completed"
-                    } else {
-                        ""
-                    },
-                    if *tracked!(editing) == Some(tracked!(item).id) {
-                        "editing"
-                    } else {
-                        ""
-                    }
+            TodoItem!(
+                key: tracked!(id),
+                item: tracked!(item).clone(),
+                is_editing: *tracked!(editing) == Some(tracked!(id)),
+                toggle_completed: Rc::new(
+                    enclose!(update_items; move || {
+                        tracked!(items_updated);
+                        update_items.update(move |items| items[i].completed = !items[i].completed)
+                })),
+                set_editing: Rc::new(
+                    enclose!(set_editing; move |editing| {
+                        set_editing.set(editing.then(|| tracked!(id)));
+                    })
                 ),
-                key: tracked!(item).id,
-                [
-                    Div!(
-                        class: "view",
-                        [
-                            Input!(
-                                class: "toggle",
-                                type_: "checkbox",
-                                checked: tracked!(item).completed,
-                                on_click: enclose!(update_items; move |_| {
-                                    tracked!(items_updated);
-                                    update_items.update(move |items| items[i].completed = !items[i].completed)
-                                })
-                            ),
-                            Label!(
-                                child: Text!(tracked!(item).text.clone()),
-                                on_double_click: enclose!(set_editing; move |_| {
-                                    set_editing.set(Some(tracked!(id)))
-                                })
-                            ),
-                            Button!(
-                                class: "destroy",
-                                on_click: enclose!(update_items; move |_| {
-                                    tracked!(items_updated);
-                                    update_items.update(move |items| {
-                                        items.remove(i);
-                                    })
-                                })
-                            )
-                        ]
-                    ),
-                    (*tracked!(editing) == Some(tracked!(item).id)).then(|| Input!(
-                        class: "edit",
-                        id: "edit",
-                        auto_focus: true,
-                        value: tracked!(item).text.clone(),
-                        on_key_down: enclose!(set_editing; move |e| {
-                            let which = e.which();
-                            if which == ENTER_KEY {
-                                e.current_target().unwrap().blur().expect("blur");
-                            } else if which == ESCAPE_KEY {
-                                set_editing.set(None);
-                            }
-                        }),
-                        on_blur: enclose!(update_items, set_editing; move |e| {
-                            tracked!(items_updated);
-                            update_items.update(move |items| items[i].text = e.current_target().unwrap().value());
-                            set_editing.set(None);
-                        })
-                    )).into()
-                ]
+                update_item: Rc::new(
+                    enclose!(update_items; move |item| {
+                        tracked!(items_updated);
+                        match item {
+                            Some(item) => update_items.update(move |items| items[i] = item),
+                            None => update_items.update(move |items| { items.remove(i); }),
+                        }
+                    })
+                )
             )
         })
         .collect::<Vec<_>>();
@@ -254,6 +214,74 @@ fn Todo() -> View {
                         ]
                     )
                 ]
+            )).into()
+        ]
+    )
+}
+
+#[component]
+fn TodoItem(item: Item, is_editing: bool, toggle_completed: Rc<dyn Fn()>, set_editing: Rc<dyn Fn(bool)>, update_item: Rc<dyn Fn(Option<Item>)>) -> View {
+    Li!(
+        class: format!(
+            "{} {}",
+            if tracked!(&item).completed {
+                "completed"
+            } else {
+                ""
+            },
+            if tracked!(is_editing) {
+                "editing"
+            } else {
+                ""
+            }
+        ),
+        [
+            Div!(
+                class: "view",
+                [
+                    Input!(
+                        class: "toggle",
+                        type_: "checkbox",
+                        checked: tracked!(&item).completed,
+                        on_click: enclose!(toggle_completed; move |_| {
+                            tracked!(&toggle_completed)();
+                        })
+                    ),
+                    Label!(
+                        child: Text!(tracked!(&item).text.clone()),
+                        on_double_click: enclose!(set_editing; move |_| {
+                            tracked!(&set_editing)(true);
+                        })
+                    ),
+                    Button!(
+                        class: "destroy",
+                        on_click: enclose!(update_item; move |_| {
+                            tracked!(&update_item)(None);
+                        })
+                    )
+                ]
+            ),
+            tracked!(is_editing).then(|| Input!(
+                class: "edit",
+                id: "edit",
+                auto_focus: true,
+                value: tracked!(&item).text.clone(),
+                on_key_down: enclose!(set_editing; move |e| {
+                    let which = e.which();
+                    if which == ENTER_KEY {
+                        e.current_target().unwrap().blur().expect("blur");
+                    } else if which == ESCAPE_KEY {
+                        tracked!(&set_editing)(false);
+                    }
+                }),
+                on_blur: enclose!(item, update_item, set_editing; move |e| {
+                    let item = Item {
+                        text: e.current_target().unwrap().value(),
+                        ..tracked!(&item)
+                    };
+                    tracked!(&update_item)(Some(tracked!(item)));
+                    tracked!(&set_editing)(false);
+                })
             )).into()
         ]
     )
