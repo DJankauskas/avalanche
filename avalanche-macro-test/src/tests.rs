@@ -389,9 +389,10 @@ fn StdMacros(a: u8, b: u8, c: u8) -> View {
     // testing try!
     // TODO: adjust closure handling or remove this test
     // let ret: Result<u8, ()> = (|| {
-    //     let a = Ok(*tracked!(a));
+    //     let a = Ok(tracked!(a));
     //     Ok(r#try!(tracked!(a)))
     // })();
+    // assert!(updated!(ret.unwrap()));
 
     ().into()
 }
