@@ -133,8 +133,7 @@ impl WebRenderer {
     }
 
     fn get_child(parent: &web_sys::Element, child_idx: usize, offset: u32) -> web_sys::Node {
-        // TODO: remove debug info
-        Self::try_get_child(parent, child_idx, offset).expect(&format!("{}", child_idx))
+        Self::try_get_child(parent, child_idx, offset).unwrap()
     }
 
     fn try_get_child(
@@ -165,7 +164,6 @@ impl WebRenderer {
 }
 
 impl Renderer for WebRenderer {
-    // TODO: add support for () rendering (important!)
     fn create_component(&mut self, native_type: &NativeType, component: &View) -> NativeHandle {
         let elem = match native_type.handler.as_ref() {
             "oak_web_text" => {

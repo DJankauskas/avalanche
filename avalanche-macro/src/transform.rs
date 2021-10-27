@@ -470,10 +470,7 @@ impl Function {
     }
 
     /// Allow providing dependencies to closures being indirectly executed by functions.
-    /// Note that its current usage in the codebase is insufficient: it does not account for
-    /// closures assigned to values and then passed to functions, either once or multiple times
     /// Returns trabsformed closure expr, which handles marking a closure as updated
-    /// TODO: fix this limitation
     fn closure(&mut self, closure: &mut syn::ExprClosure, args_deps: UnitDeps) -> (UnitDeps, Expr) {
         let mut closure_scope = Scope::function();
 
