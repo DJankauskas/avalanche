@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::rc::Rc;
@@ -84,7 +85,7 @@ impl Component for Text {
 }
 
 pub(crate) enum Attr {
-    Prop(Option<String>),
+    Prop(Option<Cow<'static, str>>),
     Handler(Rc<dyn Fn(Event)>),
 }
 #[derive(Default)]
@@ -276,7 +277,7 @@ macro_rules! def_component_attrs {
                         pub fn $propident<T>(mut self, val: T, updated: bool) -> Self where T : Into<$proptype> {
                             self.raw.attr(
                                 $propnative,
-                                Attr::Prop(Some(Into::<$proptype>::into(val).to_string())),
+                                Attr::Prop(Some(Cow::Owned(Into::<$proptype>::into(val).to_string()))),
                                 updated
                             );
                             self
@@ -288,8 +289,7 @@ macro_rules! def_component_attrs {
                             pub fn $boolpropident(mut self, val: bool, updated: bool) -> Self {
                                 self.raw.attr(
                                     $boolpropnative,
-                                    // TODO: use Cow<String> for Prop to avoid alloc
-                                    Attr::Prop(val.then(|| String::from($boolpropnative))),
+                                    Attr::Prop(val.then(|| Cow::Borrowed($boolpropnative))),
                                     updated
                                 );
                                 self
@@ -1498,10 +1498,10 @@ def_component_attrs! {
 add_input_attrs! {InputBuilder}
 
 impl InputBuilder {
-    pub fn value<S: ToString>(mut self, val: S, updated: bool) -> Self {
+    pub fn value<S: Into<String>>(mut self, val: S, updated: bool) -> Self {
         self.raw.value_controlled = true;
         self.raw
-            .attr("value", Attr::Prop(Some(val.to_string())), updated);
+            .attr("value", Attr::Prop(Some(Cow::Owned(val.into()))), updated);
         self
     }
 
@@ -1509,7 +1509,7 @@ impl InputBuilder {
         self.raw.checked_controlled = true;
         self.raw.attr(
             "checked",
-            Attr::Prop(val.then(|| "checked".to_string())),
+            Attr::Prop(val.then(|| Cow::Borrowed("checked"))),
             updated,
         );
         self
@@ -1529,7 +1529,7 @@ impl TextAreaBuilder {
     pub fn value<S: ToString>(mut self, val: S, updated: bool) -> Self {
         self.raw.value_controlled = true;
         self.raw
-            .attr("value", Attr::Prop(Some(val.to_string())), updated);
+            .attr("value", Attr::Prop(Some(Cow::Owned(val.to_string()))), updated);
         self
     }
 }
