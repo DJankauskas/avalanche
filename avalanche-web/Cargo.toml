@@ -2,7 +2,7 @@
 name = "avalanche-web"
 version = "0.0.0"
 authors = ["Darius Jankauskas <d5926j@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 avalanche = {path = '../avalanche'}
