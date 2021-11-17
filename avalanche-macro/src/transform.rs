@@ -374,28 +374,51 @@ impl Function {
                             })
                         }
                         Tracked::Unnamed(mut expr) => {
+                            // An ident that is tracked by reference should still be tracked
+                            // as a value dependency
+                            if let Expr::Reference(reference) = &expr {
+                                if let Expr::Path(path) = &*reference.expr {
+                                    if let Some(ident) = path.path.get_ident() {
+                                        unit_deps.tracked_deps.0.insert(ident.clone());
+                                    }
+                                }
+                            };
                             unit_deps.extend(self.expr(&mut expr, true));
                             expr
                         }
                     };
                     let tracked_path = &mac.path;
                     let expr_span = expr.span();
-                    let transformed = if nested_tracked {
-                        quote_spanned! {expr_span=> #tracked_path!(#expr)}
-                    } else if is_expr_trivial {
-                        quote_spanned! {expr_span=>
-                            #tracked_path!({
-                                __avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::Tracked::internal_updated(&#expr);
-                                #expr
-                            })
+                    let transformed = if &*name == "tracked" {
+                        if nested_tracked {
+                            quote_spanned! {expr_span=> #tracked_path!(#expr)}
+                        } else if is_expr_trivial {
+                            quote_spanned! {expr_span=>
+                                #tracked_path!({
+                                    __avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::updated!(#expr);
+                                    #expr
+                                })
+                            }
+                        } else {
+                            quote_spanned! {expr_span=>
+                                #tracked_path!({
+                                    let value = #expr;
+                                    __avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::updated!(value);
+                                    value
+                                })
+                            }
                         }
                     } else {
-                        quote_spanned! {expr_span=>
-                            #tracked_path!({
-                                let value = #expr;
-                                __avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::Tracked::internal_updated(&value);
-                                value
-                            })
+                        if nested_tracked {
+                            quote_spanned! {expr_span=> #tracked_path!(#expr)}
+                        } else {
+                            quote_spanned! {expr_span=>
+                                {
+                                    let updated = #tracked_path!(#expr);
+                                    __avalanche_internal_updated = __avalanche_internal_updated || updated;
+                                    updated
+                                }
+                            }
                         }
                     };
                     let transformed = parse_expr(transformed);
@@ -500,7 +523,7 @@ impl Function {
         let ident_dep = deps.tracked_deps.iter();
         let output = parse_quote! {
             {
-                #(__avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::Tracked::internal_updated(&#ident_dep);)*
+                #(__avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::updated!(#ident_dep);)*
                 #closure
             }
         };

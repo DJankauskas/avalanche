@@ -14,7 +14,8 @@ pub struct Tracked<T> {
     #[doc(hidden)]
     pub __avalanche_internal_value: T,
     /// Whether the tracked value has been updated since the last render
-    updated: bool,
+    #[doc(hidden)]
+    pub __avalanche_internal_updated: bool,
 }
 
 impl<T> Tracked<T> {
@@ -22,14 +23,14 @@ impl<T> Tracked<T> {
     pub fn new(value: T, updated: bool) -> Self {
         Self {
             __avalanche_internal_value: value,
-            updated,
+            __avalanche_internal_updated: updated,
         }
     }
 
     /// Returns whether the tracked value has been updated since the last render.
     #[doc(hidden)]
     pub fn internal_updated(&self) -> bool {
-        self.updated
+        self.__avalanche_internal_updated
     }
 }
 
@@ -53,7 +54,7 @@ macro_rules! tracked {
 #[macro_export]
 macro_rules! updated {
     ($e:expr) => {
-        ::avalanche::Tracked::internal_updated(&$e)
+        $e.__avalanche_internal_updated
     };
 }
 
@@ -130,7 +131,7 @@ impl<T> Vec<T> {
             .zip(self.gens.into_iter())
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                updated: gen.updated(curr_gen),
+                __avalanche_internal_updated: gen.updated(curr_gen),
             })
     }
 
@@ -143,7 +144,7 @@ impl<T> Vec<T> {
             .zip(self.gens.iter())
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                updated: gen.updated(self.curr_gen.get()),
+                __avalanche_internal_updated: gen.updated(self.curr_gen.get()),
             })
     }
 
@@ -157,7 +158,7 @@ impl<T> Vec<T> {
             .zip(self.gens.windows(size))
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
+                __avalanche_internal_updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
             })
     }
 
@@ -171,7 +172,7 @@ impl<T> Vec<T> {
             .zip(self.gens.chunks(chunk_size))
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
+                __avalanche_internal_updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
             })
     }
 
@@ -185,7 +186,7 @@ impl<T> Vec<T> {
             .zip(self.gens.chunks_exact(chunk_size))
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
+                __avalanche_internal_updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
             })
     }
 
@@ -199,7 +200,7 @@ impl<T> Vec<T> {
             .zip(self.gens.rchunks(chunk_size))
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
+                __avalanche_internal_updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
             })
     }
 
@@ -213,7 +214,7 @@ impl<T> Vec<T> {
             .zip(self.gens.rchunks_exact(chunk_size))
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
+                __avalanche_internal_updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
             })
     }
 
