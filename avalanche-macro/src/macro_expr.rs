@@ -12,7 +12,7 @@ pub(crate) struct EncloseBody {
 
 impl Parse for EncloseBody {
     fn parse(input: ParseStream) -> Result<Self> {
-        let idents: Punctuated<Ident, Token![,]> = Punctuated::parse_separated_nonempty(input)?;
+        let idents: Punctuated<Ident, Token![,]> = Punctuated::parse_separated_nonempty(input).unwrap_or(Punctuated::new());
         let semicolon = input.parse()?;
         let expr = input.parse()?;
 

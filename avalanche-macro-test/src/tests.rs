@@ -352,6 +352,8 @@ fn StdMacros(a: u8, b: u8, c: u8) -> View {
     assert!(!updated!(b));
 
     // testing enclose!
+    let updated_a = enclose!(; updated!(a));
+    assert!(updated!(updated_a));
     let cloned_a = enclose!(a; tracked!(a));
     assert!(updated!(cloned_a));
 
