@@ -49,7 +49,6 @@ fn Todo() -> View {
     let (monotonic_id, update_monotonic_id) = state(self, || 0);
 
     let monotonic_id = *tracked!(monotonic_id);
-    let items_updated = updated!(items);
 
     let num_completed = tracked!(items)
         .iter()
@@ -81,7 +80,7 @@ fn Todo() -> View {
                 is_editing: *tracked!(editing) == Some(tracked!(id)),
                 toggle_completed: Rc::new(
                     enclose!(update_items; move || {
-                        tracked!(items_updated);
+                        updated!(items);
                         update_items.update(move |items| items[i].completed = !items[i].completed)
                 })),
                 set_editing: Rc::new(
@@ -91,7 +90,7 @@ fn Todo() -> View {
                 ),
                 update_item: Rc::new(
                     enclose!(update_items; move |item| {
-                        tracked!(items_updated);
+                        updated!(items);
                         match item {
                             Some(item) => update_items.update(move |items| items[i] = item),
                             None => update_items.update(move |items| { items.remove(i); }),
@@ -116,7 +115,7 @@ fn Todo() -> View {
                         auto_focus: true,
                         on_key_down: enclose!(update_items; move |e| {
                             if e.which() == ENTER_KEY {
-                                tracked!(items_updated);
+                                updated!(items);
                                 let current_target = e.current_target().unwrap();
                                 let value = current_target.value();
                                 update_items.update(move |items| {
