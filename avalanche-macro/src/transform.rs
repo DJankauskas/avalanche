@@ -271,7 +271,7 @@ impl Function {
             | "print" | "println" => {
                 if let Ok(mut format) = mac.parse_body::<ExprList>() {
                     let mut unit_deps = UnitDeps::new();
-                    for expr in format.exprs.iter_mut().skip(1) {
+                    for expr in format.exprs.iter_mut() {
                         // interpret assignment as providing named parameter
                         if let Expr::Assign(assign) = expr {
                             unit_deps.extend(self.expr(&mut assign.right, nested_tracked));
