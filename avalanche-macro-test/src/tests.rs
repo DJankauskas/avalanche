@@ -142,7 +142,7 @@ fn Test() -> View {
         Match!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
         Unary!(a: tracked!(a)),
         Tuple!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
-        StdMacros!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
+        Macros!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
         NestedBlocks!(a: tracked!(a)),
         NestedTracked!(a: tracked!(a), b: tracked!(b)),
         Updated!(a: tracked!(a), b: tracked!(b), c: tracked!(c))
@@ -254,6 +254,28 @@ fn Closure(a: u8, b: u8) -> View {
     };
     assert!(!updated!(closure2));
 
+    let closure3 = || {
+        while false {
+            updated!(a);
+        }
+    };
+    assert!(updated!(a));
+
+    let closure4 = || {
+        if true {
+            match 1 {
+                1 => updated!(a),
+                _ => unreachable!()
+            };
+        }
+    };
+    assert!(updated!(closure4));
+
+    let closure5 = || {
+        let closure = || tracked!(a);
+    };
+    assert!(updated!(closure5));
+
     ().into()
 }
 
@@ -343,7 +365,11 @@ fn Tuple(a: u8, b: u8, c: u8) -> View {
 }
 
 #[component]
-fn StdMacros(a: u8, b: u8, c: u8) -> View {
+fn Macros(a: u8, b: u8, c: u8) -> View {
+    // testing assert
+    let result = assert!(updated!(a));
+    assert!(updated!(result));
+
     // testing dbg!
     let a_prime = dbg!(tracked!(a));
     assert!(updated!(a));
