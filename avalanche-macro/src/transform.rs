@@ -506,6 +506,7 @@ impl Function {
         // TODO: correct nested tracked arg?
         let deps = match &mut *closure.body {
             Expr::Block(expr) => self.closure_block(&mut expr.block),
+            Expr::Async(expr) => self.closure_block(&mut expr.block),
             _ => {
                 let mut deps = self.expr(&mut closure.body, false);
                 deps.tracked_deps
@@ -581,11 +582,11 @@ impl Function {
 
                 dependencies = Some(rhs)
             }
-            Expr::Async(_) => {
-                abort!(expr, "async blocks unsupported")
+            Expr::Async(async_) => {
+                dependencies = Some(self.block(&mut async_.block))
             }
-            Expr::Await(_) => {
-                abort!(expr, "await expressions unsupported")
+            Expr::Await(await_) => {
+                dependencies = Some(self.expr(&mut *await_.base, nested_tracked))
             }
             Expr::Binary(binary) => {
                 let mut deps = self.expr(&mut binary.left, nested_tracked);
