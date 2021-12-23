@@ -198,6 +198,7 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
             type Builder = #builder_name;
 
             #( #render_body_attributes )*
+            #[allow(clippy::eval_order_dependence, clippy::unit_arg)]
             fn render(&self, __avalanche_context: ::avalanche::Context) -> #return_type {
                 // let state = ::std::option::Option::unwrap(::std::any::Any::downcast_mut::<#state_name>(&mut **__avalanche_context.state));
 

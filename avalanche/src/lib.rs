@@ -174,8 +174,8 @@ impl<T: DynComponent> From<T> for View {
 impl<T: DynComponent> From<Option<T>> for View {
     fn from(val: Option<T>) -> Self {
         match val {
-            Some(val) => return View::new(val),
-            None => return View::new(()),
+            Some(val) => View::new(val),
+            None => View::new(()),
         }
     }
 }
@@ -183,8 +183,8 @@ impl<T: DynComponent> From<Option<T>> for View {
 impl From<Option<View>> for View {
     fn from(val: Option<View>) -> Self {
         match val {
-            Some(val) => return val,
-            None => return View::new(()),
+            Some(val) => val,
+            None => View::new(()),
         }
     }
 }

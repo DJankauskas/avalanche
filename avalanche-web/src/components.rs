@@ -223,9 +223,7 @@ macro_rules! def_component {
 
         impl $tag_builder {
             pub fn new() -> Self {
-                Self {
-                    raw: std::default::Default::default(),
-                }
+                Default::default()
             }
 
             pub fn build(mut self, location: (u32, u32)) -> RawElement {
@@ -252,6 +250,14 @@ macro_rules! def_component {
             pub fn __last<T: Into<Vec<View>>>(mut self, children: T, updated: bool) -> Self {
                 self.raw.children(children.into(), updated);
                 self
+            }
+        }
+
+        impl Default for $tag_builder {
+            fn default() -> Self {
+                Self {
+                    raw: std::default::Default::default(),
+                }
             }
         }
 

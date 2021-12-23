@@ -78,17 +78,16 @@ impl WebScheduler {
         // uses approach in https://dbaron.org/log/20100309-faster-timeouts
         let _listener = EventListener::new(&window, "message", move |e| {
             let e = e.clone();
-            match e.dyn_into::<web_sys::MessageEvent>() {
-                Ok(event) => {
-                    if event.data() == TIMEOUT_MSG_NAME {
-                        event.stop_propagation();
-                        // f may call schedule_on_ui_thread, so it must be called outside of exec_mut
-                        let f = queued_fns_clone
-                            .exec_mut(|queue: &mut VecDeque<Box<dyn FnOnce()>>| queue.pop_front());
-                        f.map(|f| f());
+            if let Ok(event) = e.dyn_into::<web_sys::MessageEvent>() {
+                if event.data() == TIMEOUT_MSG_NAME {
+                    event.stop_propagation();
+                    // f may call schedule_on_ui_thread, so it must be called outside of exec_mut
+                    let f = queued_fns_clone
+                        .exec_mut(|queue: &mut VecDeque<Box<dyn FnOnce()>>| queue.pop_front());
+                    if let Some(f) = f {
+                        f();
                     }
                 }
-                Err(_) => { /*should not be reachable*/ }
             }
         });
 
@@ -165,7 +164,7 @@ impl WebRenderer {
 
 impl Renderer for WebRenderer {
     fn create_component(&mut self, native_type: &NativeType, component: &View) -> NativeHandle {
-        let elem = match native_type.handler.as_ref() {
+        let elem = match native_type.handler {
             "oak_web_text" => {
                 let text_node = match component.downcast_ref::<Text>() {
                     Some(text) => self.document.create_text_node(&text.text),
@@ -188,7 +187,7 @@ impl Renderer for WebRenderer {
 
                 let element = self
                     .document
-                    .create_element(&native_type.name)
+                    .create_element(native_type.name)
                     .expect("WebRenderer: element creation failed from syntax error.");
 
                 let mut listeners = HashMap::new();
@@ -227,13 +226,13 @@ impl Renderer for WebRenderer {
                                     if let Some(prop) = prop {
                                         match *name {
                                             "value" => {
-                                                input_element.set_value(&prop);
+                                                input_element.set_value(prop);
                                             }
                                             "checked" => {
                                                 input_element.set_checked(!prop.is_empty());
                                             }
                                             _ => {
-                                                input_element.set_attribute(name, &prop).unwrap();
+                                                input_element.set_attribute(name, prop).unwrap();
                                             }
                                         }
                                     }
@@ -256,9 +255,9 @@ impl Renderer for WebRenderer {
                                     if let Some(prop) = prop {
                                         match *name {
                                             "value" => text_area_element.set_value(prop),
-                                            _ => text_area_element
-                                                .set_attribute(name, &prop)
-                                                .unwrap(),
+                                            _ => {
+                                                text_area_element.set_attribute(name, prop).unwrap()
+                                            }
                                         }
                                     }
                                 }
@@ -273,7 +272,7 @@ impl Renderer for WebRenderer {
                             match attr {
                                 Attr::Prop(prop) => {
                                     if let Some(prop) = prop {
-                                        element.set_attribute(name, &prop).unwrap();
+                                        element.set_attribute(name, prop).unwrap();
                                     }
                                 }
                                 Attr::Handler(handler) => {
@@ -303,7 +302,7 @@ impl Renderer for WebRenderer {
         component: &View,
     ) {
         let web_handle = native_handle.downcast_mut::<WebNativeHandle>().unwrap();
-        match native_type.handler.as_ref() {
+        match native_type.handler {
             "oak_web" => {
                 let node = web_handle.node.clone();
                 let element = node.dyn_into::<web_sys::Element>().unwrap();
@@ -324,7 +323,7 @@ impl Renderer for WebRenderer {
                                         Attr::Prop(prop) => match *name {
                                             "value" => {
                                                 if let Some(prop) = prop {
-                                                    input_element.set_value(&prop);
+                                                    input_element.set_value(prop);
                                                 }
                                             }
                                             "checked" => {
@@ -357,7 +356,7 @@ impl Renderer for WebRenderer {
                                         Attr::Prop(prop) => {
                                             if *name == "value" {
                                                 if let Some(prop) = prop {
-                                                    text_area_element.set_value(&prop);
+                                                    text_area_element.set_value(prop);
                                                 }
                                             } else {
                                                 update_generic_prop(&element, name, prop.as_deref())
@@ -538,7 +537,7 @@ impl Renderer for WebRenderer {
 fn update_generic_prop(element: &Element, name: &str, prop: Option<&str>) {
     match prop {
         Some(prop) => {
-            element.set_attribute(name, &prop).unwrap();
+            element.set_attribute(name, prop).unwrap();
         }
         None => {
             element.remove_attribute(name).unwrap();
@@ -563,9 +562,11 @@ fn add_named_listener(
     callback: Rc<dyn Fn(Event)>,
     listeners: &mut HashMap<&'static str, EventListener>,
 ) {
-    let mut options = EventListenerOptions::default();
-    options.passive = passive;
-    let listener = EventListener::new_with_options(&element, event, options, move |event| {
+    let options = EventListenerOptions {
+        passive,
+        ..Default::default()
+    };
+    let listener = EventListener::new_with_options(element, event, options, move |event| {
         callback(event.clone())
     });
     listeners.insert(name, listener);
@@ -578,6 +579,6 @@ fn update_listener(
     listeners: &mut HashMap<&'static str, EventListener>,
 ) {
     let _ = listeners.remove(name);
-    let listener = EventListener::new(&element, name, move |event| callback(event.clone()));
+    let listener = EventListener::new(element, name, move |event| callback(event.clone()));
     listeners.insert(name, listener);
 }

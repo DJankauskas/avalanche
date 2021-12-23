@@ -20,7 +20,7 @@ pub(crate) struct Gen {
 
 // TODO: support wrap edge cases
 impl Gen {
-    pub(crate) fn new(mut self) -> Self {
+    pub(crate) fn next(mut self) -> Self {
         self.inc();
         Gen { gen: self.gen }
     }
@@ -61,7 +61,7 @@ fn internal_state<'a, T: 'static>(
             SharedBox::new(Box::new(State {
                 val: f(),
                 // EDITION 2021: use ctx.gen
-                gen: ctx_gen.new(),
+                gen: ctx_gen.next(),
             }))
         })
     });
@@ -134,7 +134,7 @@ impl<T: 'static> Clone for StateSetter<T> {
             vdom: self.vdom.clone(),
             vnode: self.vnode,
             scheduler: self.scheduler.clone(),
-            location: self.location.clone(),
+            location: self.location,
             phantom: PhantomData,
         }
     }
@@ -188,8 +188,8 @@ impl<T: 'static> StateSetter<T> {
                         .downcast_mut::<State<T>>()
                         .expect("state with setter's type");
                     f(&mut state.val, vdom_gen);
-                    state.gen = vdom_gen.new();
-                    std::mem::drop(any_mut);
+                    state.gen = vdom_gen.next();
+
                     update_vnode(
                         None,
                         vnode_copy,

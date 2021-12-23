@@ -18,7 +18,7 @@ use std::{
 
 use self::wrappers::ComponentStateAccess;
 
-const DYNAMIC_CHILDREN_ERR: &'static str = "Dynamic components must be provided keys.";
+const DYNAMIC_CHILDREN_ERR: &str = "Dynamic components must be provided keys.";
 
 pub struct VDom {
     pub(crate) tree: Tree<VNode>,
@@ -195,7 +195,7 @@ fn child_with_native_handle(mut node: NodeId<VNode>, tree: &Tree<VNode>) -> Opti
         node = if node.iter(tree).len() > 1 {
             panic!("Expected non-native Oak component to have 1 child.");
         } else {
-            node.iter(tree).nth(0).unwrap()
+            node.iter(tree).next().unwrap()
         };
     }
 }
@@ -219,7 +219,7 @@ pub(crate) fn generate_vnode(
     let context = Context {
         component_pos: ComponentPos {
             node_id: node.into(),
-            vdom: vdom,
+            vdom,
         },
         scheduler,
         gen,
@@ -235,7 +235,7 @@ pub(crate) fn generate_vnode(
 
     let is_native = match &vnode.native_type {
         Some(native_type) => {
-            let native_handle = renderer.create_component(&native_type, &vnode.component);
+            let native_handle = renderer.create_component(native_type, &vnode.component);
             node.get_mut(tree).native_handle = Some(native_handle);
             true
         }
@@ -366,7 +366,7 @@ pub(crate) fn update_vnode(
     let context = Context {
         component_pos: ComponentPos {
             node_id: node.into(),
-            vdom: vdom,
+            vdom,
         },
         scheduler,
         gen,
@@ -434,7 +434,7 @@ pub(crate) fn update_vnode(
         panic!("{}", DYNAMIC_CHILDREN_ERR);
     }
 
-    let mut children: Vec<_> = children.into_iter().map(|c| Some(c)).collect();
+    let mut children: Vec<_> = children.into_iter().map(Some).collect();
 
     for (child, id) in children.iter_mut().zip(children_ids.iter()) {
         if in_place_components.get(id).is_none() {
@@ -479,7 +479,7 @@ pub(crate) fn update_vnode(
     std::mem::drop(in_place_components);
 
     if is_native {
-        let native_indices: Vec<_> = native_indices.into_iter().filter_map(|i| i).collect();
+        let native_indices: Vec<_> = native_indices.into_iter().flatten().collect();
         let mut native_indices_map = vec![usize::MAX; native_indices.len()];
         for (i, elem) in native_indices.iter().enumerate() {
             native_indices_map[*elem] = i;
@@ -496,7 +496,7 @@ pub(crate) fn update_vnode(
         }
 
         for i in (children_ids.len()..node.len(tree)).rev() {
-            if let Some(_) = child_with_native_handle(node.child(i, tree), tree) {
+            if child_with_native_handle(node.child(i, tree), tree).is_some() {
                 let node_mut = node.get_mut(tree);
                 let parent_type = node_mut.native_type.as_ref().unwrap();
                 let parent_handle = node_mut.native_handle.as_mut().unwrap();

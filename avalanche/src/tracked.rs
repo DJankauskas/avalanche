@@ -106,7 +106,7 @@ impl<'a, T> Drop for VecMutRef<'a, T> {
 impl<T> Vec<T> {
     pub(crate) fn new(data: std::vec::Vec<T>, gen: Gen) -> Self {
         Self {
-            gens: vec![gen.new(); data.len()],
+            gens: vec![gen.next(); data.len()],
             data,
             curr_gen: Cell::new(gen),
         }
@@ -119,20 +119,6 @@ impl<T> Vec<T> {
     /// of what actions were performed on it, if any.
     pub fn as_raw_vec(&mut self) -> VecMutRef<T> {
         VecMutRef { vec: self }
-    }
-
-    pub fn into_iter(
-        self,
-    ) -> impl Iterator<Item = Tracked<T>> + DoubleEndedIterator + FusedIterator + ExactSizeIterator
-    {
-        let curr_gen = self.curr_gen.get();
-        self.data
-            .into_iter()
-            .zip(self.gens.into_iter())
-            .map(move |(val, gen)| Tracked {
-                __avalanche_internal_value: val,
-                __avalanche_internal_updated: gen.updated(curr_gen),
-            })
     }
 
     pub fn iter<'a>(
@@ -158,7 +144,9 @@ impl<T> Vec<T> {
             .zip(self.gens.windows(size))
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                __avalanche_internal_updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
+                __avalanche_internal_updated: gen
+                    .iter()
+                    .any(|&val| val.updated(self.curr_gen.get())),
             })
     }
 
@@ -172,7 +160,9 @@ impl<T> Vec<T> {
             .zip(self.gens.chunks(chunk_size))
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                __avalanche_internal_updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
+                __avalanche_internal_updated: gen
+                    .iter()
+                    .any(|&val| val.updated(self.curr_gen.get())),
             })
     }
 
@@ -186,7 +176,9 @@ impl<T> Vec<T> {
             .zip(self.gens.chunks_exact(chunk_size))
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                __avalanche_internal_updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
+                __avalanche_internal_updated: gen
+                    .iter()
+                    .any(|&val| val.updated(self.curr_gen.get())),
             })
     }
 
@@ -200,7 +192,9 @@ impl<T> Vec<T> {
             .zip(self.gens.rchunks(chunk_size))
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                __avalanche_internal_updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
+                __avalanche_internal_updated: gen
+                    .iter()
+                    .any(|&val| val.updated(self.curr_gen.get())),
             })
     }
 
@@ -214,13 +208,15 @@ impl<T> Vec<T> {
             .zip(self.gens.rchunks_exact(chunk_size))
             .map(move |(val, gen)| Tracked {
                 __avalanche_internal_value: val,
-                __avalanche_internal_updated: gen.iter().any(|&val| val.updated(self.curr_gen.get())),
+                __avalanche_internal_updated: gen
+                    .iter()
+                    .any(|&val| val.updated(self.curr_gen.get())),
             })
     }
 
     pub fn push(&mut self, value: T) {
         self.data.push(value);
-        self.gens.push(self.curr_gen.get().new());
+        self.gens.push(self.curr_gen.get().next());
     }
 
     pub fn pop(&mut self) -> Option<T> {
@@ -230,7 +226,7 @@ impl<T> Vec<T> {
 
     pub fn insert(&mut self, index: usize, element: T) {
         self.data.insert(index, element);
-        self.gens.insert(index, self.curr_gen.get().new());
+        self.gens.insert(index, self.curr_gen.get().next());
     }
 
     pub fn remove(&mut self, index: usize) -> T {
@@ -278,6 +274,29 @@ impl<T> Vec<T> {
     }
 }
 
+impl<T> IntoIterator for Vec<T> {
+    type Item = Tracked<T>;
+    type IntoIter = std::vec::IntoIter<Tracked<T>>;
+
+    #[allow(clippy::needless_collect)]
+    fn into_iter(self) -> Self::IntoIter {
+        let curr_gen = self.curr_gen.get();
+
+        // Note: collect necessary as map signature uses Gen, a private type, which we cannot 
+        // export
+        let data: std::vec::Vec<_> = self
+            .data
+            .into_iter()
+            .zip(self.gens.into_iter())
+            .map(move |(val, gen)| Tracked {
+                __avalanche_internal_value: val,
+                __avalanche_internal_updated: gen.updated(curr_gen),
+            })
+            .collect();
+        data.into_iter()
+    }
+}
+
 impl<T> Deref for Vec<T> {
     type Target = [T];
 
@@ -296,7 +315,7 @@ impl<T, Idx: TrackedVecIndex<T>> Index<Idx> for Vec<T> {
 
 impl<T, Idx: TrackedVecIndex<T>> IndexMut<Idx> for Vec<T> {
     fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
-        self.gens[index.span()].fill(self.curr_gen.get().new());
+        self.gens[index.span()].fill(self.curr_gen.get().next());
         index.get_mut(self)
     }
 }

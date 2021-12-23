@@ -78,7 +78,7 @@ impl Scope {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct UnitDeps {
     /// The named tracked dependencies of a unit's value
     tracked_deps: Dependencies,
@@ -110,7 +110,7 @@ impl From<Dependencies> for UnitDeps {
 }
 
 fn parse_expr(stream: TokenStream) -> Expr {
-    parse2(stream).unwrap_or(parse_quote! {::std::compile_error!(#EXPR_CONVERSION_ERROR)})
+    parse2(stream).unwrap_or_else(|_| parse_quote! {::std::compile_error!(#EXPR_CONVERSION_ERROR)})
 }
 
 fn enable_expr_tracking(expr: &mut Expr, deps: &UnitDeps) {
@@ -237,8 +237,7 @@ impl Function {
                 _ => UnitDeps::new(),
             },
             Stmt::Expr(expr) => {
-                let deps = self.expr(expr, false);
-                deps
+                self.expr(expr, false)
             }
             Stmt::Semi(expr, _) => {
                 let mut escape_expr = self.escape_expr(expr, false);
@@ -408,16 +407,14 @@ impl Function {
                                 })
                             }
                         }
+                    } else if nested_tracked {
+                        quote_spanned! {expr_span=> #tracked_path!(#expr)}
                     } else {
-                        if nested_tracked {
-                            quote_spanned! {expr_span=> #tracked_path!(#expr)}
-                        } else {
-                            quote_spanned! {expr_span=>
-                                {
-                                    let updated = #tracked_path!(#expr);
-                                    __avalanche_internal_updated = __avalanche_internal_updated || updated;
-                                    updated
-                                }
+                        quote_spanned! {expr_span=>
+                            {
+                                let updated = #tracked_path!(#expr);
+                                __avalanche_internal_updated = __avalanche_internal_updated || updated;
+                                updated
                             }
                         }
                     };
@@ -498,7 +495,7 @@ impl Function {
         let mut closure_scope = Scope::function();
 
         for input in closure.inputs.iter() {
-            let vars = from_pat(&input, args_deps.clone());
+            let vars = from_pat(input, args_deps.clone());
             closure_scope.vars.extend(vars);
         }
 
@@ -582,9 +579,7 @@ impl Function {
 
                 dependencies = Some(rhs)
             }
-            Expr::Async(async_) => {
-                dependencies = Some(self.block(&mut async_.block))
-            }
+            Expr::Async(async_) => dependencies = Some(self.block(&mut async_.block)),
             Expr::Await(await_) => {
                 dependencies = Some(self.expr(&mut *await_.base, nested_tracked))
             }
@@ -664,12 +659,10 @@ impl Function {
                 //this scope is for variables created via let.
                 let mut if_scope = Scope::new();
                 let cond_dependencies = self.expr(&mut if_expr.cond, nested_tracked);
-                match &mut *if_expr.cond {
-                    Expr::Let(let_expr) => {
-                        let let_dependencies = self.expr(&mut let_expr.expr, nested_tracked);
-                        if_scope.vars = from_pat(&let_expr.pat, let_dependencies);
-                    }
-                    _ => {}
+
+                if let Expr::Let(let_expr) = &mut *if_expr.cond {
+                    let let_dependencies = self.expr(&mut let_expr.expr, nested_tracked);
+                    if_scope.vars = from_pat(&let_expr.pat, let_dependencies);
                 }
 
                 //allow vars created by let guard to be accessed in block
@@ -823,7 +816,7 @@ impl Function {
         }
 
         EscapeExprRet {
-            dependencies: dependencies.unwrap_or_else(|| UnitDeps::new()),
+            dependencies: dependencies.unwrap_or_default(),
             escape,
         }
     }
@@ -899,7 +892,7 @@ fn from_pat(lhs: &Pat, rhs: UnitDeps) -> Vec<Var> {
             return from_pat_numbered(&fields, rhs);
         }
         Pat::Tuple(tuple) => {
-            return from_pat_tuple(&tuple, rhs);
+            return from_pat_tuple(tuple, rhs);
         }
         Pat::TupleStruct(tuple_struct) => {
             return from_pat_tuple(&tuple_struct.pat, rhs);
@@ -921,7 +914,7 @@ fn from_pat_tuple(lhs: &syn::PatTuple, rhs: UnitDeps) -> Vec<Var> {
     let mut vars = Vec::with_capacity(lhs.elems.len());
 
     for elem in lhs.elems.iter() {
-        vars.extend(from_pat(&elem, rhs.clone()));
+        vars.extend(from_pat(elem, rhs.clone()));
     }
 
     vars

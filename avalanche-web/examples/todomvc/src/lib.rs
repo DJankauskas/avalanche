@@ -302,6 +302,5 @@ pub fn main_js() {
             .query_selector(".todoapp")
             .expect("body")
             .unwrap()
-            .into(),
     );
 }

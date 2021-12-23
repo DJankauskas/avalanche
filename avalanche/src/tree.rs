@@ -211,10 +211,10 @@ impl<T> NodeId<T> {
 
     /// Returns an iterator to the given node's children's ids.
     /// The tree is borrowed immutably for the duration of the iterator's lifetime.
-    pub fn iter<'a>(
+    pub fn iter(
         self,
-        tree: &'a Tree<T>,
-    ) -> impl DoubleEndedIterator<Item = Self> + ExactSizeIterator<Item = Self> + 'a {
+        tree: &Tree<T>,
+    ) -> impl DoubleEndedIterator<Item = Self> + ExactSizeIterator<Item = Self> + '_ {
         tree.nodes[self.idx]
             .as_ref()
             .expect("valid self")
@@ -236,7 +236,7 @@ impl<T> NodeId<T> {
             .children
             .clone()
             .into_iter()
-            .map(|child| NodeId::idx(child))
+            .map(NodeId::idx)
     }
 }
 
@@ -295,7 +295,7 @@ impl<T> Tree<T> {
         for (i, x) in rev_iter {
             // if empty site found, we store its position
             // this may enable faster searching later
-            if let None = x {
+            if x.is_none() {
                 self.last_open = i;
                 return Some(i);
             }
