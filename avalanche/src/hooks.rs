@@ -34,6 +34,9 @@ impl Gen {
     }
 }
 
+/// Provides a hook with component-specific state.
+/// 
+/// Accessed by passing `self` as the first parameter in a hook call.
 #[derive(Clone, Copy)]
 pub struct Context<'a> {
     pub(crate) gen: Gen,
@@ -47,21 +50,17 @@ struct State<T: 'static> {
     gen: Gen,
 }
 
-pub type Ref<'a, T> = std::cell::Ref<'a, T>;
-
 #[track_caller]
 fn internal_state<'a, T: 'static>(
     ctx: Context<'a>,
     f: impl FnOnce() -> T,
 ) -> (&'a dyn Any, Location<'static>) {
     let location = Location::caller();
-    let ctx_gen = ctx.gen;
     let state_ref = ctx.state.exec_mut(|state| {
         state.get_or_insert_with(*location, move || {
             SharedBox::new(Box::new(State {
                 val: f(),
-                // EDITION 2021: use ctx.gen
-                gen: ctx_gen.next(),
+                gen: ctx.gen.next(),
             }))
         })
     });
@@ -74,9 +73,9 @@ fn internal_state<'a, T: 'static>(
 /// a parameter `F` specifying the type of a function providing a default value for `T`.
 /// On first call, the given state will be initialized with `f`; it will not be called on subsequent calls of the same
 /// `state` call site.
-/// The return value contains atracked reference to the current state,
-/// and the setter [StateSetter<T>](StateSetter). `&T`'s lifetime is only valid within the component's render
-/// function, but [StateSetter<T>](StateSetter) may be freely moved and cloned.
+/// The return value contains a tracked reference to the current state,
+/// and the setter [StateSetter](StateSetter). `&T`'s lifetime is only valid within the component's render
+/// function, but [StateSetter](StateSetter) may be freely moved and cloned.
 ///
 /// To update the state, use the [set](StateSetter::set) or [update](StateSetter::update) methods on the setter variable.
 ///
@@ -155,7 +154,7 @@ impl<T: 'static> StateSetter<T> {
         }
     }
 
-    /// Takes a function that modifies the state associated with [StateSetter] and
+    /// Takes a function that modifies the state associated with the setter and
     /// triggers a rerender of its associated component.
     ///
     /// The update is not performed immediately; its effect will only be accessible
@@ -215,6 +214,38 @@ impl<T: 'static> StateSetter<T> {
     }
 }
 
+/// Like [state], but returns a reference to a [tracked::Vec]. 
+/// 
+/// Takes in a function `F` that returns 
+/// a default [Vec](std::vec::Vec). The return value has fine-grained tracking: instead of only the 
+/// whole vec being updated or not updated, each individual element is also tracked. For more information on how that works see 
+/// [tracked::Vec].
+/// 
+/// Note that `vec` returns a `Tracked<tracked::Vec>`, which is marked as updated if 
+/// any of its children are updated. However, an individual element's update status overrides this where appropriate. 
+/// 
+/// ## Example
+/// ```rust
+/// use avalanche::{component, tracked, View, vec};
+/// use avalanche_web::components::{Div, H2, Button, Text};
+///
+/// #[component]
+/// fn DynamicChildren() -> View {
+///     let (data, update_data) = vec(self, || vec!["child 1"]);
+///     let children = tracked!(data)
+///         .iter()
+///         .enumerate()
+///         .map(|(n, text)| Text!(key: n.to_string(), tracked!(text))).collect::<Vec<_>>();
+/// 
+///     Div!([
+///         Button!(
+///             on_click: move |_| update_data.update(|data| data.push("another child")),
+///             child: Text!("+")
+///         ),
+///         Div!(tracked!(children))
+///     ])
+/// }
+/// ```
 #[track_caller]
 pub fn vec<'a, T: 'static, F: FnOnce() -> Vec<T>>(
     ctx: Context<'a>,
@@ -231,6 +262,7 @@ pub fn vec<'a, T: 'static, F: FnOnce() -> Vec<T>>(
     (tracked_state_ref, updater)
 }
 
+/// Provides a setter for a piece of state managed by [vec](vec()).
 pub struct VecSetter<T: 'static> {
     setter: StateSetter<tracked::Vec<T>>,
 }
@@ -246,6 +278,12 @@ impl<T> VecSetter<T> {
         }
     }
 
+    /// Takes a function that modifies the vec associated with the setter and
+    /// triggers a rerender of its associated component.
+    ///
+    /// The update is not performed immediately; its effect will only be accessible
+    /// on its component's rerender. Note that `update` always triggers a rerender, and the state value
+    /// is marked as updated, even if the given function performs no mutations.
     pub fn update<F: FnOnce(&mut tracked::Vec<T>) + 'static>(&self, f: F) {
         self.setter.update_with_gen(|val, gen| {
             val.curr_gen.set(gen);
@@ -253,6 +291,11 @@ impl<T> VecSetter<T> {
         });
     }
 
+    /// Sets the vec to the given value, marking all elements as updated.
+    ///
+    /// The update is not performed immediately; its effect will only be accessible
+    /// on its component's rerender. Note that `set` always triggers a rerender, and the state value
+    /// is marked as updated, even if the new state is equal to the old.
     pub fn set(&self, val: Vec<T>) {
         self.update(|vec| *vec = tracked::Vec::new(val, vec.curr_gen.get()))
     }

@@ -7,6 +7,9 @@ use std::{
 use crate::hooks::Gen;
 
 #[derive(Copy, Clone)]
+/// A wrapped value that stores whether it has been modified since the last render.
+/// 
+/// To access the value, use [tracked], and to check whether it is updated, use [updated].
 pub struct Tracked<T> {
     /// The value of the tracked value
     /// Public due to implementation of [tracked!] macro,
@@ -14,12 +17,15 @@ pub struct Tracked<T> {
     #[doc(hidden)]
     pub __avalanche_internal_value: T,
     /// Whether the tracked value has been updated since the last render
+    /// Public due to implementation of [updated!] macro,
+    /// but not semver stable and must only be used internally
     #[doc(hidden)]
     pub __avalanche_internal_updated: bool,
 }
 
 impl<T> Tracked<T> {
-    // TODO: should this be a public api?
+    /// Creates a tracked value with value `value`. If it has been updated, `updated` should be `true`,
+    /// otherwise `false`. Usually, you will not need to create `Tracked` values manually.
     pub fn new(value: T, updated: bool) -> Self {
         Self {
             __avalanche_internal_value: value,
@@ -34,11 +40,46 @@ impl<T> Tracked<T> {
     }
 }
 
-// TODO: Add examples.
-/// Unwraps a [Tracked] value.
-/// Within a `#[component]` or `#[hook]` context, wraps the expression containing it in a [Tracked] instance maintaining
-/// whether any of the `tracked!()` values were updated.
-/// Otherwise, provides access to the tracked value without rewrapping the containing expression.
+/// Unwraps and propogates a [Tracked](crate::tracked::Tracked) value.
+/// 
+/// By default, `tracked` takes ownership of its input. Passing a reference instead 
+/// will return a reference to the input's inner value.
+/// 
+/// Within a `#[component]` body, wraps the expression containing it in a `Tracked` instance maintaining
+/// whether any of the `tracked!()` values were updated. Closure values are wrapped in `Tracked` if they contain `tracked`
+/// or `updated` calls with external identifiers as inputs.
+/// 
+/// Outside of `#[component]`, provides access to the tracked value 
+/// without rewrapping the containing expression.
+/// 
+/// ## Example
+/// ```rust
+/// # use avalanche::{component, View, Tracked, tracked, updated};
+/// #[component]
+/// fn ComponentBody() -> View {
+///     let a = Tracked::new(8, true);
+///     let b: Tracked<u32> = tracked!(a);
+/// 
+///     // c has type Tracked<u32>
+///     let c = tracked!(a) + tracked!(b);
+///     assert_eq!(tracked!(c), 16);
+///     assert!(updated!(c));
+/// 
+///     // Tracked closure behavior
+///     let d = Tracked::new(2, false);
+///     let closure = || {
+///         let a = Tracked::new(2, true);
+///         tracked!(a) + tracked!(d)
+///     };
+///     // closure depends on external identifier d,
+///     // so it is wrapped in Tracked, but since d is not updated, 
+///     // neither is closure.
+///     assert!(!updated!(closure));
+/// 
+///     // .. 
+///     # ().into()
+/// }
+/// ```
 #[macro_export]
 macro_rules! tracked {
     ($e:expr) => {
@@ -46,11 +87,10 @@ macro_rules! tracked {
     };
 }
 
-// TODO: Add examples.
-/// Yields whether a [Tracked] value has been updated.
-/// Within a `#[component]` or `#[hook]` context, wraps the expression containing it in a [Tracked] instance maintaining
-/// whether any of the `tracked!()` or `updated!()` values were updated.
-/// Otherwise, returns a `bool`.
+/// Returns whether the given [Tracked](crate::tracked::Tracked) value has been updated.
+/// 
+/// It behaves similarly to [tracked](tracked!), so it returns `Tracked<bool>` in a `#[component]`
+/// context, and `bool` everywhere else. It does not take ownership of the input value.
 #[macro_export]
 macro_rules! updated {
     ($e:expr) => {
@@ -58,6 +98,19 @@ macro_rules! updated {
     };
 }
 
+/// A wrapped [Vec](std::vec::Vec) tracking each element's updated status individually.
+/// 
+/// This type is returned by the [vec](crate::hooks::vec) hook. It means that, when modifying or creating individual
+/// elements with `VecSetter`, only those individual elements will be marked as updated. That allows for efficient
+/// rendering of lists of data, as only changed children derived from changed elements will need to be rerendered.
+/// 
+/// Provided iteration methods like [iter](crate::tracked::Vec::iter()) return `Tracked<T>` instead of `T`, marking whether individual elements
+/// are updated or not. Indexing with `[]`, and methods accessed by dereferencing `tracked::Vec` to get a slice, just return `T`,
+/// making them less granular as they will end up marked as updated if any element is.
+/// 
+/// Individual elements are not tracked _positionally_, or by index, but by _identity_. That means that, if we have a `tracked::Vec` `data`
+/// with elements `[1, 3, 4]`, and we then call `data.insert(1, 2)`, `tracked!(tracked!(data).iter().nth(1).unwrap())` will be marked as updated on rerender, but 
+/// every other element will be marked as not updated.
 pub struct Vec<T> {
     /// The elements being tracked by the data structure.
     pub(crate) data: std::vec::Vec<T>,
@@ -68,6 +121,9 @@ pub struct Vec<T> {
     pub(crate) curr_gen: Cell<Gen>,
 }
 
+/// Allows mutating a [tracked::Vec](crate::tracked::Vec)'s underlying [Vec](std::vec::Vec) data.
+/// 
+/// On drop, marks all elements of that data as updated.
 pub struct VecMutRef<'a, T> {
     vec: &'a mut Vec<T>,
 }
@@ -326,6 +382,7 @@ mod private {
     impl Sealed for usize {}
 }
 
+/// Emulates the role of [std::slice::SliceIndex].
 pub trait TrackedVecIndex<T>: private::Sealed + Copy {
     type Output: ?Sized;
 

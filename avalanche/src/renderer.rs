@@ -96,6 +96,8 @@ pub trait Renderer {
     /// the `log` crate
     fn log(&self, _string: &str) {}
 }
+
+/// An interface to schedule a function on a platform's ui thread.
 pub trait Scheduler {
     /// Schedule the given function to be run on the ui thread in the future.
     fn schedule_on_ui_thread(&mut self, f: Box<dyn FnOnce()>);
@@ -109,6 +111,7 @@ pub struct NativeType {
     pub name: &'static str,
 }
 
+/// A component for native children to render avalanche components.
 #[derive(Clone, Default)]
 pub struct HasChildrenMarker {
     pub children: Vec<View>,
