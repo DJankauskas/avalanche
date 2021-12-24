@@ -32,12 +32,6 @@ impl<T> Tracked<T> {
             __avalanche_internal_updated: updated,
         }
     }
-
-    /// Returns whether the tracked value has been updated since the last render.
-    #[doc(hidden)]
-    pub fn internal_updated(&self) -> bool {
-        self.__avalanche_internal_updated
-    }
 }
 
 /// Unwraps and propogates a [Tracked](crate::tracked::Tracked) value.
@@ -238,7 +232,7 @@ impl<T> Vec<T> {
             })
     }
 
-    pub fn rhunks<'a>(
+    pub fn rchunks<'a>(
         &'a self,
         chunk_size: usize,
     ) -> impl Iterator<Item = Tracked<&[T]>> + DoubleEndedIterator + FusedIterator + ExactSizeIterator + 'a

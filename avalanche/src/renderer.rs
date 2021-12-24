@@ -127,3 +127,6 @@ impl Component for HasChildrenMarker {
         todo!()
     }
 }
+
+#[doc(inline)]
+pub use crate::vdom::Root;
