@@ -87,3 +87,7 @@ features = [
     "TouchEvent",
     "WheelEvent"
 ]
+
+[dev-dependencies]
+doc-comment = "0.3"
+rand = "0.8.4"

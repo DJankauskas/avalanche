@@ -582,3 +582,14 @@ fn update_listener(
     let listener = EventListener::new(element, name, move |event| callback(event.clone()));
     listeners.insert(name, listener);
 }
+
+// Mdbook's testing doesn't quite work, so we inject our book test cases into the crate to make sure they compile.
+#[cfg(doctest)]
+mod book_tests {
+    use doc_comment::doc_comment;
+    doc_comment!(include_str!("../../docs/src/getting_started.md"));
+    doc_comment!(include_str!("../../docs/src/basic_components.md"));
+    doc_comment!(include_str!("../../docs/src/state.md"));
+    doc_comment!(include_str!("../../docs/src/reactivity.md"));
+    doc_comment!(include_str!("../../docs/src/events.md"));
+}
