@@ -4,7 +4,7 @@
 
 - [Getting started](./getting_started.md)
 
-- [Data and dynamic parameters](./params.md)
+- [Basic components](./basic_components.md)
 
 - [Hooks, state, and control flow](./state.md)
 

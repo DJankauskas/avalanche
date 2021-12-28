@@ -2,7 +2,7 @@
 
 So far, we've only used the `on_click` event, but there are both many more events and more functionality available.
 
-In addition, many events are component-specific, like `on_input` and `on_blur` on some form elements. many of these are available,
+In addition, many events are component-specific, like `on_input` and `on_blur` on some form elements. Many of these are available,
 but some have not been implemented yet. If you're missing one, please [file an issue!](https://github.com/DJankauskas/avalanche/issues/new)
 
 ## Events
@@ -19,17 +19,17 @@ One case where events are useful is with input elements. That's because the `Typ
 which provides a reference to the component's associated native reference. We can use this to keep track of an `Input` element's state:
 
 ```rust
-# use avalanche::{component, View, UseState};
-# use avalanche_web::components::{Input};
-#
-#[component(text = UseState<String>)]
-fn ControlledInput() -> View {
-    let (text, set_text) = text(String::new());
+# use avalanche::{component, tracked, state, View};
+use avalanche_web::components::Input;
 
-    Input! {
-        value: text.clone(),
+#[component]
+fn ControlledInput() -> View {
+    let (text, set_text) = state(self, || String::new());
+
+    Input!(
+        value: tracked!(text).clone(),
         on_input: move |e| set_text.set(e.current_target().unwrap().value())
-    }
+    )
 }
 ```
 
@@ -37,3 +37,5 @@ In this example, `text` holds the input's current contents, allowing us to use i
 
 > In React, programmers often use `on_change` instead of `on_input`, but React semantics do not match native browser ones in this case;
 > use `on_input` in `avalanche_web` instead.
+
+For a more complex example of how state and events work in avalanche, check out the todomvc example. 
