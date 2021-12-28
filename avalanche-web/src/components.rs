@@ -64,7 +64,7 @@ impl Component for Text {
     }
     fn native_type(&self) -> Option<NativeType> {
         let action = NativeType {
-            handler: "oak_web_text",
+            handler: "avalanche_web_text",
             name: "",
         };
 
@@ -131,7 +131,7 @@ impl Component for RawElement {
 
     fn native_type(&self) -> Option<NativeType> {
         Some(NativeType {
-            handler: "oak_web",
+            handler: "avalanche_web",
             name: self.tag,
         })
     }

@@ -15,7 +15,7 @@ use web_sys::Element;
 pub mod components;
 pub mod events;
 
-static TIMEOUT_MSG_NAME: &str = "oak_web_message_name";
+static TIMEOUT_MSG_NAME: &str = "avalanche_web_message_name";
 
 pub fn mount<C: Component + Default>(element: Element) {
     let child: View = C::default().into();
@@ -143,10 +143,10 @@ impl WebRenderer {
         parent.child_nodes().item(child_idx as u32 + offset)
     }
 
-    fn assert_handler_oak_web(native_type: &NativeType) {
+    fn assert_handler_avalanche_web(native_type: &NativeType) {
         assert_eq!(
-            native_type.handler, "oak_web",
-            "handler is not of type \"oak web\""
+            native_type.handler, "avalanche_web",
+            "handler is not of type \"avalanche_web\""
         )
     }
 
@@ -165,10 +165,10 @@ impl WebRenderer {
 impl Renderer for WebRenderer {
     fn create_component(&mut self, native_type: &NativeType, component: &View) -> NativeHandle {
         let elem = match native_type.handler {
-            "oak_web_text" => {
+            "avalanche_web_text" => {
                 let text_node = match component.downcast_ref::<Text>() {
                     Some(text) => self.document.create_text_node(&text.text),
-                    None => panic!("WebRenderer: expected Text component for oak_web_text."),
+                    None => panic!("WebRenderer: expected Text component for avalanche_web_text."),
                 };
                 WebNativeHandle {
                     node: web_sys::Node::from(text_node),
@@ -176,7 +176,7 @@ impl Renderer for WebRenderer {
                     children_offset: 0,
                 }
             }
-            "oak_web" => {
+            "avalanche_web" => {
                 assert_ne!(
                     native_type.name, "",
                     "WebRenderer: expected tag name to not be empty."
@@ -303,7 +303,7 @@ impl Renderer for WebRenderer {
     ) {
         let web_handle = native_handle.downcast_mut::<WebNativeHandle>().unwrap();
         match native_type.handler {
-            "oak_web" => {
+            "avalanche_web" => {
                 let node = web_handle.node.clone();
                 let element = node.dyn_into::<web_sys::Element>().unwrap();
                 let raw_element = component
@@ -396,7 +396,7 @@ impl Renderer for WebRenderer {
                     }
                 }
             }
-            "oak_web_text" => {
+            "avalanche_web_text" => {
                 let new_text = component.downcast_ref::<Text>().expect("Text component");
                 if new_text.updated() {
                     //TODO: compare with old text?
@@ -414,7 +414,7 @@ impl Renderer for WebRenderer {
         _child_type: &NativeType,
         child_handle: &NativeHandle,
     ) {
-        Self::assert_handler_oak_web(parent_type);
+        Self::assert_handler_avalanche_web(parent_type);
         let parent_node = Self::handle_cast(parent_handle).node.clone();
         let parent_element = Self::node_to_element(parent_node);
         let child_node = &Self::handle_cast(child_handle).node;
@@ -432,7 +432,7 @@ impl Renderer for WebRenderer {
         child_handle: &NativeHandle,
     ) {
         self.log("inserting child");
-        Self::assert_handler_oak_web(parent_type);
+        Self::assert_handler_avalanche_web(parent_type);
         let parent_handle = Self::handle_cast(parent_handle);
         let parent_element = Self::node_to_element(parent_handle.node.clone());
         let child_node = &Self::handle_cast(child_handle).node;
@@ -450,7 +450,7 @@ impl Renderer for WebRenderer {
         a: usize,
         b: usize,
     ) {
-        Self::assert_handler_oak_web(parent_type);
+        Self::assert_handler_avalanche_web(parent_type);
         let parent_handle = Self::handle_cast(parent_handle);
         let parent_element = Self::node_to_element(parent_handle.node.clone());
         let lesser = std::cmp::min(a, b);
@@ -479,7 +479,7 @@ impl Renderer for WebRenderer {
         _child_type: &NativeType,
         child_handle: &NativeHandle,
     ) {
-        Self::assert_handler_oak_web(parent_type);
+        Self::assert_handler_avalanche_web(parent_type);
         let parent_handle = Self::handle_cast(parent_handle);
         let parent_element = Self::node_to_element(parent_handle.node.clone());
         let curr_child_node =
@@ -499,7 +499,7 @@ impl Renderer for WebRenderer {
         old: usize,
         new: usize,
     ) {
-        Self::assert_handler_oak_web(parent_type);
+        Self::assert_handler_avalanche_web(parent_type);
         let parent_handle = Self::handle_cast(parent_handle);
         let parent_element = Self::node_to_element(parent_handle.node.clone());
         let curr_child_node = Self::get_child(&parent_element, old, parent_handle.children_offset);
@@ -519,7 +519,7 @@ impl Renderer for WebRenderer {
         parent_handle: &mut NativeHandle,
         index: usize,
     ) {
-        Self::assert_handler_oak_web(parent_type);
+        Self::assert_handler_avalanche_web(parent_type);
         let parent_handle = Self::handle_cast(parent_handle);
         let parent_element = Self::node_to_element(parent_handle.node.clone());
         let child_node = Self::get_child(&parent_element, index, parent_handle.children_offset);
