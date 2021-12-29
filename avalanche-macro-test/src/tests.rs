@@ -1,4 +1,154 @@
-use avalanche::{component, enclose, reactive_assert, View};
+use avalanche::renderer::{HasChildrenMarker, NativeHandle, NativeType, Renderer, Scheduler};
+use avalanche::vdom::Root;
+use avalanche::{Component, Tracked, View, component, enclose, tracked, updated};
+
+/// A renderer that does nothing, to test render functions only
+struct TestRenderer;
+
+impl Renderer for TestRenderer {
+    fn create_component(&mut self, _native_type: &NativeType, _component: &View) -> NativeHandle {
+        Box::new(())
+    }
+
+    fn append_child(
+        &mut self,
+        _parent_type: &NativeType,
+        _parent_handle: &mut NativeHandle,
+        _child_type: &NativeType,
+        _child_handle: &NativeHandle,
+    ) {
+    }
+
+    fn insert_child(
+        &mut self,
+        _parent_type: &NativeType,
+        _parent_handle: &mut NativeHandle,
+        _index: usize,
+        _child_type: &NativeType,
+        _child_handle: &NativeHandle,
+    ) {
+    }
+
+    fn replace_child(
+        &mut self,
+        _parent_type: &NativeType,
+        _parent_handle: &mut NativeHandle,
+        _index: usize,
+        _child_type: &NativeType,
+        _child_handle: &NativeHandle,
+    ) {
+    }
+
+    fn swap_children(
+        &mut self,
+        _parent_type: &NativeType,
+        _parent_handle: &mut NativeHandle,
+        _a: usize,
+        _b: usize,
+    ) {
+    }
+
+    fn move_child(
+        &mut self,
+        _parent_type: &NativeType,
+        _parent_handle: &mut NativeHandle,
+        _old: usize,
+        _new: usize,
+    ) {
+    }
+
+    fn remove_child(
+        &mut self,
+        _parent_type: &NativeType,
+        _parent_handle: &mut NativeHandle,
+        _index: usize,
+    ) {
+    }
+
+    fn update_component(
+        &mut self,
+        _native_type: &NativeType,
+        _native_handle: &mut NativeHandle,
+        _component: &View,
+    ) {
+    }
+}
+
+/// A scheduler that does nothing, used for testing only
+struct TestScheduler;
+
+impl Scheduler for TestScheduler {
+    fn schedule_on_ui_thread(&mut self, _f: Box<dyn FnOnce()>) {}
+}
+
+struct TestChildren {
+    children: Vec<View>,
+}
+
+impl Component for TestChildren {
+    type Builder = ();
+
+    fn render(&self, context: avalanche::Context) -> View {
+        HasChildrenMarker {
+            children: self.children.clone(),
+        }
+        .into()
+    }
+
+    fn updated(&self) -> bool {
+        true
+    }
+
+    fn native_type(&self) -> Option<NativeType> {
+        Some(NativeType {
+            handler: "",
+            name: "",
+        })
+    }
+}
+
+#[test]
+fn test() {
+    let native_parent = TestChildren {
+        children: Vec::new(),
+    };
+    Root::new(
+        Test::default().into(),
+        native_parent.into(),
+        Box::new(()),
+        TestRenderer,
+        TestScheduler,
+    );
+}
+
+#[component]
+fn Test() -> View {
+    let a = Tracked::new(0u8, true);
+    let b = Tracked::new(0u8, false);
+    let c = Tracked::new(0u8, true);
+
+    TestChildren { children: vec![
+        Bare!(),
+        Identity!(a: tracked!(a)),
+        ArrayIndex!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
+        Binary!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
+        Block!(a: tracked!(a), b: tracked!(b)),
+        FnCall!(a: tracked!(a)),
+        Cast!(a: tracked!(a)),
+        Closure!(a: tracked!(a), b: tracked!(b)),
+        Field!(a: (tracked!(a), tracked!(a)), b: tracked!(b)),
+        If!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
+        Loop!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
+        Match!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
+        Unary!(a: tracked!(a)),
+        Tuple!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
+        Macros!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
+        NestedBlocks!(a: tracked!(a)),
+        NestedTracked!(a: tracked!(a), b: tracked!(b)),
+        Updated!(a: tracked!(a), b: tracked!(b), c: tracked!(c))
+    ] }.into()
+}
+
 #[derive(Default)]
 struct HasFields {
     field_one: u8,
@@ -12,261 +162,330 @@ fn Bare() -> View {
 
 #[component]
 fn Identity(a: u8) -> View {
-    reactive_assert!(a => a);
-    let a = a;
-    reactive_assert!(a => a);
-
+    assert!(updated!(a));
+    let a = tracked!(a);
+    assert!(updated!(a));
+    
     ().into()
 }
 
 #[component]
 fn ArrayIndex(a: u8, b: u8, c: u8) -> View {
-    let arr = [a, b, c];
-    reactive_assert!(a, b, c => arr);
+    let arr = [tracked!(b)];
+    assert!(!updated!(arr));
+    
+    let arr = [tracked!(a), tracked!(b)];
+    assert!(updated!(arr));
+
+    let arr = [tracked!(c), tracked!(b)];
+    assert!(updated!(arr));
+
+    let arr = [tracked!(a), tracked!(b), tracked!(c)];
+    assert!(updated!(arr));
 
     {
-        let first = arr[0];
-        let second = arr[1];
-        let third = arr[2];
-        reactive_assert!(a => first; b => second; c => third);
+        let second = tracked!(arr)[1];
+        assert!(updated!(second));
     }
 
-    let arr2 = [a; 3];
-    reactive_assert!(a => arr2);
-    let from2 = arr2[0];
-    reactive_assert!(a => from2);
+    let arr2 = [tracked!(a); 3];
+    assert!(updated!(arr2));
+    let from2 = tracked!(arr2)[0];
+    assert!(updated!(from2));
 
-    let indexed = arr2[*c as usize];
-    reactive_assert!(c => indexed);
+    let arr3 = [1u8];
 
-    ().into()
-}
-
-#[component]
-fn Assign(a: u8, b: u8) -> View {
-    let mut x = *a;
-    reactive_assert!(a => x);
-    x = *b;
-    reactive_assert!(b => x);
-
-    x = *a;
-    reactive_assert!(a => x);
-
-    x += *b;
-    reactive_assert!(a, b => x);
-
-    let mut has_fields = HasFields::default();
-
-    has_fields.field_one = *a;
-    reactive_assert!(a => has_fields);
+    let indexed = arr3[tracked!(c) as usize];
+    assert!(updated!(indexed));
 
     ().into()
 }
 
 #[component]
-fn Binary(a: u16, b: u16, c: u16) -> View {
-    let x = a ^ b;
-    reactive_assert!(a, b => x);
+fn Binary(a: u8, b: u8, c: u8) -> View {
+    let x = tracked!(a) ^ tracked!(b);
+    assert!(updated!(x));
 
-    let y = b & c;
-    reactive_assert!(b, c => y);
+    let y = tracked!(b) & tracked!(c);
+    assert!(updated!(y));
 
-    let z = x * y;
-    reactive_assert!(a, b, c => z; a, b => x; b, c => y);
+    let z = tracked!(b) * tracked!(b);
+    assert!(!updated!(z));
 
     ().into()
 }
 
 #[component]
 fn Block(a: u8, b: u8) -> View {
-    let mut y = 0;
     let x = {
-        let x = a + b;
-        y += *b;
+        let x = tracked!(a) + tracked!(b);
         x
     };
-    reactive_assert!(a, b => x; b => y);
+    assert!(updated!(x));
 
     ().into()
 }
 
 #[component]
 fn FnCall(a: u8) -> View {
-    let b = std::convert::identity(a);
-    reactive_assert!(a => b);
+    let b = std::convert::identity(tracked!(a));
+    assert!(updated!(b));
 
     ().into()
 }
 
 #[component]
 fn Cast(a: u8) -> View {
-    let ret = *a as u16;
-    reactive_assert!(a => ret);
+    let ret = tracked!(a) as u16;
+    assert!(updated!(ret));
 
     ().into()
 }
 
-// TODO: fix closure handling
 #[component]
 fn Closure(a: u8, b: u8) -> View {
     let closure1 = || {
-        let (mut a, b) = (*a, *b);
-        a += b;
+        let _ = (tracked!(a), tracked!(b));
     };
-
-    reactive_assert!(a, b => closure1);
+    assert!(updated!(closure1));
 
     let closure2 = || {
-        a;
+        tracked!(b);
     };
-    reactive_assert!(a => closure2);
+    assert!(!updated!(closure2));
+
+    let closure3 = || {
+        while false {
+            updated!(a);
+        }
+    };
+    assert!(updated!(a));
+
+    let closure4 = || {
+        if true {
+            match 1 {
+                1 => updated!(a),
+                _ => unreachable!()
+            };
+        }
+    };
+    assert!(updated!(closure4));
+
+    let closure5 = || {
+        let closure = || tracked!(a);
+    };
+    assert!(updated!(closure5));
 
     ().into()
 }
 
 #[component]
 fn Field(a: (u8, u8), b: u8) -> View {
-    let ret = a.0;
-    reactive_assert!(a => ret);
-    //test assigning
-
-    let mut a_copy = *a;
-    a_copy.1 = *b;
-    reactive_assert!(b => a_copy);
-
-    ().into()
-}
-
-#[component]
-fn ForLoop(a: u8, b: u8) -> View {
-    let mut x = 0;
-
-    for n in 0..1 {
-        let n = b;
-        x += n;
-    }
-    reactive_assert!(b => x);
+    let ret = tracked!(a).0;
+    assert!(updated!(ret));
 
     ().into()
 }
 
 #[component]
 fn If(a: u8, b: u8, c: u8) -> View {
-    let x = if *a == 0 { b } else { c };
-    reactive_assert!(a, b, c => x);
+    let x = if tracked!(a) == 0 { tracked!(b) } else { 5 };
+    assert!(updated!(x));
+
+    let y = if tracked!(b) == 0 { tracked!(a) } else {tracked!(c)};
+    assert!(updated!(y));
 
     ().into()
 }
 
-//TODO: fix body processing
-// #[component]
-// fn _loop(a: u8, b: u8, c: u8) {
-//     let x = loop {
-//         if *a == 0 {
-//             break b;
-//         };
-//         break c;
-//     };
+#[component]
+fn Loop(a: u8, b: u8, c: u8) -> View {
+    let x = loop {
+        break tracked!(a);
+    };
+    assert!(updated!(x));
 
-//     reactive_assert!(a, b, c => x);
+    let y = loop {
+        if tracked!(c) == 0 {
+            break 0;
+        }
+    };
+    assert!(updated!(y));
 
-//     ().into()
-// }
+    ().into()
+}
 
 #[component]
-fn Match(a: u8, b: u8, c: u8, d: u8) -> View {
-    let option = Some(a);
-    let x = match option {
+fn Match(a: u8, b: u8, c: u8) -> View {
+    let option = Some(tracked!(a));
+    let x = match tracked!(option) {
         Some(var) => var,
-        None => b,
+        None => tracked!(b),
     };
-    reactive_assert!(a, b => x);
+    assert!(updated!(option));
 
-    let y = match x {
-        0 => c,
-        1 => d,
-        _ => a,
+
+    let y = match tracked!(b) {
+        0 => "zero",
+        1 => "one",
+        _ => "other",
     };
-
-    reactive_assert!(a, b, c, d => y);
+    assert!(!updated!(y));
+    
+    let z = match tracked!(b) {
+        0 if tracked!(c) == 0 => "zero",
+        _ => "other"
+    };
+    assert!(updated!(z));
 
     ().into()
 }
 
 #[component]
 fn Unary(a: u8) -> View {
-    let b = !a;
-    reactive_assert!(a => b);
+    let b = !tracked!(a);
+    
+    assert!(updated!(b));
 
     ().into()
 }
 
 #[component]
 fn Tuple(a: u8, b: u8, c: u8) -> View {
-    let tuple = (a, b, c);
-    reactive_assert!(a, b, c => tuple);
-    {
-        let first = tuple.0;
-        let second = tuple.1;
-        let third = tuple.2;
-        reactive_assert!(a => first; b => second; c => third);
-    }
+    let tuple = (tracked!(a), tracked!(b));
+    assert!(updated!(tuple));
+
+    let tuple = (tracked!(b), tracked!(c));
+    assert!(updated!(tuple));
+
+    let tuple = (tracked!(b), tracked!(b));
+    assert!(!updated!(tuple));
 
     ().into()
 }
 
 #[component]
-fn While(a: u8, b: u8) -> View {
-    let mut x = 0;
-    while *a == 0 {
-        x = *b;
-    }
-    reactive_assert!(b => x);
+fn Macros(a: u8, b: u8, c: u8) -> View {
+    // testing assert
+    let result = assert!(updated!(a));
+    assert!(updated!(result));
 
-    ().into()
-}
-
-#[component]
-fn Enclose(a: u8) -> View {
-    let b = enclose!(a; a);
-    reactive_assert!(a => b);
-    ().into()
-}
-
-#[component]
-fn StdMacros(a: u8, b: u8, c: u8) -> View {
     // testing dbg!
-    let a_prime = dbg!(a);
-    reactive_assert!(a => a_prime);
-    let ab_prime = dbg!(a, b);
-    reactive_assert!(a, b => ab_prime);
+    let a_prime = dbg!(tracked!(a));
+    assert!(updated!(a));
+
+    let ab_prime = dbg!(tracked!(b));
+    assert!(!updated!(b));
+
+    // testing enclose!
+    let updated_a = enclose!(; updated!(a));
+    assert!(updated!(updated_a));
+    let cloned_a = enclose!(a; tracked!(a));
+    assert!(updated!(cloned_a));
+
+    let cloned_a = enclose!(a; a);
+    assert!(updated!(cloned_a));
 
     // testing format!
-    let formatted = format!("{} {} {d}", a, b, d = c);
-    reactive_assert!(a, b, c => formatted);
+    let formatted = format!("{} {}", tracked!(a), tracked!(b));
+    assert!(updated!(formatted));
+
+    let formatted2 = format!("{} {d}", tracked!(b), d=tracked!(c));
+    assert!(updated!(formatted2));
 
     // testing matches!
-    let matched = matches!(a, 1);
-    reactive_assert!(a => matched);
-    let matched = matches!(b, 1 | 2);
-    reactive_assert!(b => matched);
-    let matched = matches!(a, 3 | 4 if *b > 2,);
-    reactive_assert!(a, b => matched);
+    let matched = matches!(tracked!(a), 1);
+    assert!(updated!(matched));
+
+    let matched = matches!(tracked!(b), 1 | 2);
+    assert!(!updated!(matched));
+
+    let matched = matches!(tracked!(b), 0 | 1 if tracked!(c) > 2,);
+    assert!(updated!(matched));
+
 
     // testing vec!
-    let vec = vec![a];
-    reactive_assert!(a => vec);
-    let vec = vec![b, c];
-    reactive_assert!(b, c => vec);
-    let vec = vec![a; *c as usize];
-    reactive_assert!(a, c => vec);
+    let vec = vec![tracked!(a)];
+    assert!(updated!(vec));
+
+    let vec = vec![tracked!(b), tracked!(c)];
+    assert!(updated!(vec));
+
+    let vec = vec![5; tracked!(c) as usize];
+    assert!(updated!(vec));
 
     // testing try!
-    let ret: Result<u8, ()> = (|| {
-        let a = Ok(*a);
-        Ok(r#try!(a))
-    })();
-    reactive_assert!(a => ret);
+    // TODO: adjust closure handling or remove this test
+    // let ret: Result<u8, ()> = (|| {
+    //     let a = Ok(tracked!(a));
+    //     Ok(r#try!(tracked!(a)))
+    // })();
+    // assert!(updated!(ret.unwrap()));
+
+    ().into()
+}
+
+#[component]
+fn NestedBlocks(a: u8) -> View {
+    let x = loop {
+        break loop {
+            break tracked!(a);
+        }
+    };
+    assert!(updated!(x));
+
+    // Check assignment within nesting
+    let y = loop {
+        let y = loop {
+            break tracked!(a);
+        };
+        break y;
+    };
+    assert!(updated!(y));
+
+    let closure = || {
+        loop {
+            break tracked!(a);
+        }
+    };
+    assert!(updated!(closure));
+
+    ().into()
+}
+
+#[component]
+fn NestedTracked(a: u8, b: u8) -> View {
+    let nested = Tracked::new(a, true);
+    let nested_val = tracked!(tracked!(nested));
+    assert!(updated!(nested_val));
+
+    // if a non updated value is nested within an updated one, accessing the non updated value
+    // should report an updated value of false
+    let nested = Tracked::new(b, true);
+    let nested_val = tracked!(tracked!(nested));
+    assert!(!updated!(nested_val));
+
+    ().into()
+}
+
+#[component]
+fn Updated(a: u8, b: u8, c: u8) -> View {
+    assert!(updated!(a));
+    assert!(!updated!(b));
+    assert!(updated!(c));
+
+    let a = updated!(a);
+    let b = updated!(b);
+    let c = updated!(c);
+
+    assert!(updated!(a));
+    assert!(!updated!(b));
+    assert!(updated!(c));
+
+    let x = updated!(a) && updated!(b);
+    let y = updated!(b) || updated!(b);
+    assert!(updated!(x));
+    assert!(!updated!(y));
 
     ().into()
 }

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::rc::Rc;
@@ -6,7 +7,7 @@ use wasm_bindgen::JsCast;
 
 use crate::events::*;
 use avalanche::renderer::{HasChildrenMarker, NativeType};
-use avalanche::{Component, InternalContext, View};
+use avalanche::{Component, Context, View};
 
 /// Represents a text node.
 #[derive(Clone, PartialEq)]
@@ -58,12 +59,12 @@ impl TextBuilder {
 impl Component for Text {
     type Builder = TextBuilder;
 
-    fn render(&self, _: InternalContext) -> View {
+    fn render(&self, _: Context) -> View {
         ().into()
     }
     fn native_type(&self) -> Option<NativeType> {
         let action = NativeType {
-            handler: "oak_web_text",
+            handler: "avalanche_web_text",
             name: "",
         };
 
@@ -84,7 +85,7 @@ impl Component for Text {
 }
 
 pub(crate) enum Attr {
-    Prop(Option<String>),
+    Prop(Option<Cow<'static, str>>),
     Handler(Rc<dyn Fn(Event)>),
 }
 #[derive(Default)]
@@ -117,7 +118,7 @@ impl RawElement {
 impl Component for RawElement {
     type Builder = ();
 
-    fn render(&self, _context: InternalContext) -> View {
+    fn render(&self, _: Context) -> View {
         HasChildrenMarker {
             children: self.children.clone(),
         }
@@ -128,13 +129,9 @@ impl Component for RawElement {
         self.attrs_updated || self.children_updated
     }
 
-    fn init_state(&self) -> Box<dyn std::any::Any> {
-        Box::new(())
-    }
-
     fn native_type(&self) -> Option<NativeType> {
         Some(NativeType {
-            handler: "oak_web",
+            handler: "avalanche_web",
             name: self.tag,
         })
     }
@@ -211,7 +208,7 @@ macro_rules! def_component {
         impl ::avalanche::Component for $tag {
             type Builder = $tag_builder;
 
-            fn render(&self, _: InternalContext) -> View {
+            fn render(&self, _: Context) -> View {
                 unreachable!()
             }
 
@@ -226,9 +223,7 @@ macro_rules! def_component {
 
         impl $tag_builder {
             pub fn new() -> Self {
-                Self {
-                    raw: std::default::Default::default(),
-                }
+                Default::default()
             }
 
             pub fn build(mut self, location: (u32, u32)) -> RawElement {
@@ -258,6 +253,14 @@ macro_rules! def_component {
             }
         }
 
+        impl Default for $tag_builder {
+            fn default() -> Self {
+                Self {
+                    raw: std::default::Default::default(),
+                }
+            }
+        }
+
         impl AssociatedNativeElement for $tag_builder {
             type NativeElement = $native_element;
         }
@@ -280,7 +283,7 @@ macro_rules! def_component_attrs {
                         pub fn $propident<T>(mut self, val: T, updated: bool) -> Self where T : Into<$proptype> {
                             self.raw.attr(
                                 $propnative,
-                                Attr::Prop(Some(Into::<$proptype>::into(val).to_string())),
+                                Attr::Prop(Some(Cow::Owned(Into::<$proptype>::into(val).to_string()))),
                                 updated
                             );
                             self
@@ -292,8 +295,7 @@ macro_rules! def_component_attrs {
                             pub fn $boolpropident(mut self, val: bool, updated: bool) -> Self {
                                 self.raw.attr(
                                     $boolpropnative,
-                                    // TODO: use Cow<String> for Prop to avoid alloc
-                                    Attr::Prop(val.then(|| String::from($boolpropnative))),
+                                    Attr::Prop(val.then(|| Cow::Borrowed($boolpropnative))),
                                     updated
                                 );
                                 self
@@ -1502,10 +1504,10 @@ def_component_attrs! {
 add_input_attrs! {InputBuilder}
 
 impl InputBuilder {
-    pub fn value<S: ToString>(mut self, val: S, updated: bool) -> Self {
+    pub fn value<S: Into<String>>(mut self, val: S, updated: bool) -> Self {
         self.raw.value_controlled = true;
         self.raw
-            .attr("value", Attr::Prop(Some(val.to_string())), updated);
+            .attr("value", Attr::Prop(Some(Cow::Owned(val.into()))), updated);
         self
     }
 
@@ -1513,7 +1515,7 @@ impl InputBuilder {
         self.raw.checked_controlled = true;
         self.raw.attr(
             "checked",
-            Attr::Prop(val.then(|| "checked".to_string())),
+            Attr::Prop(val.then(|| Cow::Borrowed("checked"))),
             updated,
         );
         self
@@ -1533,7 +1535,7 @@ impl TextAreaBuilder {
     pub fn value<S: ToString>(mut self, val: S, updated: bool) -> Self {
         self.raw.value_controlled = true;
         self.raw
-            .attr("value", Attr::Prop(Some(val.to_string())), updated);
+            .attr("value", Attr::Prop(Some(Cow::Owned(val.to_string()))), updated);
         self
     }
 }

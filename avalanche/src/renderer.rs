@@ -1,7 +1,6 @@
 use std::any::Any;
 
-use crate::vdom::VNode;
-use crate::InternalContext;
+use crate::hooks::Context;
 use crate::{Component, View};
 
 /// An opaque handle whose underlying type is determined by the current `Renderer`.
@@ -92,15 +91,13 @@ pub trait Renderer {
         component: &View,
     );
 
-    /// Destroy the native component corresponding to the `VNode`. This method will probably be removed.
-    #[deprecated]
-    fn remove_component(&mut self, vnode: &mut VNode);
-
     /// Logs the given string to a platform-appropriate destination.
     /// This method is a placeholder, and may either be elaborated or replaced with
     /// the `log` crate
     fn log(&self, _string: &str) {}
 }
+
+/// An interface to schedule a function on a platform's ui thread.
 pub trait Scheduler {
     /// Schedule the given function to be run on the ui thread in the future.
     fn schedule_on_ui_thread(&mut self, f: Box<dyn FnOnce()>);
@@ -114,18 +111,22 @@ pub struct NativeType {
     pub name: &'static str,
 }
 
+/// A component for native children to render avalanche components.
 #[derive(Clone, Default)]
 pub struct HasChildrenMarker {
     pub children: Vec<View>,
 }
 
 impl Component for HasChildrenMarker {
-    //TODO: make ! when never stabilizes
+    // TODO: make ! when never stabilizes
     type Builder = ();
-    fn render(&self, _: InternalContext) -> View {
+    fn render(&self, _: Context) -> View {
         unreachable!()
     }
     fn updated(&self) -> bool {
         todo!()
     }
 }
+
+#[doc(inline)]
+pub use crate::vdom::Root;

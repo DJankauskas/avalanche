@@ -1,103 +1,8 @@
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 use syn::parse::{discouraged::Speculative, Parse, ParseStream};
-use syn::{punctuated::Punctuated, Type};
+use syn::{punctuated::Punctuated};
 use syn::{Expr, Ident, Result, Token};
-
-pub(crate) struct ReactiveAssert {
-    pub asserts: Punctuated<Assert, Token![;]>,
-}
-
-impl Parse for ReactiveAssert {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let mut asserts = Punctuated::new();
-        while !input.is_empty() {
-            let assert = input.parse::<Assert>()?;
-            asserts.push_value(assert);
-
-            //remove separator, except if the stream has no more to process
-            if !input.is_empty() {
-                asserts.push_punct(input.parse::<Token![;]>()?);
-            }
-        }
-
-        Ok(ReactiveAssert { asserts })
-    }
-}
-
-pub(crate) struct Assert {
-    pub dependencies: Punctuated<Ident, Token![,]>,
-    pub dependent: Ident,
-    pub fat_arrow_token: Token![=>],
-}
-
-impl Parse for Assert {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let mut dependencies = Punctuated::new();
-
-        while !input.lookahead1().peek(Token![=>]) {
-            let ident = input.parse::<Ident>()?;
-            dependencies.push_value(ident);
-
-            //remove separator, except if the stream has no more to process
-            if !input.lookahead1().peek(Token![=>]) {
-                dependencies.push_punct(input.parse::<Token![,]>()?);
-            }
-        }
-
-        let fat_arrow_token = input.parse()?;
-
-        let dependent = input.parse::<Ident>()?;
-
-        Ok(Assert {
-            dependencies,
-            dependent,
-            fat_arrow_token,
-        })
-    }
-}
-
-impl ToTokens for Assert {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        self.dependencies.to_tokens(tokens);
-        self.fat_arrow_token.to_tokens(tokens);
-        self.dependent.to_tokens(tokens);
-    }
-}
-
-pub(crate) struct Hooks {
-    pub hooks: Punctuated<Hook, Token![,]>,
-}
-
-impl Parse for Hooks {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let hooks = Punctuated::parse_terminated(input)?;
-        let ret = Hooks { hooks };
-
-        Ok(ret)
-    }
-}
-
-pub(crate) struct Hook {
-    pub name: Ident,
-    pub ty: Type,
-    pub equal_token: Token![=],
-}
-
-impl Parse for Hook {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let name = input.parse()?;
-        let equal_token = input.parse()?;
-        let ty = input.parse()?;
-        let hook = Hook {
-            name,
-            ty,
-            equal_token,
-        };
-
-        Ok(hook)
-    }
-}
 
 pub(crate) struct EncloseBody {
     pub idents: Punctuated<Ident, Token![,]>,
@@ -107,7 +12,7 @@ pub(crate) struct EncloseBody {
 
 impl Parse for EncloseBody {
     fn parse(input: ParseStream) -> Result<Self> {
-        let idents: Punctuated<Ident, Token![,]> = Punctuated::parse_separated_nonempty(input)?;
+        let idents: Punctuated<Ident, Token![,]> = Punctuated::parse_separated_nonempty(input).unwrap_or_default();
         let semicolon = input.parse()?;
         let expr = input.parse()?;
 
@@ -118,6 +23,14 @@ impl Parse for EncloseBody {
         };
 
         Ok(enclose)
+    }
+}
+
+impl ToTokens for EncloseBody {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.idents.to_tokens(tokens);
+        self.semicolon.to_tokens(tokens);
+        self.expr.to_tokens(tokens);
     }
 }
 
@@ -133,6 +46,12 @@ impl Parse for ExprList {
         let dbg = ExprList { exprs };
 
         Ok(dbg)
+    }
+}
+
+impl ToTokens for ExprList {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.exprs.to_tokens(tokens);
     }
 }
 
@@ -167,6 +86,17 @@ impl Parse for MatchesBody {
     }
 }
 
+impl ToTokens for MatchesBody {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.expr.to_tokens(tokens);
+        self.comma_token.to_tokens(tokens);
+        self.pats.to_tokens(tokens);
+        self.if_token.to_tokens(tokens);
+        self.if_expr.to_tokens(tokens);
+        self.trailing_comma_token.to_tokens(tokens);
+    }
+}
+
 /// This is an incomplete representation of the body of
 /// a [`vec!`] macro, consisting of its expressions.
 pub(crate) enum VecBody {
@@ -178,6 +108,14 @@ pub(crate) struct VecRepeat {
     pub expr: Expr,
     pub semicolon_token: Token![;],
     pub n_expr: Expr,
+}
+
+impl ToTokens for VecRepeat {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.expr.to_tokens(tokens);
+        self.semicolon_token.to_tokens(tokens);
+        self.n_expr.to_tokens(tokens);
+    }
 }
 
 impl Parse for VecBody {
@@ -210,6 +148,15 @@ impl Parse for VecBody {
     }
 }
 
+impl ToTokens for VecBody {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        match self {
+            VecBody::Repeat(repeat) => repeat.to_tokens(tokens),
+            VecBody::Literal(literal) => literal.to_tokens(tokens),
+        }
+    }
+}
+
 pub(crate) struct Try {
     pub expr: Expr,
     pub trailing_comma_token: Option<Token![,]>,
@@ -229,6 +176,13 @@ impl Parse for Try {
     }
 }
 
+impl ToTokens for Try {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.expr.to_tokens(tokens);
+        self.trailing_comma_token.to_tokens(tokens);
+    }
+}
+
 pub(crate) struct ComponentFieldValue {
     pub name: Ident,
     pub colon_token: Token![:],
@@ -245,10 +199,18 @@ impl Parse for ComponentFieldValue {
     }
 }
 
+impl ToTokens for ComponentFieldValue {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.name.to_tokens(tokens);
+        self.colon_token.to_tokens(tokens);
+        self.value.to_tokens(tokens);
+    }
+}
+
 pub(crate) struct ComponentBuilder {
     pub named_init: Punctuated<ComponentFieldValue, Token![,]>,
     pub trailing_init: Option<Expr>,
-    pub trailing_comma_token: Option<Token![,]>,
+    _trailing_comma_token: Option<Token![,]>,
 }
 
 impl Parse for ComponentBuilder {
@@ -267,7 +229,7 @@ impl Parse for ComponentBuilder {
                             return Ok(ComponentBuilder {
                                 named_init,
                                 trailing_init: None,
-                                trailing_comma_token: None,
+                                _trailing_comma_token: None,
                             });
                         } else {
                             return Err(input.error("expected , or )"));
@@ -288,7 +250,28 @@ impl Parse for ComponentBuilder {
         Ok(ComponentBuilder {
             named_init,
             trailing_init,
-            trailing_comma_token,
+            _trailing_comma_token: trailing_comma_token,
         })
+    }
+}
+
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum Tracked {
+    Named(Ident),
+    Unnamed(Expr),
+}
+
+impl Parse for Tracked {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let fork = input.fork();
+        if fork.parse::<Ident>().is_ok() && fork.is_empty() {
+            let ident = input.parse()?;
+            let tracked = Tracked::Named(ident);
+            return Ok(tracked);
+        }
+        let expr = input.parse()?;
+
+        let tracked = Tracked::Unnamed(expr);
+        Ok(tracked)
     }
 }

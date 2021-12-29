@@ -1,5 +1,4 @@
 use avalanche::renderer::{NativeHandle, NativeType, Renderer, Scheduler};
-use avalanche::vdom::VNode;
 use avalanche::{Component, View};
 
 use avalanche::shared::Shared;
@@ -16,7 +15,7 @@ use web_sys::Element;
 pub mod components;
 pub mod events;
 
-static TIMEOUT_MSG_NAME: &str = "oak_web_message_name";
+static TIMEOUT_MSG_NAME: &str = "avalanche_web_message_name";
 
 pub fn mount<C: Component + Default>(element: Element) {
     let child: View = C::default().into();
@@ -79,17 +78,16 @@ impl WebScheduler {
         // uses approach in https://dbaron.org/log/20100309-faster-timeouts
         let _listener = EventListener::new(&window, "message", move |e| {
             let e = e.clone();
-            match e.dyn_into::<web_sys::MessageEvent>() {
-                Ok(event) => {
-                    if event.data() == TIMEOUT_MSG_NAME {
-                        event.stop_propagation();
-                        // f may call schedule_on_ui_thread, so it must be called outside of exec_mut
-                        let f = queued_fns_clone
-                            .exec_mut(|queue: &mut VecDeque<Box<dyn FnOnce()>>| queue.pop_front());
-                        f.map(|f| f());
+            if let Ok(event) = e.dyn_into::<web_sys::MessageEvent>() {
+                if event.data() == TIMEOUT_MSG_NAME {
+                    event.stop_propagation();
+                    // f may call schedule_on_ui_thread, so it must be called outside of exec_mut
+                    let f = queued_fns_clone
+                        .exec_mut(|queue: &mut VecDeque<Box<dyn FnOnce()>>| queue.pop_front());
+                    if let Some(f) = f {
+                        f();
                     }
                 }
-                Err(_) => { /*should not be reachable*/ }
             }
         });
 
@@ -134,8 +132,7 @@ impl WebRenderer {
     }
 
     fn get_child(parent: &web_sys::Element, child_idx: usize, offset: u32) -> web_sys::Node {
-        // TODO: remove debug info
-        Self::try_get_child(parent, child_idx, offset).expect(&format!("{}", child_idx))
+        Self::try_get_child(parent, child_idx, offset).unwrap()
     }
 
     fn try_get_child(
@@ -146,10 +143,10 @@ impl WebRenderer {
         parent.child_nodes().item(child_idx as u32 + offset)
     }
 
-    fn assert_handler_oak_web(native_type: &NativeType) {
+    fn assert_handler_avalanche_web(native_type: &NativeType) {
         assert_eq!(
-            native_type.handler, "oak_web",
-            "handler is not of type \"oak web\""
+            native_type.handler, "avalanche_web",
+            "handler is not of type \"avalanche_web\""
         )
     }
 
@@ -166,13 +163,12 @@ impl WebRenderer {
 }
 
 impl Renderer for WebRenderer {
-    // TODO: add support for () rendering (important!)
     fn create_component(&mut self, native_type: &NativeType, component: &View) -> NativeHandle {
-        let elem = match native_type.handler.as_ref() {
-            "oak_web_text" => {
+        let elem = match native_type.handler {
+            "avalanche_web_text" => {
                 let text_node = match component.downcast_ref::<Text>() {
                     Some(text) => self.document.create_text_node(&text.text),
-                    None => panic!("WebRenderer: expected Text component for oak_web_text."),
+                    None => panic!("WebRenderer: expected Text component for avalanche_web_text."),
                 };
                 WebNativeHandle {
                     node: web_sys::Node::from(text_node),
@@ -180,7 +176,7 @@ impl Renderer for WebRenderer {
                     children_offset: 0,
                 }
             }
-            "oak_web" => {
+            "avalanche_web" => {
                 assert_ne!(
                     native_type.name, "",
                     "WebRenderer: expected tag name to not be empty."
@@ -191,7 +187,7 @@ impl Renderer for WebRenderer {
 
                 let element = self
                     .document
-                    .create_element(&native_type.name)
+                    .create_element(native_type.name)
                     .expect("WebRenderer: element creation failed from syntax error.");
 
                 let mut listeners = HashMap::new();
@@ -230,13 +226,13 @@ impl Renderer for WebRenderer {
                                     if let Some(prop) = prop {
                                         match *name {
                                             "value" => {
-                                                input_element.set_value(&prop);
+                                                input_element.set_value(prop);
                                             }
                                             "checked" => {
                                                 input_element.set_checked(!prop.is_empty());
                                             }
                                             _ => {
-                                                input_element.set_attribute(name, &prop).unwrap();
+                                                input_element.set_attribute(name, prop).unwrap();
                                             }
                                         }
                                     }
@@ -259,9 +255,9 @@ impl Renderer for WebRenderer {
                                     if let Some(prop) = prop {
                                         match *name {
                                             "value" => text_area_element.set_value(prop),
-                                            _ => text_area_element
-                                                .set_attribute(name, &prop)
-                                                .unwrap(),
+                                            _ => {
+                                                text_area_element.set_attribute(name, prop).unwrap()
+                                            }
                                         }
                                     }
                                 }
@@ -276,7 +272,7 @@ impl Renderer for WebRenderer {
                             match attr {
                                 Attr::Prop(prop) => {
                                     if let Some(prop) = prop {
-                                        element.set_attribute(name, &prop).unwrap();
+                                        element.set_attribute(name, prop).unwrap();
                                     }
                                 }
                                 Attr::Handler(handler) => {
@@ -306,8 +302,8 @@ impl Renderer for WebRenderer {
         component: &View,
     ) {
         let web_handle = native_handle.downcast_mut::<WebNativeHandle>().unwrap();
-        match native_type.handler.as_ref() {
-            "oak_web" => {
+        match native_type.handler {
+            "avalanche_web" => {
                 let node = web_handle.node.clone();
                 let element = node.dyn_into::<web_sys::Element>().unwrap();
                 let raw_element = component
@@ -327,7 +323,7 @@ impl Renderer for WebRenderer {
                                         Attr::Prop(prop) => match *name {
                                             "value" => {
                                                 if let Some(prop) = prop {
-                                                    input_element.set_value(&prop);
+                                                    input_element.set_value(prop);
                                                 }
                                             }
                                             "checked" => {
@@ -360,7 +356,7 @@ impl Renderer for WebRenderer {
                                         Attr::Prop(prop) => {
                                             if *name == "value" {
                                                 if let Some(prop) = prop {
-                                                    text_area_element.set_value(&prop);
+                                                    text_area_element.set_value(prop);
                                                 }
                                             } else {
                                                 update_generic_prop(&element, name, prop.as_deref())
@@ -400,7 +396,7 @@ impl Renderer for WebRenderer {
                     }
                 }
             }
-            "oak_web_text" => {
+            "avalanche_web_text" => {
                 let new_text = component.downcast_ref::<Text>().expect("Text component");
                 if new_text.updated() {
                     //TODO: compare with old text?
@@ -411,22 +407,6 @@ impl Renderer for WebRenderer {
         };
     }
 
-    // TODO: check for custom handler
-    fn remove_component(&mut self, vnode: &mut VNode) {
-        match &vnode.native_handle {
-            Some(handle) => {
-                let node = &handle.downcast_ref::<WebNativeHandle>().unwrap().node;
-                match node.parent_node() {
-                    Some(parent) => {
-                        parent.remove_child(node).expect("Remove from parent");
-                    }
-                    None => {}
-                }
-            }
-            None => {}
-        }
-    }
-
     fn append_child(
         &mut self,
         parent_type: &NativeType,
@@ -434,7 +414,7 @@ impl Renderer for WebRenderer {
         _child_type: &NativeType,
         child_handle: &NativeHandle,
     ) {
-        Self::assert_handler_oak_web(parent_type);
+        Self::assert_handler_avalanche_web(parent_type);
         let parent_node = Self::handle_cast(parent_handle).node.clone();
         let parent_element = Self::node_to_element(parent_node);
         let child_node = &Self::handle_cast(child_handle).node;
@@ -452,7 +432,7 @@ impl Renderer for WebRenderer {
         child_handle: &NativeHandle,
     ) {
         self.log("inserting child");
-        Self::assert_handler_oak_web(parent_type);
+        Self::assert_handler_avalanche_web(parent_type);
         let parent_handle = Self::handle_cast(parent_handle);
         let parent_element = Self::node_to_element(parent_handle.node.clone());
         let child_node = &Self::handle_cast(child_handle).node;
@@ -470,7 +450,7 @@ impl Renderer for WebRenderer {
         a: usize,
         b: usize,
     ) {
-        Self::assert_handler_oak_web(parent_type);
+        Self::assert_handler_avalanche_web(parent_type);
         let parent_handle = Self::handle_cast(parent_handle);
         let parent_element = Self::node_to_element(parent_handle.node.clone());
         let lesser = std::cmp::min(a, b);
@@ -499,7 +479,7 @@ impl Renderer for WebRenderer {
         _child_type: &NativeType,
         child_handle: &NativeHandle,
     ) {
-        Self::assert_handler_oak_web(parent_type);
+        Self::assert_handler_avalanche_web(parent_type);
         let parent_handle = Self::handle_cast(parent_handle);
         let parent_element = Self::node_to_element(parent_handle.node.clone());
         let curr_child_node =
@@ -519,7 +499,7 @@ impl Renderer for WebRenderer {
         old: usize,
         new: usize,
     ) {
-        Self::assert_handler_oak_web(parent_type);
+        Self::assert_handler_avalanche_web(parent_type);
         let parent_handle = Self::handle_cast(parent_handle);
         let parent_element = Self::node_to_element(parent_handle.node.clone());
         let curr_child_node = Self::get_child(&parent_element, old, parent_handle.children_offset);
@@ -539,7 +519,7 @@ impl Renderer for WebRenderer {
         parent_handle: &mut NativeHandle,
         index: usize,
     ) {
-        Self::assert_handler_oak_web(parent_type);
+        Self::assert_handler_avalanche_web(parent_type);
         let parent_handle = Self::handle_cast(parent_handle);
         let parent_element = Self::node_to_element(parent_handle.node.clone());
         let child_node = Self::get_child(&parent_element, index, parent_handle.children_offset);
@@ -557,7 +537,7 @@ impl Renderer for WebRenderer {
 fn update_generic_prop(element: &Element, name: &str, prop: Option<&str>) {
     match prop {
         Some(prop) => {
-            element.set_attribute(name, &prop).unwrap();
+            element.set_attribute(name, prop).unwrap();
         }
         None => {
             element.remove_attribute(name).unwrap();
@@ -582,9 +562,11 @@ fn add_named_listener(
     callback: Rc<dyn Fn(Event)>,
     listeners: &mut HashMap<&'static str, EventListener>,
 ) {
-    let mut options = EventListenerOptions::default();
-    options.passive = passive;
-    let listener = EventListener::new_with_options(&element, event, options, move |event| {
+    let options = EventListenerOptions {
+        passive,
+        ..Default::default()
+    };
+    let listener = EventListener::new_with_options(element, event, options, move |event| {
         callback(event.clone())
     });
     listeners.insert(name, listener);
@@ -597,6 +579,17 @@ fn update_listener(
     listeners: &mut HashMap<&'static str, EventListener>,
 ) {
     let _ = listeners.remove(name);
-    let listener = EventListener::new(&element, name, move |event| callback(event.clone()));
+    let listener = EventListener::new(element, name, move |event| callback(event.clone()));
     listeners.insert(name, listener);
+}
+
+// Mdbook's testing doesn't quite work, so we inject our book test cases into the crate to make sure they compile.
+#[cfg(doctest)]
+mod book_tests {
+    use doc_comment::doc_comment;
+    doc_comment!(include_str!("../../docs/src/getting_started.md"));
+    doc_comment!(include_str!("../../docs/src/basic_components.md"));
+    doc_comment!(include_str!("../../docs/src/state.md"));
+    doc_comment!(include_str!("../../docs/src/reactivity.md"));
+    doc_comment!(include_str!("../../docs/src/events.md"));
 }

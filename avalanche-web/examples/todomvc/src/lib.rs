@@ -1,4 +1,6 @@
-use avalanche::{component, enclose, reactive_assert, UseState, View};
+use std::rc::Rc;
+
+use avalanche::{component, enclose, state, tracked, updated, vec, View};
 use avalanche_web::components::{
     Button, Div, Footer, Header, Input, Label, Li, Section, Span, Strong, Text, Ul, A, H1,
 };
@@ -39,16 +41,20 @@ impl Filter {
     }
 }
 
-#[component(items = UseState<Vec<Item>>, monotonic_id = UseState<u32>, editing = UseState<Option<u32>>, filter = UseState<Filter>)]
+#[component]
 fn Todo() -> View {
-    let (editing, set_editing) = editing(None);
-    let (filter, set_filter) = filter(Filter::All);
-    let (items, update_items) = items(Vec::new());
-    let (monotonic_id, update_monotonic_id) = monotonic_id(0);
-    let monotonic_id = *monotonic_id;
+    let (editing, set_editing) = state::<Option<u32>, _>(self, || None);
+    let (filter, set_filter) = state(self, || Filter::All);
+    let (items, update_items) = vec::<Item, _>(self, || vec![]);
+    let (monotonic_id, update_monotonic_id) = state(self, || 0);
 
-    let num_completed = items.iter().filter(|item| item.completed).count();
-    let num_active = items.len() - num_completed;
+    let monotonic_id = *tracked!(monotonic_id);
+
+    let num_completed = tracked!(items)
+        .iter()
+        .filter(|item| tracked!(item).completed)
+        .count();
+    let num_active = tracked!(items).len() - tracked!(num_completed);
 
     let clear_completed = enclose!(update_items; move |_| {
         update_items.update(|items| {
@@ -56,86 +62,44 @@ fn Todo() -> View {
         })
     });
 
-    let children = items
+    let children = tracked!(items)
         .iter()
         .enumerate()
         .filter(|(_, item)| {
-            match filter {
+            match *tracked!(filter) {
                 Filter::All => true,
-                Filter::Completed => item.completed,
-                Filter::Active => !item.completed
+                Filter::Completed => tracked!(item).completed,
+                Filter::Active => !tracked!(item).completed
             }
         })
         .map(|(i, item)| {
-            reactive_assert!(items => i);
-            let id = item.id;
-            Li!(
-                class: format!(
-                    "{} {}",
-                    if item.completed {
-                        "completed"
-                    } else {
-                        ""
-                    },
-                    if *editing == Some(item.id) {
-                        "editing"
-                    } else {
-                        ""
-                    }
+            let id = tracked!(item).id;
+            TodoItem!(
+                key: tracked!(id),
+                item: tracked!(item).clone(),
+                is_editing: *tracked!(editing) == Some(tracked!(id)),
+                toggle_completed: Rc::new(
+                    enclose!(update_items; move || {
+                        updated!(items);
+                        update_items.update(move |items| items[i].completed = !items[i].completed)
+                })),
+                set_editing: Rc::new(
+                    enclose!(set_editing; move |editing| {
+                        set_editing.set(editing.then(|| tracked!(id)));
+                    })
                 ),
-                key: item.id,
-                [
-                    Div!(
-                        class: "view",
-                        [
-                            Input!(
-                                class: "toggle",
-                                type_: "checkbox",
-                                checked: item.completed,
-                                on_click: enclose!(update_items; move |_| {
-                                    update_items.update(move |items| items[i].completed = !items[i].completed)
-                                })
-                            ),
-                            Label!(
-                                child: Text!(item.text.clone()),
-                                on_double_click: enclose!(set_editing; move |_| {
-                                    set_editing.set(Some(id))
-                                })
-                            ),
-                            Button!(
-                                class: "destroy",
-                                on_click: enclose!(update_items; move |_| {
-                                    update_items.update(move |items| {
-                                        items.remove(i);
-                                    })
-                                })
-                            )
-                        ]
-                    ),
-                    (*editing == Some(item.id)).then(|| Input!(
-                        class: "edit",
-                        id: "edit",
-                        auto_focus: true,
-                        value: item.text.clone(),
-                        on_key_down: enclose!(set_editing; move |e| {
-                            let which = e.which();
-                            if which == ENTER_KEY {
-                                e.current_target().unwrap().blur().expect("blur");
-                            } else if which == ESCAPE_KEY {
-                                set_editing.set(None);
-                            }
-                        }),
-                        on_blur: enclose!(update_items, set_editing; move |e| {
-                            update_items.update(move |items| items[i].text = e.current_target().unwrap().value());
-                            set_editing.set(None);
-                        })
-                    )).into()
-                ]
+                update_item: Rc::new(
+                    enclose!(update_items; move |item| {
+                        updated!(items);
+                        match item {
+                            Some(item) => update_items.update(move |items| items[i] = item),
+                            None => update_items.update(move |items| { items.remove(i); }),
+                        }
+                    })
+                )
             )
         })
         .collect::<Vec<_>>();
-
-    reactive_assert!(items => children);
 
     Div!(
         [
@@ -151,15 +115,16 @@ fn Todo() -> View {
                         auto_focus: true,
                         on_key_down: enclose!(update_items; move |e| {
                             if e.which() == ENTER_KEY {
+                                updated!(items);
                                 let current_target = e.current_target().unwrap();
                                 let value = current_target.value();
                                 update_items.update(move |items| {
                                     let new_item = Item {
                                         text: value,
                                         completed: false,
-                                        id: monotonic_id
+                                        id: tracked!(monotonic_id)
                                     };
-                                    items.push(new_item);
+                                    items.push(tracked!(new_item));
                                 });
                                 update_monotonic_id.update(|id| *id += 1);
                                 current_target.set_value("");
@@ -168,7 +133,7 @@ fn Todo() -> View {
                     )
                 ]
             ),
-            (items.len() > 0).then(|| Section!(
+            (tracked!(items).len() > 0).then(|| Section!(
                 class: "main",
                 [
                     Input!(
@@ -178,7 +143,7 @@ fn Todo() -> View {
                         on_change: enclose!(update_items; move |e| {
                             let checked = e.current_target().unwrap().checked();
                             update_items.update(move |items| {
-                                for item in items.iter_mut() {
+                                for item in items.as_raw_vec().iter_mut() {
                                     item.completed = checked;
                                 }
                             })
@@ -190,7 +155,7 @@ fn Todo() -> View {
                     ),
                     Ul!(
                         class: "todo-list",
-                        children
+                        tracked!(children)
                     ),
                     Footer!(
                         class: "footer",
@@ -199,9 +164,9 @@ fn Todo() -> View {
                                 class: "todo-count",
                                 [
                                     Strong! (
-                                        child: Text!(num_active)
+                                        child: Text!(tracked!(num_active))
                                     ),
-                                    Text!(if num_active == 1 { " item" } else { " items" })
+                                    Text!(if tracked!(num_active) == 1 { " item" } else { " items" })
                                 ]
                             ),
                             Ul!(
@@ -209,7 +174,7 @@ fn Todo() -> View {
                                 [
                                     Li!(
                                         child: A!(
-                                            class: filter.selected(Filter::All),
+                                            class: tracked!(filter).selected(Filter::All),
                                             href: "#/",
                                             child: Text!("All"),
                                             on_click: enclose!(set_filter; move |_| {
@@ -219,7 +184,7 @@ fn Todo() -> View {
                                     ),
                                     Li!(
                                         child: A!(
-                                            class: filter.selected(Filter::Active),
+                                            class: tracked!(filter).selected(Filter::Active),
                                             href: "#/active",
                                             child: Text!("Active"),
                                             on_click: enclose!(set_filter; move |_| {
@@ -229,7 +194,7 @@ fn Todo() -> View {
                                     ),
                                     Li!(
                                         child: A!(
-                                            class: filter.selected(Filter::Completed),
+                                            class: tracked!(filter).selected(Filter::Completed),
                                             href: "#/completed",
                                             child: Text!("Completed"),
                                             on_click: enclose!(set_filter; move |_| {
@@ -240,7 +205,7 @@ fn Todo() -> View {
                                 ]
                             ),
 
-                            (num_completed > 0).then(|| Button!(
+                            (tracked!(num_completed) > 0).then(|| Button!(
                                 class: "clear-completed",
                                 on_click: clear_completed,
                                 child: Text!("Clear completed")
@@ -248,6 +213,74 @@ fn Todo() -> View {
                         ]
                     )
                 ]
+            )).into()
+        ]
+    )
+}
+
+#[component]
+fn TodoItem(item: Item, is_editing: bool, toggle_completed: Rc<dyn Fn()>, set_editing: Rc<dyn Fn(bool)>, update_item: Rc<dyn Fn(Option<Item>)>) -> View {
+    Li!(
+        class: format!(
+            "{} {}",
+            if tracked!(&item).completed {
+                "completed"
+            } else {
+                ""
+            },
+            if tracked!(is_editing) {
+                "editing"
+            } else {
+                ""
+            }
+        ),
+        [
+            Div!(
+                class: "view",
+                [
+                    Input!(
+                        class: "toggle",
+                        type_: "checkbox",
+                        checked: tracked!(&item).completed,
+                        on_click: enclose!(toggle_completed; move |_| {
+                            tracked!(&toggle_completed)();
+                        })
+                    ),
+                    Label!(
+                        child: Text!(tracked!(&item).text.clone()),
+                        on_double_click: enclose!(set_editing; move |_| {
+                            tracked!(&set_editing)(true);
+                        })
+                    ),
+                    Button!(
+                        class: "destroy",
+                        on_click: enclose!(update_item; move |_| {
+                            tracked!(&update_item)(None);
+                        })
+                    )
+                ]
+            ),
+            tracked!(is_editing).then(|| Input!(
+                class: "edit",
+                id: "edit",
+                auto_focus: true,
+                value: tracked!(&item).text.clone(),
+                on_key_down: enclose!(set_editing; move |e| {
+                    let which = e.which();
+                    if which == ENTER_KEY {
+                        e.current_target().unwrap().blur().expect("blur");
+                    } else if which == ESCAPE_KEY {
+                        tracked!(&set_editing)(false);
+                    }
+                }),
+                on_blur: enclose!(item, update_item, set_editing; move |e| {
+                    let item = Item {
+                        text: e.current_target().unwrap().value(),
+                        ..tracked!(&item)
+                    };
+                    tracked!(&update_item)(Some(tracked!(item)));
+                    tracked!(&set_editing)(false);
+                })
             )).into()
         ]
     )
@@ -269,6 +302,5 @@ pub fn main_js() {
             .query_selector(".todoapp")
             .expect("body")
             .unwrap()
-            .into(),
     );
 }

@@ -49,6 +49,3 @@ impl<E: JsCast + Clone + Into<Event>, C: JsCast> Deref for TypedEvent<E, C> {
         &self.event
     }
 }
-
-//TODO: handle unstable
-//pub use web_sys::ClipboardEvent;

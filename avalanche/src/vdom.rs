@@ -1,35 +1,112 @@
 use crate::tree::{NodeId, Tree};
 use crate::View;
 use crate::{
+    hooks::Gen,
     renderer::{HasChildrenMarker, NativeHandle, NativeType, Renderer, Scheduler},
     ComponentPos,
 };
 
-use crate::{shared::Shared, InternalContext};
+use crate::{hooks::Context, shared::Shared};
 use std::{
     any::Any,
     cell::RefCell,
     collections::{HashMap, HashSet},
     hash::Hash,
+    panic::Location,
     rc::Rc,
 };
 
-const DYNAMIC_CHILDREN_ERR: &'static str = "Dynamic components must be provided keys.";
+use self::wrappers::ComponentStateAccess;
+
+const DYNAMIC_CHILDREN_ERR: &str = "Dynamic components must be provided keys.";
 
 pub struct VDom {
     pub(crate) tree: Tree<VNode>,
     pub renderer: Box<dyn Renderer>,
+    pub(crate) gen: Gen,
 }
 
-// TODO: possibly make pub(crate)
+// separate wrapper types to keep data structures maintaining safety invariants as isolated as possible
+pub(crate) mod wrappers {
+    use std::{any::Any, marker::PhantomData, panic::Location};
+
+    /// A wrapper over a `Box`, with a raw pointer to its memory, so that
+    /// references derived from it do not have a `Box`'s provenance and
+    /// remain valid when the `SharedBox` is moved.
+    pub struct SharedBox<T: ?Sized> {
+        value: *mut T,
+        _marker: PhantomData<T>,
+    }
+
+    impl<T: ?Sized> SharedBox<T> {
+        pub fn new(value: Box<T>) -> Self {
+            Self {
+                value: Box::into_raw(value),
+                _marker: PhantomData,
+            }
+        }
+
+        /// safety: Caller must ensure that the box is destroyed only after the end of
+        /// the provided lifetime 'a.
+        /// a reference from `get_mut` must not be active while
+        /// a reference returned from this method is
+        pub unsafe fn get_ref<'a>(&self) -> &'a T {
+            &*self.value
+        }
+
+        pub fn get_mut(&mut self) -> &mut T {
+            // safety: as the receiver of this method is &mut,
+            // Rust reference invariants ensure this is safe
+            unsafe { &mut *self.value }
+        }
+    }
+
+    impl<T: ?Sized> Drop for SharedBox<T> {
+        fn drop(&mut self) {
+            unsafe {
+                drop(Box::from_raw(self.value));
+            }
+        }
+    }
+
+    /// A wrapper over `ComponentState` allowing for safe additions and immutable access of state duing component rendering.
+    pub(crate) struct ComponentStateAccess<'a> {
+        /// `inner`'s `Rc` elements MUST NOT be removed or destroyed in any fashion
+        /// during the lifetime `'a`. In addition, `&mut` references pointing to the
+        /// interior of `Rc` elements MUST NOT be created or accessed during the lifetime `'a`.
+        /// Violating this leads to memory unsafety.
+        inner: &'a mut super::ComponentState,
+    }
+
+    impl<'a> ComponentStateAccess<'a> {
+        pub fn new(inner: &'a mut super::ComponentState) -> Self {
+            Self { inner }
+        }
+
+        pub fn get_or_insert_with(
+            &mut self,
+            key: Location<'static>,
+            value: impl FnOnce() -> SharedBox<dyn Any>,
+        ) -> &'a dyn Any {
+            let elem = self.inner.entry(key).or_insert_with(value);
+
+            // safety: The box cannot be destroyed or mutably dereferenced until the end of the lifetime
+            // 'a, as per the guarantees on inner.
+            unsafe { elem.get_ref() }
+        }
+    }
+}
+
+pub(crate) type ComponentState = HashMap<Location<'static>, wrappers::SharedBox<dyn Any>>;
+
 /// A "virtual node" in the UI hierarchy. Contains the node's component,
 /// native information, and associated state.
 #[doc(hidden)]
-pub struct VNode {
+pub(crate) struct VNode {
     pub component: View,
     pub native_handle: Option<NativeHandle>,
     pub native_type: Option<NativeType>,
-    pub(crate) state: Option<Box<dyn Any>>,
+    pub(crate) state: ComponentState,
     pub(crate) dirty: bool,
 }
 
@@ -41,7 +118,7 @@ impl VNode {
             component,
             native_handle: None,
             native_type: None,
-            state: None,
+            state: Default::default(),
             dirty: false,
         }
     }
@@ -73,15 +150,14 @@ impl Root {
         let native_type = native_parent
             .native_type()
             .expect("native_parent has native_type");
-        let native_parent_state = native_parent.init_state();
         let mut vnode = VNode::component(native_parent);
         vnode.native_type = Some(native_type);
         vnode.native_handle = Some(native_handle);
-        vnode.state = Some(native_parent_state);
         let scheduler: Shared<dyn Scheduler> = Shared::new_dyn(Rc::new(RefCell::new(scheduler)));
         let vdom = VDom {
             tree: Tree::new(vnode),
             renderer: Box::new(renderer),
+            gen: Gen { gen: 1 },
         };
         let vdom = Shared::new(vdom);
         let vdom_clone = vdom.clone();
@@ -94,8 +170,10 @@ impl Root {
                 &mut vdom.renderer,
                 &vdom_clone,
                 &scheduler,
+                Gen { gen: 0 },
             );
             native_append_child(root, child, &mut vdom.tree, &mut vdom.renderer);
+            vdom.gen.inc();
         });
 
         Root { _vdom: vdom }
@@ -117,7 +195,7 @@ fn child_with_native_handle(mut node: NodeId<VNode>, tree: &Tree<VNode>) -> Opti
         node = if node.iter(tree).len() > 1 {
             panic!("Expected non-native Oak component to have 1 child.");
         } else {
-            node.iter(tree).nth(0).unwrap()
+            node.iter(tree).next().unwrap()
         };
     }
 }
@@ -130,6 +208,7 @@ pub(crate) fn generate_vnode(
     renderer: &mut Box<dyn Renderer>,
     vdom: &Shared<VDom>,
     scheduler: &Shared<dyn Scheduler>,
+    gen: Gen,
 ) {
     let vnode = node.get_mut(tree);
 
@@ -137,15 +216,14 @@ pub(crate) fn generate_vnode(
         return;
     };
 
-    vnode.state = Some(vnode.component.init_state());
-
-    let context = InternalContext {
-        state: vnode.state.as_mut().unwrap(),
+    let context = Context {
         component_pos: ComponentPos {
-            vnode: node,
-            vdom: vdom,
+            node_id: node.into(),
+            vdom,
         },
         scheduler,
+        gen,
+        state: &Shared::new(ComponentStateAccess::new(&mut vnode.state)),
     };
     let child = vnode.component.render(context);
 
@@ -157,7 +235,7 @@ pub(crate) fn generate_vnode(
 
     let is_native = match &vnode.native_type {
         Some(native_type) => {
-            let native_handle = renderer.create_component(&native_type, &vnode.component);
+            let native_handle = renderer.create_component(native_type, &vnode.component);
             node.get_mut(tree).native_handle = Some(native_handle);
             true
         }
@@ -168,7 +246,7 @@ pub(crate) fn generate_vnode(
         Some(marker) => {
             for child in marker.children.iter() {
                 let child = node.push(VNode::component(child.clone()), tree);
-                generate_vnode(child, tree, renderer, vdom, scheduler);
+                generate_vnode(child, tree, renderer, vdom, scheduler, gen);
                 if is_native {
                     native_append_child(node, child, tree, renderer);
                 }
@@ -176,7 +254,7 @@ pub(crate) fn generate_vnode(
         }
         None => {
             let child = node.push(VNode::component(child.clone()), tree);
-            generate_vnode(child, tree, renderer, vdom, scheduler);
+            generate_vnode(child, tree, renderer, vdom, scheduler, gen);
             if is_native {
                 native_append_child(node, child, tree, renderer);
             }
@@ -256,6 +334,7 @@ pub(crate) fn update_vnode(
     renderer: &mut Box<dyn Renderer>,
     vdom: &Shared<VDom>,
     scheduler: &Shared<dyn Scheduler>,
+    gen: Gen,
 ) {
     let props_updated = match new_component {
         Some(ref new) => new.updated(),
@@ -284,13 +363,14 @@ pub(crate) fn update_vnode(
         None => None,
     };
 
-    let context = InternalContext {
-        state: vnode.state.as_mut().unwrap(),
+    let context = Context {
         component_pos: ComponentPos {
-            vnode: node,
-            vdom: vdom,
+            node_id: node.into(),
+            vdom,
         },
         scheduler,
+        gen,
+        state: &Shared::new(ComponentStateAccess::new(&mut vnode.state)),
     };
 
     let child = vnode.component.render(context);
@@ -316,7 +396,7 @@ pub(crate) fn update_vnode(
                     let vnode_mut = node.get_mut(tree);
                     std::mem::swap(&mut vnode_mut.component, &mut old_component);
                 }
-                update_vnode(None, native_parent, tree, renderer, vdom, scheduler);
+                update_vnode(None, native_parent, tree, renderer, vdom, scheduler, gen);
                 return;
             }
         }
@@ -354,14 +434,14 @@ pub(crate) fn update_vnode(
         panic!("{}", DYNAMIC_CHILDREN_ERR);
     }
 
-    let mut children: Vec<_> = children.into_iter().map(|c| Some(c)).collect();
+    let mut children: Vec<_> = children.into_iter().map(Some).collect();
 
     for (child, id) in children.iter_mut().zip(children_ids.iter()) {
         if in_place_components.get(id).is_none() {
             let vnode = VNode::component(child.take().unwrap());
             let new_child = node.push(vnode, tree);
             in_place_components.insert(id.clone(), (new_child, node.len(tree) - 1));
-            generate_vnode(new_child, tree, renderer, vdom, scheduler);
+            generate_vnode(new_child, tree, renderer, vdom, scheduler, gen);
             if is_native {
                 native_append_child(node, new_child, tree, renderer);
             }
@@ -399,7 +479,7 @@ pub(crate) fn update_vnode(
     std::mem::drop(in_place_components);
 
     if is_native {
-        let native_indices: Vec<_> = native_indices.into_iter().filter_map(|i| i).collect();
+        let native_indices: Vec<_> = native_indices.into_iter().flatten().collect();
         let mut native_indices_map = vec![usize::MAX; native_indices.len()];
         for (i, elem) in native_indices.iter().enumerate() {
             native_indices_map[*elem] = i;
@@ -416,7 +496,7 @@ pub(crate) fn update_vnode(
         }
 
         for i in (children_ids.len()..node.len(tree)).rev() {
-            if let Some(_) = child_with_native_handle(node.child(i, tree), tree) {
+            if child_with_native_handle(node.child(i, tree), tree).is_some() {
                 let node_mut = node.get_mut(tree);
                 let parent_type = node_mut.native_type.as_ref().unwrap();
                 let parent_handle = node_mut.native_handle.as_mut().unwrap();
@@ -450,6 +530,7 @@ pub(crate) fn update_vnode(
                     renderer,
                     vdom,
                     scheduler,
+                    gen,
                 );
             }
             None => {
@@ -526,13 +607,14 @@ fn native_update_vnode(
     renderer: &mut Box<dyn Renderer>,
     vdom: &Shared<VDom>,
     scheduler: &Shared<dyn Scheduler>,
+    gen: Gen,
 ) {
     let old_native_child = if is_native {
         child_with_native_handle(child, tree)
     } else {
         None
     };
-    update_vnode(new_component, child, tree, renderer, vdom, scheduler);
+    update_vnode(new_component, child, tree, renderer, vdom, scheduler, gen);
 
     let new_native_child = if is_native {
         child_with_native_handle(child, tree)

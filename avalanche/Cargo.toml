@@ -2,11 +2,12 @@
 name = "avalanche"
 version = "0.0.0"
 authors = ["Darius Jankauskas <d5926j@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 avalanche-macro = {path = '../avalanche-macro'}
 downcast-rs = "1.1"
+once_cell = "1.8"
 
 [dev-dependencies]
 avalanche-web = {path = '../avalanche-web'}
