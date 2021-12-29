@@ -170,8 +170,8 @@
 <p>To create an <code>avalanche_web</code> app, first run the command <code>npm init rust-webpack my-app-name</code>, where <code>my-app-name</code> is the name
 of the application you want to create. This will create a directory with name <code>my-app-name</code>. Your Rust code will live within its <code>/src</code> directory.</p>
 <p>Within <code>src/lib.rs</code>, you will see some helpful preloaded setup, including a <code>panic</code> hook for debugging messages, and the <code>main_js</code> function. To get a minimal <code>avalanche_web</code> app off the ground, first we need to add some dependencies. In the <code>Cargo.toml</code> file, add the following dependencies:</p>
-<pre><code class="language-toml">avalanche = { git = 'https://github.com/DJankauskas/avalanche/tree/master/avalanche' }
-avalanche_web = { git = 'https://github.com/DJankauskas/avalanche/tree/master/avalanche_web` }
+<pre><code class="language-toml">avalanche = &quot;^0.1.0&quot;
+avalanche_web = &quot;^0.1.0&quot;
 </code></pre>
 <p>Next, add this code somewhere outside the <code>main_js</code> function:</p>
 <pre><pre class="playground"><code class="language-rust">
