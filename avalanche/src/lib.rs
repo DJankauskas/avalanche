@@ -90,8 +90,6 @@ pub use avalanche_macro::component;
 /// let closure1 = enclose!(message; move || println!("{}", message));
 /// let closure2 = enclose!(message; move || eprintln!("{}", message));
 /// ```
-// Note: code derived from stdweb
-// TODO: appropriately license project and/or code snippet as MIT or Apache license
 #[macro_export]
 macro_rules! enclose {
     ( $( $x:ident ),*; $y:expr ) => {

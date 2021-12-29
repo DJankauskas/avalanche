@@ -846,9 +846,8 @@ impl From<String> for Atom {
 
 fn from_pat(lhs: &Pat, rhs: UnitDeps) -> Vec<Var> {
     match lhs {
-        Pat::Box(_) => {
-            // invalid lhs?
-            todo!("box")
+        Pat::Box(box_) => {
+           return from_pat(&box_.pat, rhs)
         }
         Pat::Ident(ident) => {
             return vec![Var {
@@ -870,9 +869,8 @@ fn from_pat(lhs: &Pat, rhs: UnitDeps) -> Vec<Var> {
             }
         }
         Pat::Range(_) => {}
-        Pat::Reference(_) => {
-            // TODO: needs to be handled
-            todo!("reference")
+        Pat::Reference(reference) => {
+            return from_pat(&reference.pat, rhs);
         }
         Pat::Rest(_) => return vec![],
         Pat::Slice(slice) => {
@@ -940,53 +938,52 @@ fn from_expr(expr: &Expr, rhs: UnitDeps) -> Vec<Var> {
             return from_expr_numbered(&exprs, rhs);
         }
         Expr::Assign(_) => {
-            //no-op: assigns return ()
+            // no-op: assigns return ()
         }
         Expr::AssignOp(_) => {
-            //ditto
+            // ditto
         }
         Expr::Async(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Await(_) => {
             //illegal in lhs pos
         }
         Expr::Binary(_) => {
-            //no-op: expr creates temporary
+            // no-op: expr creates temporary
         }
         Expr::Block(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Box(_) => {
-            //no-op: creates temporary
+            // no-op: creates temporary
         }
         Expr::Break(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Call(_) => {
-            //undetermined how to handle
-            todo!()
+            // no vars
         }
         Expr::Cast(_) => {
-            //no-op: expr creates temporary
+            // no-op: expr creates temporary
         }
         Expr::Closure(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Continue(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Field(field) => {
             return from_expr(&field.base, rhs);
         }
         Expr::ForLoop(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Group(group) => {
             return from_expr(&group.expr, rhs);
         }
         Expr::If(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Index(index) => {
             if let Expr::Lit(lit) = &*index.index {
@@ -996,24 +993,23 @@ fn from_expr(expr: &Expr, rhs: UnitDeps) -> Vec<Var> {
                     }
                 }
             };
-            //TODO: index-specific stuff
             return from_expr(&index.expr, rhs);
         }
         Expr::Let(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Lit(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Loop(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Macro(_) => {}
         Expr::Match(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::MethodCall(_) => {
-            todo!()
+            // no vars
         }
         Expr::Paren(paren) => {
             return from_expr(&paren.expr, rhs);
@@ -1029,25 +1025,25 @@ fn from_expr(expr: &Expr, rhs: UnitDeps) -> Vec<Var> {
             }
         }
         Expr::Range(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Reference(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Repeat(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Return(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Struct(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Try(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::TryBlock(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Tuple(tuple) => {
             let mut exprs = Vec::with_capacity(tuple.elems.len());
@@ -1058,22 +1054,22 @@ fn from_expr(expr: &Expr, rhs: UnitDeps) -> Vec<Var> {
             return from_expr_numbered(&exprs, rhs);
         }
         Expr::Type(_) => {
-            //nothing to do
+            // nothing to do
         }
         Expr::Unary(_) => {
-            //temp
+            // temp
         }
         Expr::Unsafe(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Verbatim(_) => {
-            //nothing can be done
+            // nothing can be done
         }
         Expr::While(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         Expr::Yield(_) => {
-            //illegal in lhs pos
+            // illegal in lhs pos
         }
         _ => {
             eprintln!("Warn: unknown Expr type.");
