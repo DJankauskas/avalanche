@@ -95,7 +95,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html" class="active">Introduction</a></li><li class="chapter-item expanded "><a href="getting_started.html"><strong aria-hidden="true">1.</strong> Getting started</a></li><li class="chapter-item expanded "><a href="params.html"><strong aria-hidden="true">2.</strong> Data and dynamic parameters</a></li><li class="chapter-item expanded "><a href="state.html"><strong aria-hidden="true">3.</strong> Hooks, state, and control flow</a></li><li class="chapter-item expanded "><a href="reactivity.html"><strong aria-hidden="true">4.</strong> Reactivity</a></li><li class="chapter-item expanded "><a href="events.html"><strong aria-hidden="true">5.</strong> Event handling and input elements</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html" class="active">Introduction</a></li><li class="chapter-item expanded "><a href="getting_started.html"><strong aria-hidden="true">1.</strong> Getting started</a></li><li class="chapter-item expanded "><a href="basic_components.html"><strong aria-hidden="true">2.</strong> Basic components</a></li><li class="chapter-item expanded "><a href="state.html"><strong aria-hidden="true">3.</strong> Hooks, state, and control flow</a></li><li class="chapter-item expanded "><a href="reactivity.html"><strong aria-hidden="true">4.</strong> Reactivity</a></li><li class="chapter-item expanded "><a href="events.html"><strong aria-hidden="true">5.</strong> Event handling and input elements</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -166,14 +166,14 @@
                         <h1><a class="header" href="#introduction" id="introduction">Introduction</a></h1>
 <h2><a class="header" href="#what-is-avalanche" id="what-is-avalanche">What is avalanche?</a></h2>
 <p><code>avalanche</code> is a platform-agnostic UI library aiming to bridge the strong typing, efficient runtime performance, and 
-cross-platform prowess of Rust with the ergonomics of existing UI libraries like Svelte. </p>
+cross-platform prowess of Rust with the ergonomics of existing UI libraries like React and Svelte. </p>
 <p>Like React and Vue, this library allows writing your UI code declaratively, with the ease-of-use of HTML
 but with dynamic updates. Unlike those libraries, however, <code>avalanche</code> analyzes your code
 at compile time to eliminate the need for most runtime comparisons and updates, meaning you get declarative
 ergonomics with imperative performance.</p>
 <p>While we believe the foundations for these goals are strong, the library is still very much a work in progress,
 and the implementation may not always reach our standards yet. As such, while this library is useable for hobbyist 
-projects, we <strong>DO NOT</strong> yet recommend you use this library in production.</p>
+projects, it is <strong>NOT</strong> production ready.</p>
 <h2><a class="header" href="#what-is-avalanche_web" id="what-is-avalanche_web">What is avalanche_web?</a></h2>
 <p><code>avalanche_web</code> is the official Web platform interface for <code>avalanche</code>, allowing you to use <code>avalanche</code> in browsers and
 Electron apps by compiling your app to WebAssembly. It may be missing some listeners and other functionality as of now, but all
@@ -182,8 +182,6 @@ HTML tags are available for use as components.</p>
 <p>Before using this tutorial, you should first have a decent grasp of the Rust programming language. This tutorial also heavily uses <code>avalanche_web</code>, so you should be familiar with basic HTML.</p>
 <p>This tutorial is new and still rough, so if you have any confusion or see a potential error, we'd be grateful if you
 <a href="https://github.com/DJankauskas/avalanche/issues">created an issue</a>.</p>
-<h2><a class="header" href="#what-are-components" id="what-are-components">What are components?</a></h2>
-<p>Components are encapsulated pieces of UI, potentially with complex logic and state, that can be reused as desired. An <code>avalanche</code> app always contains a root component, and can be built out of many more.</p>
 
                     </main>
 

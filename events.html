@@ -95,7 +95,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="getting_started.html"><strong aria-hidden="true">1.</strong> Getting started</a></li><li class="chapter-item expanded "><a href="params.html"><strong aria-hidden="true">2.</strong> Data and dynamic parameters</a></li><li class="chapter-item expanded "><a href="state.html"><strong aria-hidden="true">3.</strong> Hooks, state, and control flow</a></li><li class="chapter-item expanded "><a href="reactivity.html"><strong aria-hidden="true">4.</strong> Reactivity</a></li><li class="chapter-item expanded "><a href="events.html" class="active"><strong aria-hidden="true">5.</strong> Event handling and input elements</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="getting_started.html"><strong aria-hidden="true">1.</strong> Getting started</a></li><li class="chapter-item expanded "><a href="basic_components.html"><strong aria-hidden="true">2.</strong> Basic components</a></li><li class="chapter-item expanded "><a href="state.html"><strong aria-hidden="true">3.</strong> Hooks, state, and control flow</a></li><li class="chapter-item expanded "><a href="reactivity.html"><strong aria-hidden="true">4.</strong> Reactivity</a></li><li class="chapter-item expanded "><a href="events.html" class="active"><strong aria-hidden="true">5.</strong> Event handling and input elements</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -165,7 +165,7 @@
                     <main>
                         <h1><a class="header" href="#event-handling-and-input-elements" id="event-handling-and-input-elements">Event handling and input elements</a></h1>
 <p>So far, we've only used the <code>on_click</code> event, but there are both many more events and more functionality available.</p>
-<p>In addition, many events are component-specific, like <code>on_input</code> and <code>on_blur</code> on some form elements. many of these are available,
+<p>In addition, many events are component-specific, like <code>on_input</code> and <code>on_blur</code> on some form elements. Many of these are available,
 but some have not been implemented yet. If you're missing one, please <a href="https://github.com/DJankauskas/avalanche/issues/new">file an issue!</a></p>
 <h2><a class="header" href="#events" id="events">Events</a></h2>
 <p><a href="https://developer.mozilla.org/en-US/docs/Web/API/GlobalEventHandlers">Every global event</a> is settable as a parameter
@@ -178,17 +178,17 @@ which provides a reference to the component's associated native reference. We ca
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span><span class="boring">use avalanche::{component, View, UseState};
-</span><span class="boring">use avalanche_web::components::{Input};
-</span><span class="boring">
-</span>#[component(text = UseState&lt;String&gt;)]
-fn ControlledInput() -&gt; View {
-    let (text, set_text) = text(String::new());
+</span><span class="boring">use avalanche::{component, tracked, state, View};
+</span>use avalanche_web::components::Input;
 
-    Input! {
-        value: text.clone(),
+#[component]
+fn ControlledInput() -&gt; View {
+    let (text, set_text) = state(self, || String::new());
+
+    Input!(
+        value: tracked!(text).clone(),
         on_input: move |e| set_text.set(e.current_target().unwrap().value())
-    }
+    )
 }
 <span class="boring">}
 </span></code></pre></pre>
@@ -197,6 +197,7 @@ fn ControlledInput() -&gt; View {
 <p>In React, programmers often use <code>on_change</code> instead of <code>on_input</code>, but React semantics do not match native browser ones in this case;
 use <code>on_input</code> in <code>avalanche_web</code> instead.</p>
 </blockquote>
+<p>For a more complex example of how state and events work in avalanche, check out the todomvc example. </p>
 
                     </main>
 

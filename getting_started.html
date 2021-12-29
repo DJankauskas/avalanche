@@ -95,7 +95,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="getting_started.html" class="active"><strong aria-hidden="true">1.</strong> Getting started</a></li><li class="chapter-item expanded "><a href="params.html"><strong aria-hidden="true">2.</strong> Data and dynamic parameters</a></li><li class="chapter-item expanded "><a href="state.html"><strong aria-hidden="true">3.</strong> Hooks, state, and control flow</a></li><li class="chapter-item expanded "><a href="reactivity.html"><strong aria-hidden="true">4.</strong> Reactivity</a></li><li class="chapter-item expanded "><a href="events.html"><strong aria-hidden="true">5.</strong> Event handling and input elements</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="getting_started.html" class="active"><strong aria-hidden="true">1.</strong> Getting started</a></li><li class="chapter-item expanded "><a href="basic_components.html"><strong aria-hidden="true">2.</strong> Basic components</a></li><li class="chapter-item expanded "><a href="state.html"><strong aria-hidden="true">3.</strong> Hooks, state, and control flow</a></li><li class="chapter-item expanded "><a href="reactivity.html"><strong aria-hidden="true">4.</strong> Reactivity</a></li><li class="chapter-item expanded "><a href="events.html"><strong aria-hidden="true">5.</strong> Event handling and input elements</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -168,7 +168,7 @@
 <p>Before you get started, ensure you have <code>cargo</code> and <code>npm</code> installed.</p>
 <h2><a class="header" href="#creating-an-app" id="creating-an-app">Creating an app</a></h2>
 <p>To create an <code>avalanche_web</code> app, first run the command <code>npm init rust-webpack my-app-name</code>, where <code>my-app-name</code> is the name
-of the application you wish to create. This will create a directory with name <code>my-app-name</code>. Your Rust code will live within its <code>/src</code> directory.</p>
+of the application you want to create. This will create a directory with name <code>my-app-name</code>. Your Rust code will live within its <code>/src</code> directory.</p>
 <p>Within <code>src/lib.rs</code>, you will see some helpful preloaded setup, including a <code>panic</code> hook for debugging messages, and the <code>main_js</code> function. To get a minimal <code>avalanche_web</code> app off the ground, first we need to add some dependencies. In the <code>Cargo.toml</code> file, add the following dependencies:</p>
 <pre><code class="language-toml">avalanche = { git = 'https://github.com/DJankauskas/avalanche/tree/master/avalanche' }
 avalanche_web = { git = 'https://github.com/DJankauskas/avalanche/tree/master/avalanche_web` }
@@ -178,13 +178,13 @@ avalanche_web = { git = 'https://github.com/DJankauskas/avalanche/tree/master/av
 <span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use avalanche::{component, View};
-use avalanche::components::{H1, Text};
+use avalanche_web::components::{H1, Text};
 
 #[component]
 fn HelloWorld() -&gt; View {
-    H1 {
-        child: Text! {text: &quot;Hello world!&quot;}
-    }
+    H1!([
+        Text!(&quot;Hello world!&quot;)
+    ])
 }
 <span class="boring">}
 </span></code></pre></pre>
@@ -192,8 +192,19 @@ fn HelloWorld() -&gt; View {
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
+</span><span class="boring">use avalanche::{component, View};
+</span><span class="boring">use avalanche_web::components::{H1, Text};
+</span><span class="boring">
+</span><span class="boring">#[component]
+</span><span class="boring">fn HelloWorld() -&gt; View {
+</span><span class="boring">    H1!([
+</span><span class="boring">        Text!(&quot;Hello world!&quot;)
+</span><span class="boring">    ])
+</span><span class="boring">}
+</span><span class="boring">fn dont_run() {
 </span>avalanche_web::mount_to_body::&lt;HelloWorld&gt;();
 <span class="boring">}
+</span><span class="boring">}
 </span></code></pre></pre>
 <p>Now, to see your app, run <code>npm start</code> within the <code>my_app_name</code> directory. If you haven't gotten any compiler errors,
 you should see your first <code>avalanche</code> and <code>avalanche_web</code> web!</p>
@@ -201,8 +212,8 @@ you should see your first <code>avalanche</code> and <code>avalanche_web</code> 
 <p>So what exactly is going on in the code above? Well, the most important aspect here is the <code>#[component]</code> attribute macro. 
 <code>#[component]</code> accepts a function returning a <code>View</code>, which is a wrapper around an instance of a component. 
 Within a function marked with <code>#[component]</code>, macros whose names begin with a capital ASCII character are interpreted as 
-special component constructors. <code>Text</code> is a component with a single parameter <code>text</code>, so by specifying that we get an instance 
-of <code>View</code> with that text component. <code>H1</code> can take either one <code>child</code> or an array of children, so this component here is equivalent to writing
+special component calls. <code>Text</code> is a component with a single parameter, so by specifying that we get an instance 
+of <code>View</code> with that text component. <code>H1</code> can take an array of children, so this component here is equivalent to writing
 this raw HTML:</p>
 <pre><code class="language-html">&lt;h1&gt;
     Hello world!
@@ -222,7 +233,7 @@ renders our <code>HelloWorld</code> component within the <code>&lt;body&gt;&lt;/
                         
 
                         
-                            <a rel="next" href="params.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next" href="basic_components.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
                         
@@ -240,7 +251,7 @@ renders our <code>HelloWorld</code> component within the <code>&lt;body&gt;&lt;/
                 
 
                 
-                    <a rel="next" href="params.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next" href="basic_components.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
                 

@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Data and dynamic parameters - Avalanche + Avalanche Web Tutorial</title>
+        <title>Basic components - Avalanche + Avalanche Web Tutorial</title>
         
         
 
@@ -95,7 +95,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="getting_started.html"><strong aria-hidden="true">1.</strong> Getting started</a></li><li class="chapter-item expanded "><a href="params.html" class="active"><strong aria-hidden="true">2.</strong> Data and dynamic parameters</a></li><li class="chapter-item expanded "><a href="state.html"><strong aria-hidden="true">3.</strong> Hooks, state, and control flow</a></li><li class="chapter-item expanded "><a href="reactivity.html"><strong aria-hidden="true">4.</strong> Reactivity</a></li><li class="chapter-item expanded "><a href="events.html"><strong aria-hidden="true">5.</strong> Event handling and input elements</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="getting_started.html"><strong aria-hidden="true">1.</strong> Getting started</a></li><li class="chapter-item expanded "><a href="basic_components.html" class="active"><strong aria-hidden="true">2.</strong> Basic components</a></li><li class="chapter-item expanded "><a href="state.html"><strong aria-hidden="true">3.</strong> Hooks, state, and control flow</a></li><li class="chapter-item expanded "><a href="reactivity.html"><strong aria-hidden="true">4.</strong> Reactivity</a></li><li class="chapter-item expanded "><a href="events.html"><strong aria-hidden="true">5.</strong> Event handling and input elements</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -163,92 +163,106 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1><a class="header" href="#data-and-dynamic-parameters" id="data-and-dynamic-parameters">Data and dynamic parameters</a></h1>
-<h2><a class="header" href="#data" id="data">Data</a></h2>
-<p>Component constructors can take expressions as parameters, not just literals:</p>
+                        <h1><a class="header" href="#basic-components" id="basic-components">Basic components</a></h1>
+<p>Components are the building blocks of <code>avalanche</code> apps.
+They're represented as functions since they're fundamentally meant to be pure:
+they take in inputs and describe a UI as their output. They're so fundamental that
+this tutorial is mostly a component tutorial. </p>
+<h2><a class="header" href="#creating-components" id="creating-components">Creating components</a></h2>
+<p>Though components are written as functions, <code>avalanche</code> implements some quality-of-life and performance features
+not possible with functions. If we call a component that takes no parameters called <code>Comp</code>, for example, we'll call
+it with <code>Comp!()</code>. These macro calls only work inside other components, and they return the <code>View</code> type.</p>
+<h2><a class="header" href="#passing-parameters-to-components" id="passing-parameters-to-components">Passing parameters to components</a></h2>
+<p>Most components have parameters, and they're named. For example, in the components below, we pass <code>href</code> by name. However, the last 
+parameter in a function definition can be supplied without a name as the last parameter in a call. 
+For <code>Text</code>, that's the <code>text</code> parameter, which takes a value that implements <code>ToString</code>. 
+For every other <code>avalanche_web</code> component, the unnamed last parameter is <code>children</code>, which takes an <code>Into&lt;Vec&lt;View&gt;&gt;</code>.
+Below are two versions of a link component. One passes <code>text</code> and <code>children</code> explicitly, while the other does it implicitly, as is idiomatic. </p>
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use avalanche::{component, View};
-use avalanche::components::A;
+use avalanche_web::components::{A, Text};
 
-const href: &amp;str = &quot;http://info.cern.ch/hypertext/WWW/TheProject.html&quot;;
+const FIRST_SITE: &amp;str = &quot;http://info.cern.ch/hypertext/WWW/TheProject.html&quot;;
 
 #[component]
-fn Link() -&gt; View {
-    A! {
-        href: href,
-        child: Text! {text: &quot;The first website&quot;}
-    }
+fn LinkExplicit() -&gt; View {
+    A!(
+        href: FIRST_SITE,
+        children: [
+            Text!(text: &quot;The first website&quot;)
+        ]
+    )
+}
+
+#[component]
+fn LinkImplicit() -&gt; View {
+    A!(
+        href: FIRST_SITE,
+        [
+            Text!(&quot;The first website&quot;)
+        ]
+    )
 }
 <span class="boring">}
 </span></code></pre></pre>
-<p>In cases where a variable has the same name as a parameter, there's a shorthand available:</p>
-<pre><pre class="playground"><code class="language-rust">
-<span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use avalanche::{component, View};
-use avalanche::components::A;
-
-const href: &amp;str = &quot;http://info.cern.ch/hypertext/WWW/TheProject.html&quot;;
-
-#[component]
-fn Link() -&gt; View {
-    A! {
-        // same as above
-        href,
-        child: Text! {text: &quot;The first website&quot;}
-    }
-}
-<span class="boring">}
-</span></code></pre></pre>
-<h2><a class="header" href="#parameters-and-nesting" id="parameters-and-nesting">Parameters and nesting</a></h2>
-<p>So far, we've dealt only with components with hard-coded data. However, within most practical components, we want to allow other components to pass it data.
+<p>For <code>avalanche_web</code> components, it's generally recommended to use implicit last parameters, so we'll be using them from now on in this tutorial.
+In third-party components, by convention, you should only use them if there is only one 
+parameter, like in <code>Text</code>, or if the last parameter is a child or children of the component.</p>
+<h2><a class="header" href="#receiving-parameters-and-tracking" id="receiving-parameters-and-tracking">Receiving parameters and tracking</a></h2>
+<p>So far, we've dealt only with components with hard-coded data. However, within most practical components, we want to allow other components to pass them data.
 To enable that, you simply need to add parameters to your component function. Here, let's say we want a reusable <code>Link</code> with its own custom functionality,
-and want to allow a custom destination and text to be specified. We can simply just add <code>to</code> and <code>text</code> parameters:</p>
+and want to allow a custom destination and text to be specified. We can add <code>to</code> and <code>text</code> parameters:</p>
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use avalanche::{component, View};
-use avalanche::components::A;
+</span>use avalanche::{component, tracked, View};
+use avalanche_web::components::{A, Text};
 
 #[component]
 fn Link(to: String, text: String) -&gt; View {
-    A! {
-        href: to,
-        child: Text! {text: text.clone()}
-    }
+    A!(
+        href: tracked!(to),
+        [
+            Text!(tracked!(text))
+        ]
+    )
 }
 <span class="boring">}
 </span></code></pre></pre>
-<p>Notice that for the text parameter, we pass <code>text.clone()</code> instead of <code>text</code>. That's because even though we specify <code>text</code> is a <code>String</code>,
-we actually receive parameters as references (allowing a componen to be rerendered when its state but not props change). So <code>text</code> is really a <code>&amp;String</code>.</p>
+<p>Notice that for the <code>href</code> and implicit <code>text</code> parameters, we pass <code>tracked!</code> parameters instead of just passing them by value.
+That's because when we say a parameter is, for example, a <code>String</code>, we actually receive a <code>Tracked&lt;String&gt;</code>. A <code>Tracked</code> value 
+wraps an inner value with data on whether it's been updated since last render. <code>avalanche</code> uses this to allow for efficient re-rendering
+of components. Calling <code>tracked!</code> on a <code>Tracked</code> value gives us its inner value. Since <code>Text</code> and <code>A</code> expect <code>String</code>-like values, but 
+the <code>to</code> and <code>text</code> parameters are <code>Tracked&lt;String&gt;</code>, we use <code>tracked!()</code> to get <code>String</code> values.</p>
 <p>We can then construct <code>Link</code> inside of other components:</p>
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span><span class="boring">use avalanche::{component, View};
-</span><span class="boring">use avalanche::components::A;
+</span>use avalanche::{component, tracked, View};
+use avalanche_web::components::{Text, Div};
+<span class="boring">use avalanche_web::components::A;
 </span><span class="boring">
 </span><span class="boring">#[component]
-</span><span class="boring">fn Link(to: String) -&gt; View {
-</span><span class="boring">    A! {
-</span><span class="boring">        href: to
-</span><span class="boring">    }
+</span><span class="boring">fn Link(to: String, text: String) -&gt; View {
+</span><span class="boring">    A!(
+</span><span class="boring">        href: tracked!(to),
+</span><span class="boring">        [
+</span><span class="boring">            Text!(tracked!(text))
+</span><span class="boring">        ]
+</span><span class="boring">    )
 </span><span class="boring">}
-</span>use avalanche_web::{Text, Div};
-
+</span>
 #[component]
 fn Example() -&gt; View {
-    Div! {
-        children: [
-            Link! {
-                to: &quot;https://example.com&quot;.into(),
-                text: &quot;example.com&quot;.into()
-            },
-            Text! {text: &quot; is a domain reserved for use in demos.&quot;}
-        ]
-    }
+    Div!([
+        Link!(
+            to: &quot;https://example.com&quot;.into(),
+            text: &quot;example.com&quot;.into()
+        ),
+        Text!(&quot; is a domain reserved for use in demos.&quot;)
+    ])
 }
 <span class="boring">}
 </span></code></pre></pre>
@@ -260,16 +274,17 @@ fn Example() -&gt; View {
     &amp;nbsp;is a domain reserved for use in demos.
 &lt;/div&gt;
 </code></pre>
-<p>Within component constructors, parameter order does not matter, so we could've also written our <code>Link</code> construction with <code>to</code> and <code>text</code> swapped:</p>
-<pre><code>Link! {
+<p>Within component calls, parameter order does not matter, so we could've also called <code>Link!</code> with <code>to</code> and <code>text</code> swapped:</p>
+<pre><code class="language-rust ignore">Link!(
     text: &quot;example.com&quot;.into(),
     to: &quot;https://example.com&quot;.into()
-}
+)
 </code></pre>
 <h2><a class="header" href="#parameter-type-restrictions" id="parameter-type-restrictions">Parameter type restrictions</a></h2>
 <p>You might have noticed that we used the <code>String</code> type for our parameters, rather than the more generic <code>&amp;str</code>. That's because 
-parameters are stored and need to live longer than the function body, and are thus required to be <code>'static</code>. That means
-parameter types can't contain non-<code>'static</code> references. However, <code>static</code> references like <code>&amp;'static str</code> are allowed.</p>
+parameters are stored by avalanche and need to live longer than the function body, and are thus required to be <code>'static</code>. That means
+parameter types can't contain non-<code>'static</code> references. However, <code>static</code> references like <code>&amp;'static str</code> are allowed.
+Also, parameter types must implement <code>Clone</code>.</p>
 
                     </main>
 
