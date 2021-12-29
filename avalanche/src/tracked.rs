@@ -10,6 +10,7 @@ use crate::hooks::Gen;
 /// A wrapped value that stores whether it has been modified since the last render.
 /// 
 /// To access the value, use [tracked], and to check whether it is updated, use [updated].
+#[non_exhaustive]
 pub struct Tracked<T> {
     /// The value of the tracked value
     /// Public due to implementation of [tracked!] macro,

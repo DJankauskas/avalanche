@@ -101,7 +101,6 @@ pub(crate) type ComponentState = HashMap<Location<'static>, wrappers::SharedBox<
 
 /// A "virtual node" in the UI hierarchy. Contains the node's component,
 /// native information, and associated state.
-#[doc(hidden)]
 pub(crate) struct VNode {
     pub component: View,
     pub native_handle: Option<NativeHandle>,
