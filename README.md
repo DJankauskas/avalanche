@@ -2,18 +2,23 @@
 <h4 align="center">
     <a href="https://djankauskas.github.io/avalanche/">Book</a>
     <span> | </span>
+    <a href="https://docs.rs/avalanche/0.1.0/avalanche/">Docs</a>
+    <span> | </span>
     <a href="https://github.com/DJankauskas/avalanche/tree/master/avalanche-web/examples">Examples</a>
     <span> | </span>
     <a href="https://github.com/DJankauskas/avalanche/blob/master/ROADMAP.md">Roadmap</a>
 </h4>
 
 Avalanche is a performant library for building declarative, performant UIs. It analyzes functional component definitions at compile time to generate 
-efficient and precise app updates. It is bundled with avalanche web, which provides facilities and components for building WebAssembly web apps. This library is
+efficient and precise app updates. It is bundled with avalanche-web, which provides facilities and components for building WebAssembly web apps. This library is
 in early stages of development, and should not yet be used in production. 
 
+This crate does not respect semver for `0.1.x`. 
+
 ## How it works
-Functions marked with `#[component]` are analyzed to determine what properties and instances of state might influence a child's property. If any of those have changed, that
-property will be marked as updated, while unmarked properties will be ignored (except on first render).
+Functions marked with `#[component]` define UI declaratively by returning other components. Component parameters and state
+are augmented by tracking, a system where avalanche tracks whether variables have been updated, only updating the UI for changed
+data. This allows for higher performance while keeping code ergonomic. 
 
 ## Getting started
 

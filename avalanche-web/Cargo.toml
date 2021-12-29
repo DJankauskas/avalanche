@@ -1,12 +1,19 @@
 [package]
 name = "avalanche-web"
-version = "0.0.0"
+version = "0.1.0"
 authors = ["Darius Jankauskas <d5926j@gmail.com>"]
+repository = "https://github.com/DJankauskas/avalanche"
+hopepage = "https://github.com/DJankauskas/avalanche"
+keywords = ["reactive", "web", "javascript"]
+categories = ["gui", "wasm", "web-programming"]
+description = "A client-side web integration for avalanche"
+readme = "../README.md"
 license = "MIT OR Apache-2.0"
 edition = "2021"
+rust-version = "1.56"
 
 [dependencies]
-avalanche = {path = '../avalanche'}
+avalanche = {version = "^0.1.0", path = '../avalanche'}
 wasm-bindgen = "0.2"
 gloo-events = "0.1"
 

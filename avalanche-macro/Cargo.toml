@@ -1,9 +1,16 @@
 [package]
 name = "avalanche-macro"
-version = "0.0.0"
+version = "0.1.0"
 authors = ["Darius Jankauskas <d5926j@gmail.com>"]
+repository = "https://github.com/DJankauskas/avalanche"
+hopepage = "https://github.com/DJankauskas/avalanche"
+keywords = ["reactive"]
+categories = ["gui"]
+description = "Proc macro implementation crate for avalanche"
+readme = "../README.md"
 license = "MIT OR Apache-2.0"
 edition = "2021"
+rust-version = "1.56"
 
 [lib]
 proc-macro = true
