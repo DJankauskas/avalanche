@@ -12,8 +12,8 @@ of the application you want to create. This will create a directory with name `m
 Within `src/lib.rs`, you will see some helpful preloaded setup, including a `panic` hook for debugging messages, and the `main_js` function. To get a minimal `avalanche_web` app off the ground, first we need to add some dependencies. In the `Cargo.toml` file, add the following dependencies:
 
 ```toml
-avalanche = { git = 'https://github.com/DJankauskas/avalanche/tree/master/avalanche' }
-avalanche_web = { git = 'https://github.com/DJankauskas/avalanche/tree/master/avalanche_web` }
+avalanche = "^0.1.0"
+avalanche_web = "^0.1.0"
 ```
 
 Next, add this code somewhere outside the `main_js` function:
