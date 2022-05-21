@@ -199,12 +199,10 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
 
             #( #render_body_attributes )*
             #[allow(clippy::eval_order_dependence, clippy::unit_arg)]
-            fn render(&self, __avalanche_context: ::avalanche::Context) -> #return_type {
+            fn render(self, mut __avalanche_render_context: ::avalanche::RenderContext, __avalanche_hook_context: ::avalanche::HookContext) -> #return_type {
                 // let state = ::std::option::Option::unwrap(::std::any::Any::downcast_mut::<#state_name>(&mut **__avalanche_context.state));
 
-                let #name { #(#param_ident,)* .. } = ::std::clone::Clone::clone(self);
-
-                #(let #param_ident = ::avalanche::Tracked::new(#param_ident, (&self.__internal_updates & #flag) != 0);)*
+                #(let #param_ident = ::avalanche::Tracked::new(self.#param_ident, (&self.__internal_updates & #flag) != 0);)*
 
                 let mut __avalanche_internal_updated = false;
 
@@ -215,8 +213,8 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
                 self.__internal_updates != 0
             }
 
-            fn key(&self) -> ::std::option::Option<&str> {
-                self.__key.as_deref()
+            fn key(&self) -> ::std::option::Option<String> {
+                std::clone::Clone::clone(&self.__key)
             }
 
         }

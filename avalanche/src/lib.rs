@@ -6,21 +6,17 @@ pub mod renderer;
 pub mod shared;
 /// Holds types and macros used for propogating and tracking data updates.
 pub mod tracked;
-/// A `Vec`-backed implementation of a tree, with a relatively friendly mutation api.
-pub(crate) mod tree;
 /// An in-memory representation of the current component tree.
 #[doc(hidden)]
 pub mod vdom;
 
-use downcast_rs::{impl_downcast, Downcast};
-use std::rc::Rc;
+pub use hooks::{HookContext, RenderContext};
 
-use renderer::NativeType;
+use renderer::{NativeType};
 use shared::Shared;
-use tree::NodeId;
-use vdom::{VDom, VNode};
+use vdom::{ComponentId, VDom, VNode};
 
-pub use hooks::{state, vec, Context};
+pub use hooks::{state, vec};
 pub use tracked::Tracked;
 
 /// An attribute macro used to define components.
@@ -64,13 +60,13 @@ pub use tracked::Tracked;
 /// ## Tracked values
 /// Parameter values are passed into a function with the [Tracked](Tracked) wrapper. More details on how that works is found in
 /// the [tracked](tracked!) macro documentation.
-/// 
+///
 /// ## Avoid side effects and mutability
 /// `avalanche` considers a parameter updated if one of the parameters or hooks that influence it change, but
 /// a function like [rand::thread_rng](https://docs.rs/rand/0.8/rand/fn.thread_rng.html) has a different value on every call
 /// despite having no parameter or hook dependencies.
-/// Using values from functions and methods that are not pure or mutate values will lead to missed updates. Instead, create new variables: 
-/// use `let string = string + " appended"` instead of `string += "appended"`. 
+/// Using values from functions and methods that are not pure or mutate values will lead to missed updates. Instead, create new variables:
+/// use `let string = string + " appended"` instead of `string += "appended"`.
 /// If you need to use mutation in a component, including interior mutability, use the [state](state) hook.
 ///
 /// ## Eschew third-party macros
@@ -114,38 +110,29 @@ macro_rules! __internal_identity {
     };
 }
 
-/// A reference-counted type that holds an instance of a component.
-/// Component functions must return a [`View`].
-#[derive(Clone)]
+/// The return type of a component. Represents the child a component renders and returns.
 pub struct View {
-    rc: Rc<dyn DynComponent>,
+    /// The id of the component corresponding to the view, or None if it is ()
+    id: Option<ComponentId>,
+    /// The component id corresponding to the native component representation
+    /// of the given tree, if it exists
+    native_component_id: Option<ComponentId>,
 }
 
 impl View {
-    fn new<T: DynComponent>(val: T) -> Self {
-        Self { rc: Rc::new(val) }
+    fn private_copy(&self) -> Self {
+        View {
+            id: self.id,
+            native_component_id: self.native_component_id,
+        }
     }
 }
 
-impl std::ops::Deref for View {
-    type Target = dyn DynComponent;
-
-    fn deref(&self) -> &dyn DynComponent {
-        &*self.rc
-    }
-}
-
-impl<T: DynComponent> From<T> for View {
-    fn from(val: T) -> Self {
-        Self::new(val)
-    }
-}
-
-impl<T: DynComponent> From<Option<T>> for View {
-    fn from(val: Option<T>) -> Self {
-        match val {
-            Some(val) => View::new(val),
-            None => View::new(()),
+impl From<()> for View {
+    fn from(_: ()) -> Self {
+        Self {
+            id: None,
+            native_component_id: None,
         }
     }
 }
@@ -154,19 +141,23 @@ impl From<Option<View>> for View {
     fn from(val: Option<View>) -> Self {
         match val {
             Some(val) => val,
-            None => View::new(()),
+            None => ().into()
         }
     }
 }
 
-/// The trait representing a component. 
-/// 
+/// The trait representing a component.
+///
 /// Users should not implement this trait manually but instead use the `component` attribute.
 /// However, native component implementations may need to use manual component implementations.
-pub trait Component: 'static {
+pub trait Component: Sized + 'static {
     type Builder;
 
-    fn render(&self, ctx: Context) -> View;
+    fn render(self, render_ctx: RenderContext, hook_ctx: HookContext) -> View;
+
+    fn children(self) -> Vec<View> {
+        panic!("Cannot get children from a non-native component")
+    }
 
     fn updated(&self) -> bool;
 
@@ -178,7 +169,7 @@ pub trait Component: 'static {
         None
     }
 
-    fn key(&self) -> Option<&str> {
+    fn key(&self) -> Option<String> {
         None
     }
 }
@@ -187,74 +178,37 @@ impl Component for () {
     // TODO: make ! when never stabilizes
     type Builder = ();
 
-    fn render(&self, _: Context) -> View {
-        unreachable!()
+    fn render(self, _: RenderContext, _: HookContext) -> View {
+        View {
+            id: None,
+            native_component_id: None,
+        }
     }
     fn updated(&self) -> bool {
         false
     }
 }
 
-/// An internal trait implemented for all [`Component`]s. This should not be
-/// implemented manually.
 #[doc(hidden)]
-pub trait DynComponent: Downcast + 'static {
-    fn render(&self, ctx: Context) -> View;
-
-    fn native_type(&self) -> Option<NativeType>;
-
-    fn updated(&self) -> bool;
-
-    fn location(&self) -> Option<(u32, u32)>;
-
-    fn key(&self) -> Option<&str>;
-}
-
-impl_downcast!(DynComponent);
-
-impl<T: Component> DynComponent for T {
-    fn render(&self, ctx: Context) -> View {
-        Component::render(self, ctx)
-    }
-
-    fn native_type(&self) -> Option<NativeType> {
-        Component::native_type(self)
-    }
-
-    fn updated(&self) -> bool {
-        Component::updated(self)
-    }
-
-    fn location(&self) -> Option<(u32, u32)> {
-        Component::location(self)
-    }
-
-    fn key(&self) -> Option<&str> {
-        Component::key(self)
-    }
-}
-
-#[doc(hidden)]
-#[derive(Copy, Clone)]
-pub struct ComponentNodeId {
-    pub(crate) id: NodeId<VNode>,
-}
-
-impl From<NodeId<VNode>> for ComponentNodeId {
-    fn from(node: NodeId<VNode>) -> Self {
-        Self { id: node }
-    }
-}
-
-#[doc(hidden)]
-#[derive(Copy, Clone)]
 /// Internal data structure that stores what tree a component
 /// belongs to, and its position within it
+#[derive(Copy, Clone)]
 pub struct ComponentPos<'a> {
     /// Shared value ONLY for passing to UseState
     /// within the render function this value is mutably borrowed,
     /// so exec and exec_mut will panic
-    pub node_id: ComponentNodeId,
-    /// Shared container to the VDom of which the [`vnode`] is a part.
-    pub vdom: &'a Shared<VDom>,
+    /// Shared container to the `VDom` of which the [`vnode`] is a part.
+    pub(crate) vdom: &'a Shared<VDom>,
+    /// Id of parent of component. Note that during a render it may
+    /// not be present within the vdom.
+    pub(crate) component_id: ComponentId,
+}
+
+#[doc(hidden)]
+#[derive(PartialEq, Eq, Hash)]
+/// Represents a component macro invocation's unique identity within a component.
+// TODO: make private, have child_render take in the two fields as arguments
+pub struct ChildId {
+    pub location: (u32, u32),
+    pub key: Option<String>,
 }

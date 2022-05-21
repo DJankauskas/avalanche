@@ -1,29 +1,33 @@
-use crate::tree::{NodeId, Tree};
-use crate::View;
+use crate::hooks::{HookContext, RenderContext};
 use crate::{
     hooks::Gen,
-    renderer::{HasChildrenMarker, NativeHandle, NativeType, Renderer, Scheduler},
-    ComponentPos,
+    renderer::{NativeHandle, NativeType, Renderer, Scheduler},
 };
+use crate::{ChildId, Component, ComponentPos, View};
 
-use crate::{hooks::Context, shared::Shared};
-use std::{
-    any::Any,
-    cell::RefCell,
-    collections::{HashMap, HashSet},
-    hash::Hash,
-    panic::Location,
-    rc::Rc,
-};
+use crate::shared::Shared;
+use std::num::NonZeroU64;
+use std::{any::Any, cell::RefCell, collections::HashMap, hash::Hash, panic::Location, rc::Rc};
 
 use self::wrappers::ComponentStateAccess;
 
 const DYNAMIC_CHILDREN_ERR: &str = "Dynamic components must be provided keys.";
 
-pub struct VDom {
-    pub(crate) tree: Tree<VNode>,
+/// Holds all the component nodes for a given root, as well as state information
+/// for allowing updates and the dataflow tracking system to function.
+pub(crate) struct VDom {
+    /// Stores all the nodes in the vdom, addressable by their `ComponentId`.
+    pub(crate) children: HashMap<ComponentId, VNode>,
+    /// Yields the `ComponentId` for the next created `VNode`, available by calling
+    /// the `create_next` method.
+    pub(crate) curr_component_id: ComponentId,
+    /// The renderer used to convert avalanche representations of native components into
+    /// actual native components.
     pub renderer: Box<dyn Renderer>,
+    /// The current state update generation.
     pub(crate) gen: Gen,
+    /// Updates the vdom by rendering the root component and all descendents that are dirty.
+    pub(crate) update_vdom: fn(&mut VDom, &Shared<VDom>, &Shared<dyn Scheduler>),
 }
 
 // separate wrapper types to keep data structures maintaining safety invariants as isolated as possible
@@ -50,7 +54,7 @@ pub(crate) mod wrappers {
         /// the provided lifetime 'a.
         /// a reference from `get_mut` must not be active while
         /// a reference returned from this method is
-        pub unsafe fn get_ref<'a>(&self) -> &'a T {
+        unsafe fn get_ref<'a>(&self) -> &'a T {
             &*self.value
         }
 
@@ -63,6 +67,9 @@ pub(crate) mod wrappers {
 
     impl<T: ?Sized> Drop for SharedBox<T> {
         fn drop(&mut self) {
+            // safety: by construction of `self.value` in `new`, it is
+            // a valid `Box`-allocated memory location, and thus can be converted back
+            // into a `Box`.
             unsafe {
                 drop(Box::from_raw(self.value));
             }
@@ -99,26 +106,380 @@ pub(crate) mod wrappers {
 
 pub(crate) type ComponentState = HashMap<Location<'static>, wrappers::SharedBox<dyn Any>>;
 
-/// A "virtual node" in the UI hierarchy. Contains the node's component,
-/// native information, and associated state.
-pub(crate) struct VNode {
-    pub component: View,
-    pub native_handle: Option<NativeHandle>,
-    pub native_type: Option<NativeType>,
-    pub(crate) state: ComponentState,
-    pub(crate) dirty: bool,
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+/// Represents a unique instance of a component within the lifetime
+/// of a particular vdom tree.
+pub(crate) struct ComponentId {
+    pub id: NonZeroU64,
 }
 
-impl VNode {
-    /// default VNode initialized with a component
-    /// this VNode should be filled in with [`generate_vnode`]
-    fn component(component: View) -> Self {
+impl ComponentId {
+    /// Returns the next instance of a `ComponentId`, modifying the given instance
+    /// to allow generating new ids.
+    pub fn create_next(&mut self) -> Self {
+        let id = self.id;
+        self.id = NonZeroU64::try_from(self.id.get() + 1).unwrap();
+        ComponentId { id }
+    }
+
+    pub fn new() -> Self {
         Self {
-            component,
-            native_handle: None,
-            native_type: None,
-            state: Default::default(),
-            dirty: false,
+            id: NonZeroU64::new(1).unwrap(),
+        }
+    }
+}
+
+/// Holds data specific to avalanche components representing native components.
+struct NativeComponent {
+    native_handle: NativeHandle,
+    native_type: NativeType,
+    native_parent: Option<ComponentId>,
+    native_children: Vec<ComponentId>,
+}
+
+/// Data associated with a child rendered within the body of another function.
+struct BodyChild {
+    /// The component id associated with a child id.
+    id: ComponentId,
+    /// Whether a component has been rendered over.
+    used: bool,
+}
+
+/// State and other data associated with a non-empty component within the `VDom`.
+pub(crate) struct VNode {
+    /// The component in which the VNode's component was rendered in, if any.
+    pub body_parent: Option<ComponentId>,
+    /// The components rendered within the render function of the component, if any.
+    body_children: HashMap<ChildId, BodyChild>,
+    /// The direct children of the component, where `()`-derived ones are represented
+    /// by `None`.
+    pub children: Vec<Option<ComponentId>>,
+    /// The native information of the given component, if it is native.
+    native_component: Option<NativeComponent>,
+    /// The hook state of the given component.
+    pub(crate) state: ComponentState,
+    /// Whether the VNode is in need of updating due to a change in state in
+    /// itself or a descendent.
+    pub(crate) dirty: bool,
+    /// Memoized value of the component's `ComponentId` and its closest native descendent.
+    pub(crate) view: View,
+}
+
+/// A type-erased container for `Component` allowing virtualization
+/// to avoid code bloat.
+struct DynComponent {
+    updated: bool,
+    native_type: Option<NativeType>,
+    inner: Box<dyn Any>,
+    get_children: fn(Box<dyn Any>) -> Vec<View>,
+    get_render: fn(Box<dyn Any>, RenderContext, HookContext) -> View,
+}
+
+impl DynComponent {
+    fn new<C: Component>(component: C) -> Self {
+        fn get_children<C: Component>(c: Box<dyn Any + 'static>) -> Vec<View> {
+            Box::<dyn Any + 'static>::downcast::<C>(c)
+                .unwrap()
+                .children()
+        }
+
+        fn get_render<C: Component>(
+            c: Box<dyn Any>,
+            render_ctx: RenderContext,
+            hook_ctx: HookContext,
+        ) -> View {
+            Box::<dyn Any + 'static>::downcast::<C>(c)
+                .unwrap()
+                .render(render_ctx, hook_ctx)
+        }
+        Self {
+            updated: component.updated(),
+            native_type: component.native_type(),
+            inner: Box::new(component),
+            get_children: get_children::<C>,
+            get_render: get_render::<C>,
+        }
+    }
+
+    fn updated(&self) -> bool {
+        self.updated
+    }
+
+    fn native_type(&self) -> Option<NativeType> {
+        self.native_type
+    }
+
+    fn children(self) -> Vec<View> {
+        (self.get_children)(self.inner)
+    }
+
+    fn render(self, render_ctx: RenderContext, hook_ctx: HookContext) -> View {
+        (self.get_render)(self.inner, render_ctx, hook_ctx)
+    }
+}
+
+/// Renders a child of a component, given a reference to that component's `VNode` and
+/// the `Component` instance describing the child. Avoids re-rendering if the child was
+/// rendered before and neither its data nor the state of itself or one of its descendents
+/// were updated since the last render.
+/// Called within the code generated by `#[component]`. Library consumers should avoid calling this
+/// themselves, as this interface is not guaranteed to be stable.
+#[doc(hidden)]
+pub fn render_child(
+    child_id: ChildId,
+    component: impl Component,
+    context: &mut RenderContext,
+) -> View {
+    /// A non-monomorphized implementation of the function to avoid a heavy code size penalty
+    /// for every component rendered in an application.
+    fn render_child(
+        child_id: ChildId,
+        component: DynComponent,
+        context: &mut RenderContext,
+    ) -> View {
+        // Gets the `ComponentId` of the child if it existed previously,
+        // and generates a new one otherwise.
+        let body_child = context
+            .vnode
+            .body_children
+            .entry(child_id)
+            .or_insert(BodyChild {
+                id: context.vdom.curr_component_id.create_next(),
+                used: true,
+            });
+
+        // Marks the child as used so its body parent will not destroy it.
+        body_child.used = true;
+
+        let child_component_id = body_child.id;
+        // Gets the `VNode` associated with the `ComponentId` and removes it to
+        // allow for concurrent modification of the vdom and vnode. If the vnode does not
+        // exist yet, create a default value.
+        let mut child_vnode = context
+            .vdom
+            .children
+            .remove(&child_component_id)
+            .unwrap_or_else(|| {
+                let native_type = component.native_type();
+                let native_component = native_type.map(|native_type| {
+                    let native_handle = context
+                        .vdom
+                        .renderer
+                        .create_component(&native_type, &*component.inner);
+                    NativeComponent {
+                        native_handle,
+                        native_type,
+                        native_parent: None,
+                        native_children: Vec::new(),
+                    }
+                });
+                VNode {
+                    body_parent: Some(context.component_pos.component_id),
+                    body_children: HashMap::new(),
+                    children: Vec::new(),
+                    native_component,
+                    state: HashMap::new(),
+                    dirty: true,
+                    view: View {
+                        id: Some(child_component_id),
+                        // will be overwritten in update code
+                        native_component_id: None,
+                    },
+                }
+            });
+
+        child_vnode.body_parent = Some(context.component_pos.component_id);
+        let view = if child_vnode.dirty || component.updated() {
+            let native_component_id = match &mut child_vnode.native_component {
+                Some(native_component) => {
+                    context.vdom.renderer.update_component(
+                        &native_component.native_type,
+                        &mut native_component.native_handle,
+                        &*component.inner,
+                    );
+                    let new_children = component.children();
+                    let new_children: Vec<_> =
+                        new_children.into_iter().map(|child| child.id).collect();
+                    let mut new_native_children: Vec<_> = new_children
+                        .iter()
+                        .filter_map(|id| {
+                            id.and_then(|id| context.vdom.children[&id].view.native_component_id)
+                        })
+                        .collect();
+                    update_native_children(
+                        child_component_id,
+                        &mut native_component.native_children,
+                        &mut new_native_children,
+                        &native_component.native_type,
+                        &mut native_component.native_handle,
+                        context.vdom,
+                    );
+                    native_component.native_children = new_native_children;
+                    child_vnode.children = new_children;
+
+                    Some(child_component_id)
+                }
+                None => {
+                    // swap state out of vnode to allow passing a mut VDom reference down the stack
+                    let mut state = ComponentState::new();
+                    std::mem::swap(&mut state, &mut child_vnode.state);
+                    // wrap state to allow joint hook creation and state consumption
+                    let shared_state = Shared::new(ComponentStateAccess::new(&mut state));
+
+                    // Before rendering mark all body children as unused
+                    for (_, child) in child_vnode.body_children.iter_mut() {
+                        child.used = false;
+                    }
+
+                    let child_hook_context = HookContext {
+                        gen: context.vdom.gen,
+                        state: &shared_state,
+                        component_pos: ComponentPos {
+                            component_id: child_component_id.clone(),
+                            vdom: context.component_pos.vdom,
+                        },
+                        scheduler: context.scheduler,
+                    };
+                    let child_render_context = RenderContext {
+                        vdom: context.vdom,
+                        vnode: &mut child_vnode,
+                        component_pos: ComponentPos {
+                            component_id: child_component_id.clone(),
+                            vdom: context.component_pos.vdom,
+                        },
+                        scheduler: context.scheduler,
+                    };
+
+                    let view: View = component.render(child_render_context, child_hook_context);
+
+                    // After rendering destroy all components that are body children but were not referenced in the render
+                    child_vnode
+                        .body_children
+                        .retain(|_, BodyChild { id, used }| {
+                            if !*used {
+                                remove_node(&mut context.vdom, *id);
+                            };
+                            *used
+                        });
+
+                    // restore the vnode's state after swapping it out earlier
+                    std::mem::swap(&mut state, &mut child_vnode.state);
+                    child_vnode.children = view.id.into_iter().map(Some).collect();
+                    view.native_component_id
+                }
+            };
+            child_vnode.view.native_component_id = native_component_id;
+            child_vnode.dirty = false;
+            let view = child_vnode.view.private_copy();
+            view
+        } else {
+            child_vnode.view.private_copy()
+        };
+        // After removing the child's vnode from the vdom, restore it,
+        // or introduce it for the first time
+        context
+            .vdom
+            .children
+            .insert(child_component_id, child_vnode);
+        view
+    }
+
+    // Call the type-erased implementation of the function
+    render_child(child_id, DynComponent::new(component), context)
+}
+
+/// Remove a vnode from `vdom`, along with all of its descendents.
+fn remove_node(vdom: &mut VDom, node: ComponentId) {
+    let removed_node = vdom.children.remove(&node);
+    if let Some(removed_node) = removed_node {
+        for child in removed_node.children.into_iter().flatten() {
+            remove_node(vdom, child);
+        }
+    }
+}
+
+/// Takes old and new native children, as component ids of native components.
+/// `old_native_children` must be a superset of the native children of `parent_handle`.
+/// Updates the native children of `parent_handle` such that its native children correspond
+/// with the native components of each child in `new_native_child` in order.
+pub(crate) fn update_native_children(
+    parent_id: ComponentId,
+    old_native_children: &mut Vec<ComponentId>,
+    new_native_children: &mut Vec<ComponentId>,
+    parent_type: &NativeType,
+    parent_handle: &mut NativeHandle,
+    vdom: &mut VDom,
+) {
+    // Filter out components from old_native_children that have been reparented elsewhere, and thus are no longer
+    // present within the given `parent_handle`
+    old_native_children.retain(|child| {
+        vdom.children[child]
+            .native_component
+            .as_ref()
+            .unwrap()
+            .native_parent
+            == Some(parent_id)
+    });
+    let mut old_native_children_map = HashMap::with_capacity(std::cmp::max(
+        old_native_children.len(),
+        new_native_children.len(),
+    ));
+    for (i, child) in old_native_children.iter().enumerate() {
+        old_native_children_map.insert(*child, (i, *child));
+    }
+
+    if old_native_children.len() != old_native_children_map.len() {
+        panic!("{}", DYNAMIC_CHILDREN_ERR);
+    }
+
+    for (i, new_child) in new_native_children.iter().enumerate() {
+        let (j, _) = old_native_children_map
+            .entry(*new_child)
+            .or_insert_with(|| {
+                let new_native_component = vdom
+                    .children
+                    .get_mut(new_child)
+                    .unwrap()
+                    .native_component
+                    .as_mut()
+                    .unwrap();
+                new_native_component.native_parent = Some(parent_id);
+                vdom.renderer.append_child(
+                    parent_type,
+                    parent_handle,
+                    &new_native_component.native_type,
+                    &new_native_component.native_handle,
+                );
+                let i = old_native_children.len();
+                old_native_children.push(*new_child);
+                (i, *new_child)
+            });
+        let j = *j;
+        if i != j {
+            vdom.renderer
+                .swap_children(parent_type, parent_handle, i, j);
+            let swap_child = old_native_children[i];
+            old_native_children_map.get_mut(&swap_child).unwrap().0 = j;
+            old_native_children.swap(i, j);
+        }
+    }
+
+    // Native children of `parent_handle` now consist of all new native children as well
+    // as leftover old ones. Remove those leftovers.
+    // TODO: implement and use a renderer truncate function.
+    for i in (new_native_children.len()..old_native_children.len()).rev() {
+        vdom.renderer.remove_child(parent_type, parent_handle, i);
+    }
+}
+
+/// Walks up the VDom upwards and marks the given node and its body parents dirty to allow for running the update algorithm
+pub(crate) fn mark_node_dirty(vdom: &mut VDom, mut component_id: ComponentId) {
+    loop {
+        let vnode = vdom.children.get_mut(&component_id).unwrap();
+        vnode.dirty = true;
+        component_id = match vnode.body_parent {
+            Some(body_parent) => body_parent,
+            None => break,
         }
     }
 }
@@ -135,525 +496,98 @@ pub struct Root {
 }
 
 impl Root {
-    /// Creates a new UI tree rooted at `native_parent`, with native handle `native_handle`. That handle will be used,
-    /// and `renderer.create_component` will not be called for it, in order to allow rooting an avaqlanche tree upon
-    /// an existing UI component created externally. Renders `child` as the child of `native_parent`; `native_parent`
-    /// must also return only `child` from its `render` method within `HasChildMarker`.
-    pub fn new<R: Renderer + 'static, S: Scheduler + 'static>(
-        child: View,
-        native_parent: View,
+    /// Creates a new UI tree rooted at `native_parent`, with native handle `native_handle`. That handle will be used
+    /// in order to allow rooting an avalanche tree upon
+    /// an existing UI component created externally. Renders `child` as the child of `native_handle`.
+    pub fn new<R: Renderer + 'static, S: Scheduler + 'static, C: Component + Default>(
+        native_type: NativeType,
         native_handle: NativeHandle,
         renderer: R,
         scheduler: S,
     ) -> Self {
-        let native_type = native_parent
-            .native_type()
-            .expect("native_parent has native_type");
-        let mut vnode = VNode::component(native_parent);
-        vnode.native_type = Some(native_type);
-        vnode.native_handle = Some(native_handle);
-        let scheduler: Shared<dyn Scheduler> = Shared::new_dyn(Rc::new(RefCell::new(scheduler)));
+        let mut curr_component_id = ComponentId::new();
+        let root_component_id = curr_component_id.create_next();
+        let mut children = HashMap::with_capacity(16);
+        let vnode = VNode {
+            body_parent: None,
+            body_children: HashMap::with_capacity(1),
+            children: vec![Some(ComponentId {
+                id: NonZeroU64::new(2).unwrap(),
+            })],
+            native_component: Some(NativeComponent {
+                native_handle,
+                native_type,
+                native_parent: None,
+                native_children: Vec::new(),
+            }),
+            state: HashMap::new(),
+            dirty: false,
+            view: View {
+                id: Some(root_component_id),
+                native_component_id: Some(root_component_id),
+            },
+        };
+        children.insert(root_component_id, vnode);
         let vdom = VDom {
-            tree: Tree::new(vnode),
+            children,
+            curr_component_id,
             renderer: Box::new(renderer),
-            gen: Gen { gen: 1 },
+            gen: Gen::new(),
+            update_vdom: render_vdom::<C>,
         };
         let vdom = Shared::new(vdom);
         let vdom_clone = vdom.clone();
+        let scheduler: Shared<dyn Scheduler> = Shared::new_dyn(Rc::new(RefCell::new(scheduler)));
         vdom.exec_mut(|vdom| {
-            let root = vdom.tree.root();
-            let child = root.push(VNode::component(child), &mut vdom.tree);
-            generate_vnode(
-                child,
-                &mut vdom.tree,
-                &mut vdom.renderer,
-                &vdom_clone,
-                &scheduler,
-                Gen { gen: 0 },
-            );
-            native_append_child(root, child, &mut vdom.tree, &mut vdom.renderer);
+            render_vdom::<C>(vdom, &vdom_clone, &scheduler);
             vdom.gen.inc();
         });
-
         Root { _vdom: vdom }
     }
 }
 
-/// Traverses hierarchy until node with NativeHandle is found.
-/// Returns None if end of tree has no handle.
-/// # Panics
-/// Panics if `node` is invalid or a node violates the invariant that it may only have multiple
-/// children if it is a native component.
-fn child_with_native_handle(mut node: NodeId<VNode>, tree: &Tree<VNode>) -> Option<NodeId<VNode>> {
-    loop {
-        if node.get(tree).native_handle.is_some() {
-            return Some(node);
-        } else if node.iter(tree).len() == 0 {
-            return None;
-        }
-        node = if node.iter(tree).len() > 1 {
-            panic!("Expected non-native Oak component to have 1 child.");
-        } else {
-            node.iter(tree).next().unwrap()
-        };
-    }
-}
-
-/// Given a `node` with a new component, generates a virtual tree for its children,
-/// and renders it.
-pub(crate) fn generate_vnode(
-    node: NodeId<VNode>,
-    tree: &mut Tree<VNode>,
-    renderer: &mut Box<dyn Renderer>,
-    vdom: &Shared<VDom>,
+fn render_vdom<C: Component + Default>(
+    vdom: &mut VDom,
+    shared_vdom: &Shared<VDom>,
     scheduler: &Shared<dyn Scheduler>,
-    gen: Gen,
 ) {
-    let vnode = node.get_mut(tree);
-
-    if vnode.component.is::<()>() {
-        return;
-    };
-
-    let context = Context {
-        component_pos: ComponentPos {
-            node_id: node.into(),
-            vdom,
+    let mut parent_vnode = vdom.children.remove(&ComponentId::new()).unwrap();
+    render_child(
+        ChildId {
+            location: (0, 0),
+            key: None,
         },
-        scheduler,
-        gen,
-        state: &Shared::new(ComponentStateAccess::new(&mut vnode.state)),
-    };
-    let child = vnode.component.render(context);
-
-    let vnode = node.get_mut(tree);
-    let native_type = vnode.component.native_type();
-    vnode.native_type = native_type;
-    // convert to immutable borrow
-    let vnode = node.get(tree);
-
-    let is_native = match &vnode.native_type {
-        Some(native_type) => {
-            let native_handle = renderer.create_component(native_type, &vnode.component);
-            node.get_mut(tree).native_handle = Some(native_handle);
-            true
-        }
-        None => false,
-    };
-
-    match child.downcast_ref::<HasChildrenMarker>() {
-        Some(marker) => {
-            for child in marker.children.iter() {
-                let child = node.push(VNode::component(child.clone()), tree);
-                generate_vnode(child, tree, renderer, vdom, scheduler, gen);
-                if is_native {
-                    native_append_child(node, child, tree, renderer);
-                }
-            }
-        }
-        None => {
-            let child = node.push(VNode::component(child.clone()), tree);
-            generate_vnode(child, tree, renderer, vdom, scheduler, gen);
-            if is_native {
-                native_append_child(node, child, tree, renderer);
-            }
-        }
-    };
-}
-
-/// if a child has a native element,
-/// appends it to the children of the parent
-/// `parent` must have a `native_handle` and `native_type`
-fn native_append_child(
-    parent: NodeId<VNode>,
-    child: NodeId<VNode>,
-    tree: &mut Tree<VNode>,
-    renderer: &mut Box<dyn Renderer>,
-) {
-    if let Some(native_child) = child_with_native_handle(child, tree) {
-        let (parent_mut, child_mut) = tree.get_mut_pair(parent, native_child);
-        renderer.append_child(
-            parent_mut
-                .native_type
-                .as_ref()
-                .expect("parent is a native component"),
-            parent_mut
-                .native_handle
-                .as_mut()
-                .expect("parent is a native component"),
-            child_mut.native_type.as_ref().unwrap(),
-            child_mut.native_handle.as_ref().unwrap(),
-        );
-    }
-}
-
-/// Uniquely represents a component amongst its children.
-/// Components with the same location rendered multiple times must be given unique keys.
-#[derive(PartialEq, Eq, Hash, Debug, Clone)]
-struct ChildId {
-    key: Option<String>,
-    location: Option<(u32, u32)>,
-}
-
-impl ChildId {
-    fn from_view(view: &View) -> Self {
-        Self {
-            key: view.key().map(ToOwned::to_owned),
-            location: view.location(),
-        }
-    }
-}
-
-/// Given a node within the VDom, goes up its hierarchy until finding the first parent with a
-/// native handle, returning it if present, or `None` otherwise. Sets all nodes up to but
-/// excluding the parent to `dirty` to propagate the need for an update
-fn propogate_update_to_native_parent(
-    mut node: NodeId<VNode>,
-    tree: &mut Tree<VNode>,
-) -> Option<NodeId<VNode>> {
-    loop {
-        node = node.parent(tree)?;
-        let node = node.get_mut(tree);
-        if node.native_handle.is_some() {
-            break;
-        }
-        node.dirty = true;
-    }
-    Some(node)
-}
-
-// TODO: clarify: can new_component be a different type than the old component?
-// right now, assumption is no
-/// Updates the given `node` so that its children and corresponding native elements
-/// match the current properties and state of its component.
-pub(crate) fn update_vnode(
-    new_component: Option<View>,
-    node: NodeId<VNode>,
-    tree: &mut Tree<VNode>,
-    renderer: &mut Box<dyn Renderer>,
-    vdom: &Shared<VDom>,
-    scheduler: &Shared<dyn Scheduler>,
-    gen: Gen,
-) {
-    let props_updated = match new_component {
-        Some(ref new) => new.updated(),
-        None => false,
-    };
-    let vnode = node.get_mut(tree);
-    let state_updated = vnode.dirty;
-
-    debug_assert_eq!(vnode.native_handle.is_some(), vnode.native_type.is_some());
-    let is_native = vnode.native_handle.is_some();
-
-    //if neither props nor state have changed
-    //we do not need to rerender
-    if !(props_updated || state_updated) {
-        return;
-    }
-
-    // enables recursive behavior like propogate_update_to_native_parent to work properly
-    vnode.dirty = true;
-
-    let old_component = match new_component {
-        Some(mut comp) => {
-            std::mem::swap(&mut vnode.component, &mut comp);
-            Some(comp)
-        }
-        None => None,
-    };
-
-    let context = Context {
-        component_pos: ComponentPos {
-            node_id: node.into(),
+        C::default(),
+        &mut RenderContext {
             vdom,
+            vnode: &mut &mut parent_vnode,
+            component_pos: ComponentPos {
+                component_id: ComponentId::new(),
+                vdom: shared_vdom,
+            },
+            scheduler,
         },
-        scheduler,
-        gen,
-        state: &Shared::new(ComponentStateAccess::new(&mut vnode.state)),
-    };
+    );
+    vdom.children.insert(ComponentId::new(), parent_vnode);
 
-    let child = vnode.component.render(context);
-
-    let children = match child.downcast_ref::<HasChildrenMarker>() {
-        Some(marker) => marker.children.clone(),
-        None => vec![child],
-    };
-
-    // If the component is non-native, but its native_child potentially changes, this result must be
-    // propagated up to its native parent, unless if the native parent is already being processed
-    if !is_native {
-        let old_child = &node.child(0, tree).get(tree).component;
-        let new_child = &children[0];
-        if old_child.location() != new_child.location() || old_child.key() != new_child.key() {
-            let native_parent = propogate_update_to_native_parent(node, tree)
-                .expect("native parent of a component with updated native identity");
-            let native_parent_mut = native_parent.get_mut(tree);
-            // If the native parent is not currently being updated, restart the update process there.
-            if !native_parent_mut.dirty {
-                native_parent_mut.dirty = true;
-                if let Some(mut old_component) = old_component {
-                    let vnode_mut = node.get_mut(tree);
-                    std::mem::swap(&mut vnode_mut.component, &mut old_component);
-                }
-                update_vnode(None, native_parent, tree, renderer, vdom, scheduler, gen);
-                return;
-            }
-        }
-    };
-
-    let vnode_children_iter = node.iter(tree).enumerate();
-    let vnode_children_len = vnode_children_iter.len();
-    let mut in_place_components = HashMap::with_capacity(vnode_children_len);
-
-    let mut curr_native_idx = 0usize;
-    let mut native_indices = Vec::with_capacity(vnode_children_len);
-
-    for (idx, old_vnode) in vnode_children_iter {
-        in_place_components.insert(ChildId::from_view(&old_vnode.get(tree).component), {
-            (old_vnode, idx)
-        });
-        native_indices.push(child_with_native_handle(old_vnode, tree).map(|_| {
-            let idx = curr_native_idx;
-            curr_native_idx += 1;
-            idx
-        }));
-    }
-
-    if in_place_components.len() != vnode_children_len {
-        panic!("{}", DYNAMIC_CHILDREN_ERR);
-    }
-
-    let children_ids: Vec<_> = children
+    // TODO: code duplicated from render_child; factor out into function?
+    // furthermore code is not clean: tweak function interfaces to clean up and remove need to remove root vnode
+    let new_children: Vec<Option<ComponentId>> =
+        vdom.children[&ComponentId::new()].children.clone();
+    let mut new_native_children: Vec<_> = new_children
         .iter()
-        .map(|view| ChildId::from_view(view))
+        .filter_map(|id| id.and_then(|id| vdom.children[&id].view.native_component_id))
         .collect();
-
-    let check_duplicates: HashSet<_> = children_ids.iter().collect();
-    if check_duplicates.len() != children_ids.len() {
-        panic!("{}", DYNAMIC_CHILDREN_ERR);
-    }
-
-    let mut children: Vec<_> = children.into_iter().map(Some).collect();
-
-    for (child, id) in children.iter_mut().zip(children_ids.iter()) {
-        if in_place_components.get(id).is_none() {
-            let vnode = VNode::component(child.take().unwrap());
-            let new_child = node.push(vnode, tree);
-            in_place_components.insert(id.clone(), (new_child, node.len(tree) - 1));
-            generate_vnode(new_child, tree, renderer, vdom, scheduler, gen);
-            if is_native {
-                native_append_child(node, new_child, tree, renderer);
-            }
-        }
-    }
-
-    for i in vnode_children_len..node.len(tree) {
-        native_indices.push(
-            child_with_native_handle(node.child(i, tree), tree).map(|_| {
-                let idx = curr_native_idx;
-                curr_native_idx += 1;
-                idx
-            }),
-        );
-    }
-
-    for (i, id) in children_ids.iter().enumerate() {
-        let old_node = node.child(i, tree).get(tree);
-        let old_node_id = ChildId::from_view(&old_node.component);
-        if old_node_id != *id {
-            let swap_node_ref = in_place_components.get(id).unwrap();
-            let swap_node = swap_node_ref.0;
-            let swap_pos = swap_node_ref.1;
-            node.swap_children(i, swap_pos, tree);
-            native_indices.swap(i, swap_pos);
-            let old_node_mut = in_place_components.get_mut(&old_node_id).unwrap();
-            old_node_mut.0 = swap_node;
-            old_node_mut.1 = swap_pos;
-        }
-        // TODO: remove used-up elements from in_place_components?
-        // or update .1 of the entry originally at swap_pos?
-    }
-
-    // prevent use of some inconsistent state
-    std::mem::drop(in_place_components);
-
-    if is_native {
-        let native_indices: Vec<_> = native_indices.into_iter().flatten().collect();
-        let mut native_indices_map = vec![usize::MAX; native_indices.len()];
-        for (i, elem) in native_indices.iter().enumerate() {
-            native_indices_map[*elem] = i;
-        }
-        let node_mut = node.get_mut(tree);
-        let node_type = node_mut.native_type.as_ref().unwrap();
-        let node_handle = node_mut.native_handle.as_mut().unwrap();
-        for i in 0..native_indices.len() {
-            while i != native_indices_map[i] {
-                let swap_pos = native_indices_map[i];
-                renderer.swap_children(node_type, node_handle, i, swap_pos);
-                native_indices_map.swap(i, swap_pos);
-            }
-        }
-
-        for i in (children_ids.len()..node.len(tree)).rev() {
-            if child_with_native_handle(node.child(i, tree), tree).is_some() {
-                let node_mut = node.get_mut(tree);
-                let parent_type = node_mut.native_type.as_ref().unwrap();
-                let parent_handle = node_mut.native_handle.as_mut().unwrap();
-                renderer.remove_child(
-                    parent_type,
-                    parent_handle,
-                    native_indices_map.pop().unwrap(),
-                );
-                curr_native_idx = curr_native_idx.saturating_sub(1);
-            }
-        }
-    }
-
-    for i in (children_ids.len()..node.len(tree)).rev() {
-        node.remove_child(i, tree);
-    }
-
-    debug_assert_eq!(children.len(), node.len(tree));
-
-    curr_native_idx = curr_native_idx.saturating_sub(1);
-    for (child, child_vnode) in children.into_iter().zip(node.iter_mut(tree)).rev() {
-        match child {
-            Some(child) => {
-                native_update_vnode(
-                    is_native,
-                    &mut curr_native_idx,
-                    Some(child),
-                    node,
-                    child_vnode,
-                    tree,
-                    renderer,
-                    vdom,
-                    scheduler,
-                    gen,
-                );
-            }
-            None => {
-                if is_native && child_with_native_handle(child_vnode, tree).is_some() {
-                    curr_native_idx = curr_native_idx.saturating_sub(1);
-                }
-            }
-        }
-    }
-
-    let vnode_mut = node.get_mut(tree);
-    if let Some(old_component) = old_component {
-        // The native_action can only be updated if the type of component
-        // has remained the same
-        if old_component.type_id() == vnode_mut.component.type_id() {
-            vnode_mut.native_type = vnode_mut.component.native_type();
-            if let Some(native_type) = &vnode_mut.native_type {
-                renderer.update_component(
-                    native_type,
-                    vnode_mut.native_handle.as_mut().unwrap(),
-                    &vnode_mut.component,
-                );
-            }
-        }
-    }
-
-    node.get_mut(tree).dirty = false;
-}
-
-/// Inserts `child`'s corresponding native element at position `pos`.
-/// # Panics
-/// Panics if `parent` does not have a native handle and native type, or if `pos` is greater than
-/// the length of `parent`'s current native children.
-fn native_insert_child(
-    parent: NodeId<VNode>,
-    child: NodeId<VNode>,
-    pos: usize,
-    tree: &mut Tree<VNode>,
-    renderer: &mut Box<dyn Renderer>,
-) {
-    if let Some(native_child) = child_with_native_handle(child, tree) {
-        let (parent_mut, child_mut) = tree.get_mut_pair(parent, native_child);
-        renderer.insert_child(
-            parent_mut
-                .native_type
-                .as_ref()
-                .expect("parent is a native component"),
-            parent_mut
-                .native_handle
-                .as_mut()
-                .expect("parent is a native component"),
-            pos,
-            child_mut.native_type.as_ref().unwrap(),
-            child_mut.native_handle.as_ref().unwrap(),
-        );
-    }
-}
-
-/// Updates the given `child`, and if `is_native` is true, creates, updates, or removes its
-/// corresponding native element as needed. `native_pos` should be the index of the native element of `child`,
-// if it possesses one.
-/// This function is intended to be called from the last child
-/// to the first, in reverse order, as `native_pos` is decremented when a child that contains a native element is processed.
-/// # Panics
-/// Panics if `is_native` is incorrect, `native_pos` is out of bounds, or `parent` and `child` are not
-/// valid parents and children within `tree`.
-fn native_update_vnode(
-    is_native: bool,
-    native_pos: &mut usize,
-    new_component: Option<View>,
-    parent: NodeId<VNode>,
-    child: NodeId<VNode>,
-    tree: &mut Tree<VNode>,
-    renderer: &mut Box<dyn Renderer>,
-    vdom: &Shared<VDom>,
-    scheduler: &Shared<dyn Scheduler>,
-    gen: Gen,
-) {
-    let old_native_child = if is_native {
-        child_with_native_handle(child, tree)
-    } else {
-        None
-    };
-    update_vnode(new_component, child, tree, renderer, vdom, scheduler, gen);
-
-    let new_native_child = if is_native {
-        child_with_native_handle(child, tree)
-    } else {
-        None
-    };
-
-    match (old_native_child, new_native_child) {
-        (Some(_), Some(new)) => {
-            let (parent_mut, child_mut) = tree.get_mut_pair(parent, new);
-            //TODO: should old component be explicitly destroyed?
-            // TODO: should checking if this is necessary occur in the `replace_child`
-            // method or through some other means?
-            renderer.replace_child(
-                parent_mut.native_type.as_ref().unwrap(),
-                parent_mut.native_handle.as_mut().unwrap(),
-                *native_pos,
-                child_mut.native_type.as_ref().unwrap(),
-                child_mut.native_handle.as_ref().unwrap(),
-            );
-            *native_pos = native_pos.saturating_sub(1);
-        }
-        // There was a native child, and now there isn't on rerender
-        (Some(_), None) => {
-            // TODO: this doesn't use `destroy_vnode`
-            // refactor later to use either only `remove_component`
-            // or `remove_child`
-            let parent_mut = parent.get_mut(tree);
-            renderer.remove_child(
-                parent_mut.native_type.as_ref().unwrap(),
-                parent_mut.native_handle.as_mut().unwrap(),
-                *native_pos,
-            );
-            *native_pos = native_pos.saturating_sub(1);
-        }
-        // There was no native child, but now there is on rerender
-        (None, Some(new)) => {
-            native_insert_child(parent, new, *native_pos, tree, renderer);
-        }
-        // no native child before and on rerender
-        (None, None) => {}
-    }
+    let mut vnode = vdom.children.remove(&ComponentId::new()).unwrap();
+    let native_component = vnode.native_component.as_mut().unwrap();
+    update_native_children(
+        ComponentId::new(),
+        &mut native_component.native_children,
+        &mut new_native_children,
+        &native_component.native_type,
+        &mut native_component.native_handle,
+        vdom,
+    );
+    native_component.native_children = new_native_children;
+    vdom.children.insert(ComponentId::new(), vnode);
 }

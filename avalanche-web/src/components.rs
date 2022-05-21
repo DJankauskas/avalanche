@@ -6,8 +6,8 @@ use std::rc::Rc;
 use wasm_bindgen::JsCast;
 
 use crate::events::*;
-use avalanche::renderer::{HasChildrenMarker, NativeType};
-use avalanche::{Component, Context, View};
+use avalanche::renderer::NativeType;
+use avalanche::{Component, HookContext, RenderContext, View};
 
 /// Represents a text node.
 #[derive(Clone, PartialEq)]
@@ -59,8 +59,8 @@ impl TextBuilder {
 impl Component for Text {
     type Builder = TextBuilder;
 
-    fn render(&self, _: Context) -> View {
-        ().into()
+    fn render(self, _: RenderContext, _: HookContext) -> View {
+        unimplemented!()
     }
     fn native_type(&self) -> Option<NativeType> {
         let action = NativeType {
@@ -71,6 +71,10 @@ impl Component for Text {
         Some(action)
     }
 
+    fn children(self) -> Vec<View> {
+        Vec::new()
+    }
+
     fn updated(&self) -> bool {
         self.updated
     }
@@ -79,8 +83,8 @@ impl Component for Text {
         Some(self.location)
     }
 
-    fn key(&self) -> Option<&str> {
-        self.key.as_deref()
+    fn key(&self) -> Option<String> {
+        self.key.clone()
     }
 }
 
@@ -104,12 +108,12 @@ pub struct RawElement {
 }
 
 impl RawElement {
-    fn attr(&mut self, name: &'static str, attr: Attr, updated: bool) {
+    fn set_attr(&mut self, name: &'static str, attr: Attr, updated: bool) {
         self.attrs.insert(name, (attr, updated));
         self.attrs_updated |= updated;
     }
 
-    fn children(&mut self, children: Vec<View>, updated: bool) {
+    fn set_children(&mut self, children: Vec<View>, updated: bool) {
         self.children = children;
         self.children_updated = updated;
     }
@@ -118,11 +122,12 @@ impl RawElement {
 impl Component for RawElement {
     type Builder = ();
 
-    fn render(&self, _: Context) -> View {
-        HasChildrenMarker {
-            children: self.children.clone(),
-        }
-        .into()
+    fn render(self, _: RenderContext, _: HookContext) -> View {
+        unimplemented!()
+    }
+
+    fn children(self) -> Vec<View> {
+        self.children
     }
 
     fn updated(&self) -> bool {
@@ -140,8 +145,8 @@ impl Component for RawElement {
         Some(self.location)
     }
 
-    fn key(&self) -> Option<&str> {
-        self.key.as_deref()
+    fn key(&self) -> Option<String> {
+        self.key.clone()
     }
 }
 
@@ -208,7 +213,7 @@ macro_rules! def_component {
         impl ::avalanche::Component for $tag {
             type Builder = $tag_builder;
 
-            fn render(&self, _: Context) -> View {
+            fn render(self, _: RenderContext, _: HookContext) -> View {
                 unreachable!()
             }
 
@@ -238,17 +243,17 @@ macro_rules! def_component {
             }
 
             pub fn child(mut self, child: View, updated: bool) -> Self {
-                self.raw.children(vec![child], updated);
+                self.raw.set_children(vec![child], updated);
                 self
             }
 
             pub fn children<T: Into<Vec<View>>>(mut self, children: T, updated: bool) -> Self {
-                self.raw.children(children.into(), updated);
+                self.raw.set_children(children.into(), updated);
                 self
             }
 
             pub fn __last<T: Into<Vec<View>>>(mut self, children: T, updated: bool) -> Self {
-                self.raw.children(children.into(), updated);
+                self.raw.set_children(children.into(), updated);
                 self
             }
         }
@@ -281,7 +286,7 @@ macro_rules! def_component_attrs {
                 impl $builder {
                     $(
                         pub fn $propident<T>(mut self, val: T, updated: bool) -> Self where T : Into<$proptype> {
-                            self.raw.attr(
+                            self.raw.set_attr(
                                 $propnative,
                                 Attr::Prop(Some(Cow::Owned(Into::<$proptype>::into(val).to_string()))),
                                 updated
@@ -293,7 +298,7 @@ macro_rules! def_component_attrs {
                     $(
                         $(
                             pub fn $boolpropident(mut self, val: bool, updated: bool) -> Self {
-                                self.raw.attr(
+                                self.raw.set_attr(
                                     $boolpropnative,
                                     Attr::Prop(val.then(|| Cow::Borrowed($boolpropnative))),
                                     updated
@@ -306,7 +311,7 @@ macro_rules! def_component_attrs {
                     $(
                         $(
                             pub fn $listenident(mut self, f: impl Fn(TypedEvent::<$listentype, <$builder as AssociatedNativeElement>::NativeElement>) + 'static, updated: bool) -> Self {
-                                self.raw.attr(
+                                self.raw.set_attr(
                                     $listennative,
                                     Attr::Handler(std::rc::Rc::new(move |e: Event| f(
                                         TypedEvent::<$listentype, <$builder as AssociatedNativeElement>::NativeElement>::new(e.dyn_into::<$listentype>().unwrap())
@@ -1507,13 +1512,13 @@ impl InputBuilder {
     pub fn value<S: Into<String>>(mut self, val: S, updated: bool) -> Self {
         self.raw.value_controlled = true;
         self.raw
-            .attr("value", Attr::Prop(Some(Cow::Owned(val.into()))), updated);
+            .set_attr("value", Attr::Prop(Some(Cow::Owned(val.into()))), updated);
         self
     }
 
     pub fn checked(mut self, val: bool, updated: bool) -> Self {
         self.raw.checked_controlled = true;
-        self.raw.attr(
+        self.raw.set_attr(
             "checked",
             Attr::Prop(val.then(|| Cow::Borrowed("checked"))),
             updated,
@@ -1534,8 +1539,11 @@ add_textinput_attrs! {TextAreaBuilder}
 impl TextAreaBuilder {
     pub fn value<S: ToString>(mut self, val: S, updated: bool) -> Self {
         self.raw.value_controlled = true;
-        self.raw
-            .attr("value", Attr::Prop(Some(Cow::Owned(val.to_string()))), updated);
+        self.raw.set_attr(
+            "value",
+            Attr::Prop(Some(Cow::Owned(val.to_string()))),
+            updated,
+        );
         self
     }
 }

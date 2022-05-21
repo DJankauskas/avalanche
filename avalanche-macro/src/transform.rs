@@ -468,13 +468,19 @@ impl Function {
                             let column: u32 = random();
 
                             let transformed = parse_quote! {
-                                ::avalanche::__internal_identity! {
-                                    ::std::convert::Into::<::avalanche::View>::into({
-                                        let __avalanche_internal_built = <<#type_path as ::avalanche::Component>::Builder>::new();
-                                        #(let __avalanche_internal_built = #prop_construct_expr;)*
-                                        __avalanche_internal_built.build((#line, #column))
-                                    })
-                                }
+                                ::avalanche::__internal_identity! {{
+                                    let __avalanche_internal_built = <<#type_path as ::avalanche::Component>::Builder>::new();
+                                    #(let __avalanche_internal_built = #prop_construct_expr;)*
+                                    let __avalanche_internal_component = __avalanche_internal_built.build((#line, #column));
+                                    ::avalanche::vdom::render_child(
+                                        ::avalanche::ChildId {
+                                            location: (#line, #column),
+                                            key: ::avalanche::Component::key(&__avalanche_internal_component),
+                                        },
+                                        __avalanche_internal_component,
+                                        &mut __avalanche_render_context
+                                    )
+                                }}
                             };
 
                             return (macro_dependencies, Some(transformed));
@@ -729,7 +735,7 @@ impl Function {
                 // macro
 
                 if path.path.is_ident("self") {
-                    path.path = Ident::new("__avalanche_context", path.path.span()).into()
+                    path.path = Ident::new("__avalanche_hook_context", path.path.span()).into()
                 }
             }
             Expr::Range(range) => {

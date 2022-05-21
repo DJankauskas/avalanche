@@ -1,8 +1,9 @@
 use avalanche::renderer::{NativeHandle, NativeType, Renderer, Scheduler};
-use avalanche::{Component, View};
+use avalanche::Component;
 
 use avalanche::shared::Shared;
 
+use std::any::Any;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
@@ -18,30 +19,20 @@ pub mod events;
 static TIMEOUT_MSG_NAME: &str = "avalanche_web_message_name";
 
 pub fn mount<C: Component + Default>(element: Element) {
-    let child: View = C::default().into();
-    let native_parent = RawElement {
-        attrs: Default::default(),
-        attrs_updated: false,
-        children: vec![child.clone()],
-        children_updated: false,
-        value_controlled: false,
-        checked_controlled: false,
-        key: None,
-        location: (0, 0),
-        tag: "@root",
-    };
-
     let renderer = WebRenderer::new();
     let scheduler = WebScheduler::new();
+    let native_parent_type = NativeType {
+        handler: "avalanche_web",
+        name: "avalanche_web",
+    };
     let native_parent_handle = WebNativeHandle {
         children_offset: element.child_nodes().length(),
         node: element.into(),
         listeners: Default::default(),
     };
 
-    let root = avalanche::vdom::Root::new(
-        child,
-        native_parent.into(),
+    let root = avalanche::vdom::Root::new::<_, _, C>(
+        native_parent_type,
         Box::new(native_parent_handle),
         renderer,
         scheduler,
@@ -163,7 +154,7 @@ impl WebRenderer {
 }
 
 impl Renderer for WebRenderer {
-    fn create_component(&mut self, native_type: &NativeType, component: &View) -> NativeHandle {
+    fn create_component(&mut self, native_type: &NativeType, component: &dyn Any) -> NativeHandle {
         let elem = match native_type.handler {
             "avalanche_web_text" => {
                 let text_node = match component.downcast_ref::<Text>() {
@@ -299,7 +290,7 @@ impl Renderer for WebRenderer {
         &mut self,
         native_type: &NativeType,
         native_handle: &mut NativeHandle,
-        component: &View,
+        component: &dyn Any,
     ) {
         let web_handle = native_handle.downcast_mut::<WebNativeHandle>().unwrap();
         match native_type.handler {

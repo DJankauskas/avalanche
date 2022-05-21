@@ -1,8 +1,5 @@
 use std::any::Any;
 
-use crate::hooks::Context;
-use crate::{Component, View};
-
 /// An opaque handle whose underlying type is determined by the current `Renderer`.
 pub type NativeHandle = Box<dyn Any>;
 
@@ -11,7 +8,11 @@ pub type NativeHandle = Box<dyn Any>;
 pub trait Renderer {
     /// Given a component and its native type, generate its native representation and return
     /// an opaque `NativeHandle` to it.
-    fn create_component(&mut self, native_type: &NativeType, component: &View) -> NativeHandle;
+    fn create_component(
+        &mut self,
+        native_type: &NativeType,
+        component: &dyn Any,
+    ) -> NativeHandle;
 
     /// Appends the component with handle `child_handle` into the component with
     /// handle `parent_handle`'s children.
@@ -88,7 +89,7 @@ pub trait Renderer {
         &mut self,
         native_type: &NativeType,
         native_handle: &mut NativeHandle,
-        component: &View,
+        component: &dyn Any,
     );
 
     /// Logs the given string to a platform-appropriate destination.
@@ -109,23 +110,6 @@ pub trait Scheduler {
 pub struct NativeType {
     pub handler: &'static str,
     pub name: &'static str,
-}
-
-/// A component for native children to render avalanche components.
-#[derive(Clone, Default)]
-pub struct HasChildrenMarker {
-    pub children: Vec<View>,
-}
-
-impl Component for HasChildrenMarker {
-    // TODO: make ! when never stabilizes
-    type Builder = ();
-    fn render(&self, _: Context) -> View {
-        unreachable!()
-    }
-    fn updated(&self) -> bool {
-        unimplemented!()
-    }
 }
 
 #[doc(inline)]

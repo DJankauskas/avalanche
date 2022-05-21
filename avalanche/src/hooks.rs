@@ -4,11 +4,10 @@ use crate::{
     renderer::Scheduler,
     shared::Shared,
     tracked,
-    tree::NodeId,
     vdom::{
-        update_vnode,
+        mark_node_dirty,
         wrappers::{ComponentStateAccess, SharedBox},
-        VDom, VNode,
+        ComponentId, VDom, VNode,
     },
     ComponentPos, Tracked,
 };
@@ -20,6 +19,9 @@ pub(crate) struct Gen {
 
 // TODO: support wrap edge cases
 impl Gen {
+    pub(crate) fn new() -> Self {
+        Gen { gen: 0 }
+    }
     pub(crate) fn next(mut self) -> Self {
         self.inc();
         Gen { gen: self.gen }
@@ -35,12 +37,23 @@ impl Gen {
 }
 
 /// Provides a hook with component-specific state.
-/// 
+///
 /// Accessed by passing `self` as the first parameter in a hook call.
-#[derive(Clone, Copy)]
-pub struct Context<'a> {
+#[derive(Copy, Clone)]
+pub struct HookContext<'a> {
     pub(crate) gen: Gen,
     pub(crate) state: &'a Shared<ComponentStateAccess<'a>>,
+    pub(crate) component_pos: ComponentPos<'a>,
+    pub(crate) scheduler: &'a Shared<dyn Scheduler>,
+}
+
+/// Provides a hook with component-specific state.
+///
+/// Accessed by passing `self` as the first parameter in a hook call.
+pub struct RenderContext<'a> {
+    pub(crate) vdom: &'a mut VDom,
+    // vnode of parent
+    pub(crate) vnode: &'a mut VNode,
     pub(crate) component_pos: ComponentPos<'a>,
     pub(crate) scheduler: &'a Shared<dyn Scheduler>,
 }
@@ -52,7 +65,7 @@ struct State<T: 'static> {
 
 #[track_caller]
 fn internal_state<'a, T: 'static>(
-    ctx: Context<'a>,
+    ctx: HookContext<'a>,
     f: impl FnOnce() -> T,
 ) -> (&'a dyn Any, Location<'static>) {
     let location = Location::caller();
@@ -105,7 +118,7 @@ fn internal_state<'a, T: 'static>(
 /// [counter example.](https://github.com/DJankauskas/avalanche/blob/38ec4ccb83f93550c7d444351fa395708505d053/avalanche-web/examples/counter/src/lib.rs)*
 #[track_caller]
 pub fn state<'a, T: 'static, F: FnOnce() -> T>(
-    ctx: Context<'a>,
+    ctx: HookContext<'a>,
     f: F,
 ) -> (Tracked<&'a T>, StateSetter<T>) {
     let (state, location) = internal_state(ctx, f);
@@ -121,7 +134,7 @@ pub fn state<'a, T: 'static, F: FnOnce() -> T>(
 /// Provides a setter for a piece of state managed by [state].
 pub struct StateSetter<T: 'static> {
     vdom: Shared<VDom>,
-    vnode: NodeId<VNode>,
+    component_id: ComponentId,
     scheduler: Shared<dyn Scheduler>,
     location: Location<'static>,
     phantom: PhantomData<T>,
@@ -131,7 +144,7 @@ impl<T: 'static> Clone for StateSetter<T> {
     fn clone(&self) -> Self {
         Self {
             vdom: self.vdom.clone(),
-            vnode: self.vnode,
+            component_id: self.component_id,
             scheduler: self.scheduler.clone(),
             location: self.location,
             phantom: PhantomData,
@@ -147,7 +160,7 @@ impl<T: 'static> StateSetter<T> {
     ) -> Self {
         Self {
             vdom: component_pos.vdom.clone(),
-            vnode: component_pos.node_id.id,
+            component_id: component_pos.component_id,
             scheduler,
             location,
             phantom: PhantomData,
@@ -168,16 +181,15 @@ impl<T: 'static> StateSetter<T> {
     fn update_with_gen<F: FnOnce(&mut T, Gen) + 'static>(&self, f: F) {
         let vdom_clone = self.vdom.clone();
         let vdom_clone_2 = vdom_clone.clone();
-        let vnode_copy = self.vnode;
         let scheduler_clone = self.scheduler.clone();
         let location_copy = self.location;
+        let component_id_copy = self.component_id;
 
         self.scheduler.exec_mut(move |scheduler| {
             scheduler.schedule_on_ui_thread(Box::new(move || {
                 vdom_clone.exec_mut(|vdom| {
                     let vdom_gen = vdom.gen;
-                    let vnode = vnode_copy.get_mut(&mut vdom.tree);
-                    vnode.dirty = true;
+                    let vnode = &mut vdom.children.get_mut(&component_id_copy).unwrap();
                     let shared_box = vnode
                         .state
                         .get_mut(&location_copy)
@@ -189,15 +201,9 @@ impl<T: 'static> StateSetter<T> {
                     f(&mut state.val, vdom_gen);
                     state.gen = vdom_gen.next();
 
-                    update_vnode(
-                        None,
-                        vnode_copy,
-                        &mut vdom.tree,
-                        &mut vdom.renderer,
-                        &vdom_clone_2,
-                        &scheduler_clone,
-                        vdom_gen,
-                    );
+                    mark_node_dirty(vdom, component_id_copy);
+                    (vdom.update_vdom)(vdom, &vdom_clone_2, &scheduler_clone);
+
                     vdom.gen.inc();
                 })
             }));
@@ -214,16 +220,16 @@ impl<T: 'static> StateSetter<T> {
     }
 }
 
-/// Like [state], but returns a reference to a [tracked::Vec]. 
-/// 
-/// Takes in a function `F` that returns 
-/// a default [Vec](std::vec::Vec). The return value has fine-grained tracking: instead of only the 
-/// whole vec being updated or not updated, each individual element is also tracked. For more information on how that works see 
+/// Like [state], but returns a reference to a [tracked::Vec].
+///
+/// Takes in a function `F` that returns
+/// a default [Vec](std::vec::Vec). The return value has fine-grained tracking: instead of only the
+/// whole vec being updated or not updated, each individual element is also tracked. For more information on how that works see
 /// [tracked::Vec].
-/// 
-/// Note that `vec` returns a `Tracked<tracked::Vec>`, which is marked as updated if 
-/// any of its children are updated. However, an individual element's update status overrides this where appropriate. 
-/// 
+///
+/// Note that `vec` returns a `Tracked<tracked::Vec>`, which is marked as updated if
+/// any of its children are updated. However, an individual element's update status overrides this where appropriate.
+///
 /// ## Example
 /// ```rust
 /// use avalanche::{component, tracked, View, vec};
@@ -236,7 +242,7 @@ impl<T: 'static> StateSetter<T> {
 ///         .iter()
 ///         .enumerate()
 ///         .map(|(n, text)| Text!(key: n.to_string(), tracked!(text))).collect::<Vec<_>>();
-/// 
+///
 ///     Div!([
 ///         Button!(
 ///             on_click: move |_| update_data.update(|data| data.push("another child")),
@@ -248,7 +254,7 @@ impl<T: 'static> StateSetter<T> {
 /// ```
 #[track_caller]
 pub fn vec<'a, T: 'static, F: FnOnce() -> Vec<T>>(
-    ctx: Context<'a>,
+    ctx: HookContext<'a>,
     f: F,
 ) -> (Tracked<&'a tracked::Vec<T>>, VecSetter<T>) {
     let (state, location) = internal_state(ctx, || tracked::Vec::new(f(), ctx.gen));

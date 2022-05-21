@@ -1,4 +1,6 @@
-use avalanche::renderer::{HasChildrenMarker, NativeHandle, NativeType, Renderer, Scheduler};
+use std::any::Any;
+
+use avalanche::renderer::{NativeHandle, NativeType, Renderer, Scheduler};
 use avalanche::vdom::Root;
 use avalanche::{Component, Tracked, View, component, enclose, tracked, updated};
 
@@ -6,7 +8,7 @@ use avalanche::{Component, Tracked, View, component, enclose, tracked, updated};
 struct TestRenderer;
 
 impl Renderer for TestRenderer {
-    fn create_component(&mut self, _native_type: &NativeType, _component: &View) -> NativeHandle {
+    fn create_component(&mut self, _native_type: &NativeType, _component: &dyn Any) -> NativeHandle {
         Box::new(())
     }
 
@@ -69,7 +71,7 @@ impl Renderer for TestRenderer {
         &mut self,
         _native_type: &NativeType,
         _native_handle: &mut NativeHandle,
-        _component: &View,
+        _component: &dyn Any,
     ) {
     }
 }
@@ -85,14 +87,30 @@ struct TestChildren {
     children: Vec<View>,
 }
 
-impl Component for TestChildren {
-    type Builder = ();
+impl TestChildren {
+    fn new() -> Self {
+        Self { children: Vec::new() }
+    }
 
-    fn render(&self, context: avalanche::Context) -> View {
-        HasChildrenMarker {
-            children: self.children.clone(),
-        }
-        .into()
+    fn __last(mut self, children: Vec<View>, _updated: bool) -> Self {
+        self.children = children;
+        self
+    }
+
+    fn build(self, _location: (u32, u32)) -> Self {
+        self
+    }
+}
+
+impl Component for TestChildren {
+    type Builder = Self;
+
+    fn render(self, _: avalanche::RenderContext, _: avalanche::HookContext) -> View {
+       unimplemented!() 
+    }
+
+    fn children(self) -> Vec<View> {
+        self.children
     }
 
     fn updated(&self) -> bool {
@@ -105,6 +123,7 @@ impl Component for TestChildren {
             name: "",
         })
     }
+
 }
 
 #[test]
@@ -112,9 +131,8 @@ fn test() {
     let native_parent = TestChildren {
         children: Vec::new(),
     };
-    Root::new(
-        Test::default().into(),
-        native_parent.into(),
+    Root::new::<_, _, Test>(
+        NativeType { handler: "", name: "" },
         Box::new(()),
         TestRenderer,
         TestScheduler,
@@ -127,7 +145,7 @@ fn Test() -> View {
     let b = Tracked::new(0u8, false);
     let c = Tracked::new(0u8, true);
 
-    TestChildren { children: vec![
+    TestChildren!(vec![
         Bare!(),
         Identity!(a: tracked!(a)),
         ArrayIndex!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
@@ -146,7 +164,7 @@ fn Test() -> View {
         NestedBlocks!(a: tracked!(a)),
         NestedTracked!(a: tracked!(a), b: tracked!(b)),
         Updated!(a: tracked!(a), b: tracked!(b), c: tracked!(c))
-    ] }.into()
+    ] )
 }
 
 #[derive(Default)]
