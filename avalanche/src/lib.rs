@@ -14,7 +14,7 @@ pub use hooks::{HookContext, RenderContext};
 
 use renderer::{NativeType};
 use shared::Shared;
-use vdom::{ComponentId, VDom, VNode};
+use vdom::{ComponentId, VDom};
 
 pub use hooks::{state, vec};
 pub use tracked::Tracked;

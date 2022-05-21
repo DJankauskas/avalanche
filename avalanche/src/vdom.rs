@@ -335,7 +335,7 @@ pub fn render_child(
                         gen: context.vdom.gen,
                         state: &shared_state,
                         component_pos: ComponentPos {
-                            component_id: child_component_id.clone(),
+                            component_id: child_component_id,
                             vdom: context.component_pos.vdom,
                         },
                         scheduler: context.scheduler,
@@ -344,7 +344,7 @@ pub fn render_child(
                         vdom: context.vdom,
                         vnode: &mut child_vnode,
                         component_pos: ComponentPos {
-                            component_id: child_component_id.clone(),
+                            component_id: child_component_id,
                             vdom: context.component_pos.vdom,
                         },
                         scheduler: context.scheduler,
@@ -357,7 +357,7 @@ pub fn render_child(
                         .body_children
                         .retain(|_, BodyChild { id, used }| {
                             if !*used {
-                                remove_node(&mut context.vdom, *id);
+                                remove_node(context.vdom, *id);
                             };
                             *used
                         });
@@ -370,8 +370,7 @@ pub fn render_child(
             };
             child_vnode.view.native_component_id = native_component_id;
             child_vnode.dirty = false;
-            let view = child_vnode.view.private_copy();
-            view
+            child_vnode.view.private_copy()
         } else {
             child_vnode.view.private_copy()
         };
@@ -405,7 +404,7 @@ fn remove_node(vdom: &mut VDom, node: ComponentId) {
 pub(crate) fn update_native_children(
     parent_id: ComponentId,
     old_native_children: &mut Vec<ComponentId>,
-    new_native_children: &mut Vec<ComponentId>,
+    new_native_children: &mut [ComponentId],
     parent_type: &NativeType,
     parent_handle: &mut NativeHandle,
     vdom: &mut VDom,

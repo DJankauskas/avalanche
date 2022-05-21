@@ -52,12 +52,6 @@ pub(crate) struct Var {
     pub(crate) dependencies: UnitDeps,
 }
 
-#[derive(Debug, Clone)]
-struct Closure {
-    value_dependencies: Dependencies,
-    call_dependencies: Dependencies,
-}
-
 #[derive(Default, Debug)]
 pub(crate) struct Scope {
     pub(crate) vars: Vec<Var>,
@@ -168,7 +162,6 @@ impl Function {
             // don't include non-value deps, as only expr deps contribute to the dependencies of the block
             let mut stmt_deps = self.stmt(stmt, false);
             // remove variables internal to the block from the dependencies list, as they are not external dependencies
-            // TODO: fix let a = tracked!(a); currently this would not report a as a dependency
             stmt_deps
                 .tracked_deps
                 .retain(|dep| self.get_var_function_scope(&dep.to_string()).is_none());
@@ -773,7 +766,7 @@ impl Function {
                 let mut deps = struct_expr
                     .rest
                     .as_mut()
-                    .map(|mut rest| self.expr(&mut rest, nested_tracked));
+                    .map(|rest| self.expr(rest, nested_tracked));
                 for field in struct_expr.fields.iter_mut() {
                     match &mut deps {
                         Some(deps) => {
@@ -833,21 +826,6 @@ struct EscapeExprRet {
     // whether this expression may result in a jump from its enclosing block
     // examples: return, break, yield in generators (although unsupported)
     escape: bool,
-}
-
-#[derive(Debug, Clone)]
-struct Atom {
-    name: String,
-    sub: Option<Vec<usize>>,
-}
-
-impl From<String> for Atom {
-    fn from(string: String) -> Self {
-        Atom {
-            name: string,
-            sub: None,
-        }
-    }
 }
 
 fn from_pat(lhs: &Pat, rhs: UnitDeps) -> Vec<Var> {
