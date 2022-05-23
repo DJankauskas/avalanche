@@ -1,9 +1,8 @@
 use avalanche::renderer::{NativeHandle, NativeType, Renderer, Scheduler};
 use avalanche::Component;
-
 use avalanche::shared::Shared;
+use avalanche::any_ref::DynRef;
 
-use std::any::Any;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
@@ -18,7 +17,7 @@ pub mod events;
 
 static TIMEOUT_MSG_NAME: &str = "avalanche_web_message_name";
 
-pub fn mount<C: Component + Default>(element: Element) {
+pub fn mount<C: Component<'static> + Default>(element: Element) {
     let renderer = WebRenderer::new();
     let scheduler = WebScheduler::new();
     let native_parent_type = NativeType {
@@ -43,7 +42,7 @@ pub fn mount<C: Component + Default>(element: Element) {
 }
 
 /// Renders the given view in the current document's body.
-pub fn mount_to_body<C: Component + Default>() {
+pub fn mount_to_body<C: Component<'static> + Default>() {
     let body = web_sys::window()
         .expect("window")
         .document()
@@ -154,7 +153,7 @@ impl WebRenderer {
 }
 
 impl Renderer for WebRenderer {
-    fn create_component(&mut self, native_type: &NativeType, component: &dyn Any) -> NativeHandle {
+    fn create_component(&mut self, native_type: &NativeType, component: DynRef) -> NativeHandle {
         let elem = match native_type.handler {
             "avalanche_web_text" => {
                 let text_node = match component.downcast_ref::<Text>() {
@@ -290,7 +289,7 @@ impl Renderer for WebRenderer {
         &mut self,
         native_type: &NativeType,
         native_handle: &mut NativeHandle,
-        component: &dyn Any,
+        component: DynRef,
     ) {
         let web_handle = native_handle.downcast_mut::<WebNativeHandle>().unwrap();
         match native_type.handler {

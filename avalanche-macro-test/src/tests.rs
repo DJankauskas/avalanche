@@ -1,5 +1,4 @@
-use std::any::Any;
-
+use avalanche::any_ref::{AnyRef, DynRef};
 use avalanche::renderer::{NativeHandle, NativeType, Renderer, Scheduler};
 use avalanche::vdom::Root;
 use avalanche::{Component, Tracked, View, component, enclose, tracked, updated};
@@ -8,7 +7,7 @@ use avalanche::{Component, Tracked, View, component, enclose, tracked, updated};
 struct TestRenderer;
 
 impl Renderer for TestRenderer {
-    fn create_component(&mut self, _native_type: &NativeType, _component: &dyn Any) -> NativeHandle {
+    fn create_component(&mut self, _native_type: &NativeType, _component: DynRef) -> NativeHandle {
         Box::new(())
     }
 
@@ -71,7 +70,7 @@ impl Renderer for TestRenderer {
         &mut self,
         _native_type: &NativeType,
         _native_handle: &mut NativeHandle,
-        _component: &dyn Any,
+        _component: DynRef,
     ) {
     }
 }
@@ -102,7 +101,9 @@ impl TestChildren {
     }
 }
 
-impl Component for TestChildren {
+avalanche::impl_any_ref!{ TestChildren }
+
+impl<'a> Component<'a> for TestChildren {
     type Builder = Self;
 
     fn render(self, _: avalanche::RenderContext, _: avalanche::HookContext) -> View {

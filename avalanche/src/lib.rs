@@ -9,12 +9,15 @@ pub mod tracked;
 /// An in-memory representation of the current component tree.
 #[doc(hidden)]
 pub mod vdom;
+/// Facilities for dynamically typed, downcastable, data with lifetimes.
+pub mod any_ref;
 
 pub use hooks::{HookContext, RenderContext};
 
 use renderer::{NativeType};
 use shared::Shared;
 use vdom::{ComponentId, VDom};
+use any_ref::{AnyRef};
 
 pub use hooks::{state, vec};
 pub use tracked::Tracked;
@@ -150,7 +153,7 @@ impl From<Option<View>> for View {
 ///
 /// Users should not implement this trait manually but instead use the `component` attribute.
 /// However, native component implementations may need to use manual component implementations.
-pub trait Component: Sized + 'static {
+pub trait Component<'a>: Sized + AnyRef<'a> {
     type Builder;
 
     fn render(self, render_ctx: RenderContext, hook_ctx: HookContext) -> View;
@@ -174,7 +177,7 @@ pub trait Component: Sized + 'static {
     }
 }
 
-impl Component for () {
+impl<'a> Component<'a> for () {
     // TODO: make ! when never stabilizes
     type Builder = ();
 

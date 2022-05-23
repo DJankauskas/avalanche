@@ -1,3 +1,6 @@
+use crate::any_ref::DynRef;
+#[doc(inline)]
+pub use crate::vdom::Root;
 use std::any::Any;
 
 /// An opaque handle whose underlying type is determined by the current `Renderer`.
@@ -8,11 +11,7 @@ pub type NativeHandle = Box<dyn Any>;
 pub trait Renderer {
     /// Given a component and its native type, generate its native representation and return
     /// an opaque `NativeHandle` to it.
-    fn create_component(
-        &mut self,
-        native_type: &NativeType,
-        component: &dyn Any,
-    ) -> NativeHandle;
+    fn create_component(&mut self, native_type: &NativeType, component: DynRef) -> NativeHandle;
 
     /// Appends the component with handle `child_handle` into the component with
     /// handle `parent_handle`'s children.
@@ -89,7 +88,7 @@ pub trait Renderer {
         &mut self,
         native_type: &NativeType,
         native_handle: &mut NativeHandle,
-        component: &dyn Any,
+        component: DynRef,
     );
 
     /// Logs the given string to a platform-appropriate destination.
@@ -111,6 +110,3 @@ pub struct NativeType {
     pub handler: &'static str,
     pub name: &'static str,
 }
-
-#[doc(inline)]
-pub use crate::vdom::Root;

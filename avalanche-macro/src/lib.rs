@@ -193,8 +193,14 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
         }
 
         #component_default_impl
+        
+        /// Safety: only implemented for 'static types
+        /// Revisit with more complex types
+        unsafe impl<'a> ::avalanche::any_ref::AnyRef<'a> for #name {
+            type Static = #name;
+        }
 
-        impl avalanche::Component for #name where #( #param_type: ::std::clone::Clone ),* {
+        impl<'a> ::avalanche::Component<'a> for #name where #( #param_type: ::std::clone::Clone ),* {
             type Builder = #builder_name;
 
             #( #render_body_attributes )*

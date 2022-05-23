@@ -164,7 +164,7 @@ fn Todo() -> View {
                                 class: "todo-count",
                                 [
                                     Strong! (
-                                        child: Text!(tracked!(num_active))
+                                        child: Text!(tracked!(num_active).to_string())
                                     ),
                                     Text!(if tracked!(num_active) == 1 { " item" } else { " items" })
                                 ]
@@ -264,7 +264,7 @@ fn TodoItem(item: Item, is_editing: bool, toggle_completed: Rc<dyn Fn()>, set_ed
                 class: "edit",
                 id: "edit",
                 auto_focus: true,
-                value: tracked!(&item).text.clone(),
+                value: &tracked!(&item).text,
                 on_key_down: enclose!(set_editing; move |e| {
                     let which = e.which();
                     if which == ENTER_KEY {
