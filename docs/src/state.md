@@ -26,7 +26,7 @@ fn Counter() -> View {
                 Text!("+")
             ]
         ),
-        Text!(0)
+        Text!(0.to_string())
     ])
 }
 ```
@@ -58,7 +58,7 @@ fn Counter() -> View {
                 Text!("+")
             ]
         ),
-        Text!(tracked!(count))
+        Text!(tracked!(count).to_string())
     ])
 }
 ```

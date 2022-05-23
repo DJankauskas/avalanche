@@ -109,7 +109,7 @@ fn internal_state<'a, T: 'static>(
 ///                 on_click: move |_| set_count.update(|count| *count += 1),
 ///                 child: Text!("+")
 ///             ),
-///             Text!(tracked!(count))
+///             Text!(tracked!(count).to_string())
 ///         ]
 ///     )
 /// }
@@ -241,7 +241,7 @@ impl<T: 'static> StateSetter<T> {
 ///     let children = tracked!(data)
 ///         .iter()
 ///         .enumerate()
-///         .map(|(n, text)| Text!(key: n.to_string(), tracked!(text))).collect::<Vec<_>>();
+///         .map(|(n, text)| Text!(key: n.to_string(), *tracked!(text))).collect::<Vec<_>>();
 ///
 ///     Div!([
 ///         Button!(

@@ -32,7 +32,7 @@ fn Random() -> View {
                 ],
             ),
             Div!([
-                Text!(random::<u16>())
+                Text!(random::<u16>().to_string())
             ]) 
         ]
     )
@@ -65,7 +65,7 @@ fn Random() -> View {
                 ]
             ),
             Div!([
-                Text!(tracked!(value))
+                Text!(tracked!(value).to_string())
             ]) 
         ]
     )
