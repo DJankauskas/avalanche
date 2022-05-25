@@ -351,6 +351,7 @@ impl Function {
             }
             "tracked" | "updated" => {
                 if let Ok(tracked) = mac.parse_body::<Tracked>() {
+                    let mac_span = mac.span();
                     let mut unit_deps = UnitDeps::new();
                     let is_expr_trivial = matches!(
                         tracked,
@@ -380,19 +381,18 @@ impl Function {
                         }
                     };
                     let tracked_path = &mac.path;
-                    let expr_span = expr.span();
                     let transformed = if &*name == "tracked" {
                         if nested_tracked {
-                            quote_spanned! {expr_span=> #tracked_path!(#expr)}
+                            quote_spanned! {mac_span=> #tracked_path!(#expr)}
                         } else if is_expr_trivial {
-                            quote_spanned! {expr_span=>
+                            quote_spanned! {mac_span=>
                                 #tracked_path!({
                                     __avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::updated!(#expr);
                                     #expr
                                 })
                             }
                         } else {
-                            quote_spanned! {expr_span=>
+                            quote_spanned! {mac_span=>
                                 #tracked_path!({
                                     let value = #expr;
                                     __avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::updated!(value);
@@ -401,9 +401,9 @@ impl Function {
                             }
                         }
                     } else if nested_tracked {
-                        quote_spanned! {expr_span=> #tracked_path!(#expr)}
+                        quote_spanned! {mac_span=> #tracked_path!(#expr)}
                     } else {
-                        quote_spanned! {expr_span=>
+                        quote_spanned! {mac_span=>
                             {
                                 let updated = #tracked_path!(#expr);
                                 __avalanche_internal_updated = __avalanche_internal_updated || updated;
@@ -422,7 +422,7 @@ impl Function {
                         Ok(mut init) => {
                             if let Some(trailing_init) = init.trailing_init {
                                 init.named_init.push(ComponentFieldValue {
-                                    name: Ident::new("__last", Span::call_site()),
+                                    name: Ident::new("__last", trailing_init.span()),
                                     colon_token: Default::default(),
                                     value: trailing_init,
                                 })
