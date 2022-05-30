@@ -41,7 +41,7 @@ macro_rules! impl_any_ref {
     };
 
     ($ident:ident <$l:lifetime>) => {
-       unsafe impl<'a> ::avalanche::any_ref::AnyRef<'a> for $ident<$l> {
+       unsafe impl<$l> ::avalanche::any_ref::AnyRef<$l> for $ident<$l> {
            type Static = $ident <'static>;
        } 
     };
