@@ -437,17 +437,19 @@ impl Function {
                                 let field_span = field.span();
                                 let construct_expr = if dependencies.has_tracked {
                                     quote_spanned! { field_span=>
+                                        #field_ident({
+                                            __avalanche_internal_updated = false;
+                                            #init_expr
+                                        }, 
                                         {
-                                            let __avalanche_internal_outer_updated = &mut __avalanche_internal_updated;
-                                            let mut __avalanche_internal_updated = false;
-                                            let __avalanche_internal_built = __avalanche_internal_built.#field_ident(#init_expr, __avalanche_internal_updated);
                                             *__avalanche_internal_outer_updated = *__avalanche_internal_outer_updated || __avalanche_internal_updated;
-                                            __avalanche_internal_built
-                                        }
+                                            __avalanche_internal_updated
+                                            
+                                        })
                                     }
                                 } else {
                                     quote_spanned! { field_span=>
-                                        __avalanche_internal_built.#field_ident(#init_expr, false)
+                                        #field_ident(#init_expr, false)
                                     }
                                 };
                                 let construct_expr = parse_expr(construct_expr);
@@ -463,14 +465,12 @@ impl Function {
                             let transformed = parse_quote! {
                                 ::avalanche::__internal_identity! {{
                                     let __avalanche_internal_built = <<#type_path as ::avalanche::Component>::Builder>::new();
-                                    #(let __avalanche_internal_built = #prop_construct_expr;)*
-                                    let __avalanche_internal_component = __avalanche_internal_built.build((#line, #column));
+                                    let __avalanche_internal_outer_updated = &mut __avalanche_internal_updated;
+                                    let mut __avalanche_internal_updated = false;
                                     ::avalanche::vdom::render_child(
-                                        ::avalanche::ChildId {
-                                            location: (#line, #column),
-                                            key: ::avalanche::Component::key(&__avalanche_internal_component),
-                                        },
-                                        __avalanche_internal_component,
+                                        __avalanche_internal_built
+                                        #(.#prop_construct_expr)*
+                                        .build((#line, #column)),
                                         &mut __avalanche_render_context
                                     )
                                 }}
