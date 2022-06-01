@@ -1,7 +1,7 @@
-use avalanche::any_ref::{AnyRef, DynRef};
+use avalanche::any_ref::DynRef;
 use avalanche::renderer::{NativeHandle, NativeType, Renderer, Scheduler};
 use avalanche::vdom::Root;
-use avalanche::{Component, Tracked, View, component, enclose, tracked, updated};
+use avalanche::{component, enclose, tracked, updated, Component, Tracked, View};
 
 /// A renderer that does nothing, to test render functions only
 struct TestRenderer;
@@ -84,11 +84,15 @@ impl Scheduler for TestScheduler {
 
 struct TestChildren {
     children: Vec<View>,
+    location: (u32, u32)
 }
 
 impl TestChildren {
     fn new() -> Self {
-        Self { children: Vec::new() }
+        Self {
+            children: Vec::new(),
+            location: (0, 0)
+        }
     }
 
     fn __last(mut self, children: Vec<View>, _updated: bool) -> Self {
@@ -96,18 +100,19 @@ impl TestChildren {
         self
     }
 
-    fn build(self, _location: (u32, u32)) -> Self {
+    fn build(mut self, location: (u32, u32)) -> Self {
+        self.location = location;
         self
     }
 }
 
-avalanche::impl_any_ref!{ TestChildren }
+avalanche::impl_any_ref! { TestChildren }
 
 impl<'a> Component<'a> for TestChildren {
     type Builder = Self;
 
     fn render(self, _: avalanche::RenderContext, _: avalanche::HookContext) -> View {
-       unimplemented!() 
+        unimplemented!()
     }
 
     fn children(self) -> Vec<View> {
@@ -124,16 +129,23 @@ impl<'a> Component<'a> for TestChildren {
             name: "",
         })
     }
-
+    
+    fn location(&self) -> Option<(u32, u32)> {
+        Some(self.location)
+    }
 }
 
 #[test]
 fn test() {
     let native_parent = TestChildren {
         children: Vec::new(),
+        location: (0, 0)
     };
     Root::new::<_, _, Test>(
-        NativeType { handler: "", name: "" },
+        NativeType {
+            handler: "",
+            name: "",
+        },
         Box::new(()),
         TestRenderer,
         TestScheduler,
@@ -164,8 +176,14 @@ fn Test() -> View {
         Macros!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
         NestedBlocks!(a: tracked!(a)),
         NestedTracked!(a: tracked!(a), b: tracked!(b)),
-        Updated!(a: tracked!(a), b: tracked!(b), c: tracked!(c))
-    ] )
+        Updated!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
+        BasicRef!(a: &tracked!(a)),
+        ComplexRef!(a: &tracked!(a), bc: &[&tracked!(b), &tracked!(c)]),
+        ComplexTrait!(b: &tracked!(&b)),
+        ParameterizedRef!(a: vec![&tracked!(a)]),
+        ExplicitLifetime!(b: &tracked!(b)),
+        MixedLifetimes!(a: &tracked!(a), c: &tracked!(c))
+    ])
 }
 
 #[derive(Default)]
@@ -184,7 +202,7 @@ fn Identity(a: u8) -> View {
     assert!(updated!(a));
     let a = tracked!(a);
     assert!(updated!(a));
-    
+
     ().into()
 }
 
@@ -192,7 +210,7 @@ fn Identity(a: u8) -> View {
 fn ArrayIndex(a: u8, b: u8, c: u8) -> View {
     let arr = [tracked!(b)];
     assert!(!updated!(arr));
-    
+
     let arr = [tracked!(a), tracked!(b)];
     assert!(updated!(arr));
 
@@ -284,7 +302,7 @@ fn Closure(a: u8, b: u8) -> View {
         if true {
             match 1 {
                 1 => updated!(a),
-                _ => unreachable!()
+                _ => unreachable!(),
             };
         }
     };
@@ -311,7 +329,11 @@ fn If(a: u8, b: u8, c: u8) -> View {
     let x = if tracked!(a) == 0 { tracked!(b) } else { 5 };
     assert!(updated!(x));
 
-    let y = if tracked!(b) == 0 { tracked!(a) } else {tracked!(c)};
+    let y = if tracked!(b) == 0 {
+        tracked!(a)
+    } else {
+        tracked!(c)
+    };
     assert!(updated!(y));
 
     ().into()
@@ -343,17 +365,16 @@ fn Match(a: u8, b: u8, c: u8) -> View {
     };
     assert!(updated!(option));
 
-
     let y = match tracked!(b) {
         0 => "zero",
         1 => "one",
         _ => "other",
     };
     assert!(!updated!(y));
-    
+
     let z = match tracked!(b) {
         0 if tracked!(c) == 0 => "zero",
-        _ => "other"
+        _ => "other",
     };
     assert!(updated!(z));
 
@@ -363,7 +384,7 @@ fn Match(a: u8, b: u8, c: u8) -> View {
 #[component]
 fn Unary(a: u8) -> View {
     let b = !tracked!(a);
-    
+
     assert!(updated!(b));
 
     ().into()
@@ -409,7 +430,7 @@ fn Macros(a: u8, b: u8, c: u8) -> View {
     let formatted = format!("{} {}", tracked!(a), tracked!(b));
     assert!(updated!(formatted));
 
-    let formatted2 = format!("{} {d}", tracked!(b), d=tracked!(c));
+    let formatted2 = format!("{} {d}", tracked!(b), d = tracked!(c));
     assert!(updated!(formatted2));
 
     // testing matches!
@@ -421,7 +442,6 @@ fn Macros(a: u8, b: u8, c: u8) -> View {
 
     let matched = matches!(tracked!(b), 0 | 1 if tracked!(c) > 2,);
     assert!(updated!(matched));
-
 
     // testing vec!
     let vec = vec![tracked!(a)];
@@ -449,7 +469,7 @@ fn NestedBlocks(a: u8) -> View {
     let x = loop {
         break loop {
             break tracked!(a);
-        }
+        };
     };
     assert!(updated!(x));
 
@@ -462,10 +482,8 @@ fn NestedBlocks(a: u8) -> View {
     };
     assert!(updated!(y));
 
-    let closure = || {
-        loop {
-            break tracked!(a);
-        }
+    let closure = || loop {
+        break tracked!(a);
     };
     assert!(updated!(closure));
 
@@ -505,6 +523,47 @@ fn Updated(a: u8, b: u8, c: u8) -> View {
     let y = updated!(b) || updated!(b);
     assert!(updated!(x));
     assert!(!updated!(y));
+
+    ().into()
+}
+
+#[component]
+fn BasicRef(a: &u8) -> View {
+    assert!(updated!(a));
+    ().into()
+}
+
+#[component]
+fn ComplexRef(a: &u8, bc: &[&u8]) -> View {
+    assert!(updated!(a));
+    assert!(updated!(bc));
+
+    ().into()
+}
+
+#[component]
+fn ComplexTrait(b: &<&u8 as std::ops::Deref>::Target) -> View {
+    assert!(!updated!(b));
+    ().into()
+}
+
+#[component]
+fn ParameterizedRef(a: Vec<&u8>) -> View {
+    assert!(updated!(a));
+
+    ().into()
+}
+
+#[component]
+fn ExplicitLifetime<'a>(b: &'a u8) -> View {
+    assert!(!updated!(b));
+
+    ().into()
+}
+
+#[component]
+fn MixedLifetimes<'a>(a: &u8, c: &'a u8) -> View {
+    assert!(updated!(a) && updated!(c));
 
     ().into()
 }
