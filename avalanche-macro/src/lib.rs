@@ -3,9 +3,13 @@ mod transform;
 
 use proc_macro::TokenStream;
 
+use proc_macro2::Span;
 use proc_macro_error::{abort, emit_error, proc_macro_error};
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, Item, Pat, ReturnType};
+use syn::{
+    parse_macro_input, GenericParam, Item, Lifetime, Pat, Path, PathArguments, ReturnType, Type,
+    TypeParamBound,
+};
 
 use transform::{Dependencies, Function, Scope, Var};
 
@@ -55,6 +59,26 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
         abort!(token, "variadic components unsupported");
     };
 
+    let mut lifetime = None;
+
+    for param in item_fn.sig.generics.params.iter() {
+        if let GenericParam::Lifetime(lifetime_def) = param {
+            if let None = lifetime {
+                lifetime = Some(&lifetime_def.lifetime);
+            } else {
+                abort!(lifetime_def, "only one lifetime parameter allowed in a component signature");
+            };
+        } else {
+            abort!(
+                param, 
+                "only single lifetime parameter allowed"; 
+                note = "currently generic components are unsupported"
+            );
+        }
+    }
+
+    let mut lifetime = lifetime.cloned();
+
     let inputs_len = item_fn.sig.inputs.len();
 
     let mut param_ident = Vec::with_capacity(inputs_len);
@@ -63,13 +87,14 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     let mut flag = Vec::with_capacity(inputs_len);
 
     // process render code
-    for (i, param) in item_fn.sig.inputs.iter().enumerate() {
+    for (i, param) in item_fn.sig.inputs.iter_mut().enumerate() {
         let update_bit_pattern = 2u64.pow(i as u32);
         match param {
             syn::FnArg::Receiver(rec) => {
                 abort!(rec, "receiver not allowed");
             }
             syn::FnArg::Typed(param) => {
+                add_explicit_lifetime(&mut lifetime, &mut param.ty);
                 let ident = if let Pat::Ident(ident) = &*param.pat {
                     let mut dependencies = Dependencies::default();
                     dependencies.insert(ident.ident.to_owned());
@@ -98,7 +123,7 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
 
     function.scopes.push(param_scope);
 
-    //dependencies unneeded: we only want to process the block
+    // dependencies unneeded: we only want to process the block
     let _ = function.block(&mut item_fn.block);
 
     let name = &item_fn.sig.ident;
@@ -109,6 +134,7 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     let visibility = &item_fn.vis;
 
     let component_default_impl = if inputs_len == 0 {
+        lifetime = None;
         Some(quote! {
             impl ::std::default::Default for #name {
                 fn default() -> Self {
@@ -124,14 +150,25 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
         None
     };
 
+    let any_ref_impl = match &lifetime {
+        Some(lifetime) => quote! { ::avalanche::impl_any_ref!(#name<#lifetime>); },
+        None => quote! { ::avalanche::impl_any_ref!(#name); },
+    };
+
+    // a lifetime that always exists for the Component<'a> imp;
+    let component_lifetime = lifetime
+        .clone()
+        .unwrap_or_else(|| Lifetime::new("'a", Span::call_site()));
+    let lifetime_iter: Vec<_> = lifetime.as_ref().into_iter().collect();
+
     let component = quote! {
-        #visibility struct #builder_name {
+        #visibility struct #builder_name<#lifetime> {
             __internal_updates: ::std::primitive::u64,
             __key: ::std::option::Option<::std::string::String>,
             #(#param_ident: ::std::option::Option<#param_type>),*
         }
 
-        impl ::std::default::Default for #builder_name {
+        impl<#lifetime> ::std::default::Default for #builder_name<#lifetime> {
             fn default() -> Self {
                 Self {
                     __internal_updates: 0,
@@ -141,13 +178,13 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
 
-        impl #builder_name {
+        impl<#lifetime> #builder_name<#lifetime> where #( #param_type: ::std::clone::Clone ),* {
             fn new() -> Self {
                 ::std::default::Default::default()
             }
 
-            fn build(self, location: (::std::primitive::u32, ::std::primitive::u32)) -> #name {
-                #name {
+            fn build(self, location: (::std::primitive::u32, ::std::primitive::u32)) -> #name<#lifetime> {
+                #name::<#lifetime> {
                     __internal_updates: self.__internal_updates,
                     __key: self.__key,
                     __location: location,
@@ -185,7 +222,7 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
         }
 
         #[derive(::std::clone::Clone)]
-        #visibility struct #name {
+        #visibility struct #name #(<#lifetime_iter>)* {
             __internal_updates: ::std::primitive::u64,
             __key: std::option::Option<::std::string::String>,
             __location: (::std::primitive::u32, ::std::primitive::u32),
@@ -193,15 +230,11 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
         }
 
         #component_default_impl
-        
-        /// Safety: only implemented for 'static types
-        /// Revisit with more complex types
-        unsafe impl<'a> ::avalanche::any_ref::AnyRef<'a> for #name {
-            type Static = #name;
-        }
 
-        impl<'a> ::avalanche::Component<'a> for #name where #( #param_type: ::std::clone::Clone ),* {
-            type Builder = #builder_name;
+        #any_ref_impl
+
+        impl<#component_lifetime> ::avalanche::Component<#component_lifetime> for #name<#lifetime> {
+            type Builder = #builder_name<#lifetime>;
 
             #( #render_body_attributes )*
             #[allow(clippy::eval_order_dependence, clippy::unit_arg)]
@@ -229,4 +262,88 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     // println!("{}", component);
 
     component.into()
+}
+
+fn add_explicit_lifetime(lifetime: &mut Option<Lifetime>, ty: &mut Type) {
+    match ty {
+        Type::Array(array) => {
+            add_explicit_lifetime(lifetime, &mut *array.elem);
+        }
+        Type::BareFn(_) => {}
+        Type::Group(group) => add_explicit_lifetime(lifetime, &mut *group.elem),
+        Type::ImplTrait(impl_trait) => {
+            for bound in impl_trait.bounds.iter_mut() {
+                add_explicit_lifetime_type_bound(lifetime, bound);
+            }
+        }
+        Type::Infer(_) => {}
+        Type::Macro(_) => {}
+        Type::Never(_) => {}
+        Type::Paren(paren) => add_explicit_lifetime(lifetime, &mut *paren.elem),
+        Type::Path(path) => {
+            if let Some(qself) = &mut path.qself {
+                add_explicit_lifetime(lifetime, &mut qself.ty);
+            };
+            add_explicit_lifetime_path(lifetime, &mut path.path);
+        }
+        Type::Ptr(ptr) => add_explicit_lifetime(lifetime, &mut *ptr.elem),
+        Type::Reference(reference) => {
+            // TODO: handle inference
+            if let Some(l) = &reference.lifetime {
+                if l.ident.to_string() == "_" {
+                    reference.lifetime = None;
+                }
+            }
+            reference.lifetime.get_or_insert_with(|| {
+                lifetime
+                    .get_or_insert_with(|| Lifetime::new("'a", Span::call_site()))
+                    .clone()
+            });
+            add_explicit_lifetime(lifetime, &mut reference.elem);
+        }
+        Type::Slice(slice) => add_explicit_lifetime(lifetime, &mut *slice.elem),
+        Type::TraitObject(trait_object) => {
+            for bound in trait_object.bounds.iter_mut() {
+                add_explicit_lifetime_type_bound(lifetime, bound);
+            }
+        }
+        Type::Tuple(tuple) => {
+            for elem in tuple.elems.iter_mut() {
+                add_explicit_lifetime(lifetime, &mut *elem);
+            }
+        }
+        Type::Verbatim(_token_stream) => {}
+        _ => {}
+    };
+}
+
+fn add_explicit_lifetime_path(lifetime: &mut Option<Lifetime>, path: &mut Path) {
+    for segment in path.segments.iter_mut() {
+        if let PathArguments::AngleBracketed(generics) = &mut segment.arguments {
+            for arg in generics.args.iter_mut() {
+                match arg {
+                    syn::GenericArgument::Lifetime(_) => {}
+                    syn::GenericArgument::Type(ty) => add_explicit_lifetime(lifetime, ty),
+                    syn::GenericArgument::Binding(binding) => {
+                        add_explicit_lifetime(lifetime, &mut binding.ty)
+                    }
+                    syn::GenericArgument::Constraint(constraint) => {
+                        for bound in constraint.bounds.iter_mut() {
+                            add_explicit_lifetime_type_bound(lifetime, bound);
+                        }
+                    }
+                    syn::GenericArgument::Const(_) => {}
+                }
+            }
+        }
+    }
+}
+
+fn add_explicit_lifetime_type_bound(
+    lifetime: &mut Option<Lifetime>,
+    type_bound: &mut TypeParamBound,
+) {
+    if let TypeParamBound::Trait(trait_bound) = type_bound {
+        add_explicit_lifetime_path(lifetime, &mut trait_bound.path)
+    }
 }
