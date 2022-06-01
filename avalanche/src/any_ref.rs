@@ -89,7 +89,7 @@ impl<'a> DynBox<'a> {
         }
     }
     
-    pub(crate) fn as_ref<'b>(&'b self) -> DynRef<'b> {
+    pub(crate) fn as_ref<'r>(&'r self) -> DynRef<'a, 'r> {
         DynRef { data: &*self.data, _phantom: PhantomData }
     }
 
@@ -118,14 +118,14 @@ impl<'a> Debug for DynBox<'a> {
 }
 
 /// A reference to type-erased data.
-pub struct DynRef<'a> {
-    data: &'a dyn Any,
+pub struct DynRef<'a, 'r> {
+    data: &'r dyn Any,
     /// Uses lifetime and introduces covariance and contravariance
     _phantom: PhantomData<Cell<&'a ()>>,
 }
 
 
-impl<'a> DynRef<'a> {
+impl<'a, 'r> DynRef<'a, 'r> {
     /// Returns some reference to the inner value if it is of type `T`, or `None` if it isn’t.
     pub fn downcast_ref<T: AnyRef<'a>>(self) -> Option<&'a T> {
         match self.data.downcast_ref::<T::Static>() {
@@ -141,7 +141,7 @@ impl<'a> DynRef<'a> {
     }
 }
 
-impl<'a> Debug for DynRef<'a> {
+impl<'a, 'r> Debug for DynRef<'a, 'r> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DynRefp").finish_non_exhaustive()
     }
