@@ -207,11 +207,9 @@ pub struct ComponentPos<'a> {
     pub(crate) component_id: ComponentId,
 }
 
-#[doc(hidden)]
 #[derive(PartialEq, Eq, Hash)]
 /// Represents a component macro invocation's unique identity within a component.
-// TODO: make private, have child_render take in the two fields as arguments
-pub struct ChildId {
+pub(crate) struct ChildId {
     pub location: (u32, u32),
     pub key: Option<String>,
 }
