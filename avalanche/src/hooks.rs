@@ -117,9 +117,9 @@ fn internal_state<'a, T: 'static>(
 /// *Adapted from the `avalanche_web`
 /// [counter example.](https://github.com/DJankauskas/avalanche/blob/38ec4ccb83f93550c7d444351fa395708505d053/avalanche-web/examples/counter/src/lib.rs)*
 #[track_caller]
-pub fn state<'a, T: 'static, F: FnOnce() -> T>(
+pub fn state<'a, T: 'static>(
     ctx: HookContext<'a>,
-    f: F,
+    f: fn() -> T,
 ) -> (Tracked<&'a T>, StateSetter<T>) {
     let (state, location) = internal_state(ctx, f);
     let state = state.downcast_ref::<State<T>>().unwrap();
@@ -257,9 +257,9 @@ impl<T: 'static> StateSetter<T> {
 /// }
 /// ```
 #[track_caller]
-pub fn vec<'a, T: 'static, F: FnOnce() -> Vec<T>>(
+pub fn vec<'a, T: 'static>(
     ctx: HookContext<'a>,
-    f: F,
+    f: fn() -> Vec<T>,
 ) -> (Tracked<&'a tracked::Vec<T>>, VecSetter<T>) {
     let (state, location) = internal_state(ctx, || tracked::Vec::new(f(), ctx.gen));
     let state = state.downcast_ref::<State<tracked::Vec<T>>>().unwrap();

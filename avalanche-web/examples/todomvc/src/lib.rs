@@ -43,9 +43,9 @@ impl Filter {
 
 #[component]
 fn Todo() -> View {
-    let (editing, set_editing) = state::<Option<u32>, _>(self, || None);
+    let (editing, set_editing) = state::<Option<u32>>(self, || None);
     let (filter, set_filter) = state(self, || Filter::All);
-    let (items, update_items) = vec::<Item, _>(self, || vec![]);
+    let (items, update_items) = vec::<Item>(self, || vec![]);
     let (monotonic_id, update_monotonic_id) = state(self, || 0);
 
     let monotonic_id = *tracked!(monotonic_id);

@@ -46,7 +46,7 @@ use avalanche_web::components::{Div, H2, Button, Text};
 
 #[component]
 fn Counter() -> View {
-    let (count, set_count) = state::<u64, _>(self, || 0);
+    let (count, set_count) = state::<u64>(self, || 0);
 
     Div!([
         H2!([
