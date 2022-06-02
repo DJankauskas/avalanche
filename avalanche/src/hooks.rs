@@ -190,10 +190,14 @@ impl<T: 'static> StateSetter<T> {
                 vdom_clone.exec_mut(|vdom| {
                     let vdom_gen = vdom.gen;
                     let vnode = &mut vdom.children.get_mut(&component_id_copy).unwrap();
-                    let shared_box = vnode
-                        .state
-                        .get_mut(&location_copy)
-                        .expect("state referenced by correct location");
+                    let shared_box = match vnode.state.get_mut(&location_copy) {
+                        Some(vnode) => vnode,
+                        None => {
+                            // TODO: emit warning of leak with callback associated with
+                            // removed node
+                            return;
+                        }
+                    };
                     let any_mut = shared_box.get_mut();
                     let state = any_mut
                         .downcast_mut::<State<T>>()
