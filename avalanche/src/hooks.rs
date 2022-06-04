@@ -1,7 +1,7 @@
 use std::{any::Any, marker::PhantomData, panic::Location};
 
 use crate::{
-    renderer::Scheduler,
+    renderer::{Scheduler, NativeEvent},
     shared::Shared,
     tracked,
     vdom::{
@@ -56,6 +56,7 @@ pub struct RenderContext<'a> {
     pub(crate) vnode: &'a mut VNode,
     pub(crate) component_pos: ComponentPos<'a>,
     pub(crate) scheduler: &'a Shared<dyn Scheduler>,
+    pub(crate) current_native_event: &'a mut Option<(NativeEvent, ComponentId)>,
 }
 
 struct State<T: 'static> {
@@ -206,7 +207,7 @@ impl<T: 'static> StateSetter<T> {
                     state.gen = vdom_gen.next();
 
                     mark_node_dirty(vdom, component_id_copy);
-                    (vdom.update_vdom)(vdom, &vdom_clone_2, &scheduler_clone);
+                    (vdom.update_vdom)(vdom, &vdom_clone_2, &scheduler_clone, None);
 
                     vdom.gen.inc();
                 })

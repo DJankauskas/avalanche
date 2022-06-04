@@ -5,6 +5,7 @@ pub(crate) use web_sys::AnimationEvent;
 pub(crate) use web_sys::CompositionEvent;
 pub(crate) use web_sys::DragEvent;
 pub(crate) use web_sys::Event;
+use web_sys::EventTarget;
 pub(crate) use web_sys::FocusEvent;
 pub(crate) use web_sys::KeyboardEvent;
 pub(crate) use web_sys::MouseEvent;
@@ -25,13 +26,10 @@ pub struct TypedEvent<E: JsCast + Clone + Into<Event>, C: JsCast> {
 impl<E: JsCast + Clone + Into<Event>, C: JsCast + Clone> TypedEvent<E, C> {
     /// Constructs a new [`TypedEvent`] using the given event. It is the caller's
     /// responsibility to ensure the component type `C` is correct in context.
-    pub(crate) fn new(event: E) -> Self {
-        let event_clone: Event = event.clone().into();
+    pub(crate) fn new(event: E, current_target: Option<EventTarget>) -> Self {
         Self {
             event,
-            current_target: event_clone
-                .current_target()
-                .and_then(|ct| ct.dyn_into::<C>().ok()),
+            current_target: current_target.and_then(|ct| ct.dyn_into::<C>().ok()),
         }
     }
 

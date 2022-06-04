@@ -1,5 +1,6 @@
 use crate::any_ref::DynBox;
 use crate::hooks::{HookContext, RenderContext};
+use crate::renderer::{NativeEvent, DispatchNativeEvent};
 use crate::{
     hooks::Gen,
     renderer::{NativeHandle, NativeType, Renderer, Scheduler},
@@ -24,11 +25,11 @@ pub(crate) struct VDom {
     pub(crate) curr_component_id: ComponentId,
     /// The renderer used to convert avalanche representations of native components into
     /// actual native components.
-    pub renderer: Box<dyn Renderer>,
+    pub(crate) renderer: Box<dyn Renderer>,
     /// The current state update generation.
     pub(crate) gen: Gen,
     /// Updates the vdom by rendering the root component and all descendents that are dirty.
-    pub(crate) update_vdom: fn(&mut VDom, &Shared<VDom>, &Shared<dyn Scheduler>),
+    pub(crate) update_vdom: fn(&mut VDom, &Shared<VDom>, &Shared<dyn Scheduler>, Option<(NativeEvent, ComponentId)>),
 }
 
 // separate wrapper types to keep data structures maintaining safety invariants as isolated as possible
@@ -266,11 +267,16 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
             .remove(&child_component_id)
             .unwrap_or_else(|| {
                 let native_type = component.native_type();
+                let dispatch_native_event = DispatchNativeEvent {
+                    component_id: child_component_id,
+                    vdom: context.component_pos.vdom.clone(),
+                    scheduler: context.scheduler.clone()
+                };
                 let native_component = native_type.map(|native_type| {
                     let native_handle = context
                         .vdom
                         .renderer
-                        .create_component(&native_type, component.inner.as_ref());
+                        .create_component(&native_type, component.inner.as_ref(), dispatch_native_event);
                     NativeComponent {
                         native_handle,
                         native_type,
@@ -297,10 +303,19 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
         let view = if child_vnode.dirty || component.updated() {
             let native_component_id = match &mut child_vnode.native_component {
                 Some(native_component) => {
+                    let current_native_event = match &mut context.current_native_event {
+                        Some((_, id)) => {
+                            if *id == child_component_id {
+                                context.current_native_event.take().map(|(event, _)| event)
+                            } else { None }
+                        }
+                        None => None,
+                    };
                     context.vdom.renderer.update_component(
                         &native_component.native_type,
                         &mut native_component.native_handle,
                         component.inner.as_ref(),
+                        current_native_event,
                     );
                     let new_children = component.children();
                     let new_children: Vec<_> =
@@ -353,6 +368,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
                             vdom: context.component_pos.vdom,
                         },
                         scheduler: context.scheduler,
+                        current_native_event: context.current_native_event,
                     };
 
                     let view: View = component.render(child_render_context, child_hook_context);
@@ -479,7 +495,10 @@ pub(crate) fn update_native_children(
 /// Walks up the VDom upwards and marks the given node and its body parents dirty to allow for running the update algorithm
 pub(crate) fn mark_node_dirty(vdom: &mut VDom, mut component_id: ComponentId) {
     loop {
-        let vnode = vdom.children.get_mut(&component_id).unwrap();
+        let vnode = match vdom.children.get_mut(&component_id) {
+            Some(vnode) => vnode,
+            None => return,
+        };
         vnode.dirty = true;
         component_id = match vnode.body_parent {
             Some(body_parent) => body_parent,
@@ -543,7 +562,7 @@ impl Root {
         let vdom_clone = vdom.clone();
         let scheduler: Shared<dyn Scheduler> = Shared::new_dyn(Rc::new(RefCell::new(scheduler)));
         vdom.exec_mut(|vdom| {
-            render_vdom::<C>(vdom, &vdom_clone, &scheduler);
+            render_vdom::<C>(vdom, &vdom_clone, &scheduler, None);
             vdom.gen.inc();
         });
         Root { _vdom: vdom }
@@ -554,6 +573,7 @@ fn render_vdom<'a, C: Component<'a> + Default>(
     vdom: &mut VDom,
     shared_vdom: &Shared<VDom>,
     scheduler: &Shared<dyn Scheduler>,
+    mut current_native_event: Option<(NativeEvent, ComponentId)>
 ) {
     let mut parent_vnode = vdom.children.remove(&ComponentId::new()).unwrap();
     render_child(
@@ -566,6 +586,7 @@ fn render_vdom<'a, C: Component<'a> + Default>(
                 vdom: shared_vdom,
             },
             scheduler,
+            current_native_event: &mut current_native_event,
         },
     );
     vdom.children.insert(ComponentId::new(), parent_vnode);

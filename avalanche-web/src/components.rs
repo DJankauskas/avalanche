@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use wasm_bindgen::JsCast;
 
-use crate::events::*;
+use crate::{events::*, WebNativeEvent};
 use avalanche::renderer::NativeType;
 use avalanche::{Component, HookContext, RenderContext, View};
 
@@ -97,7 +97,7 @@ impl<'a> Component<'a> for Text<'a> {
 
 pub(crate) enum Attr<'a> {
     Prop(Option<Cow<'a, str>>),
-    Handler(Rc<dyn Fn(Event)>),
+    Handler(Rc<dyn Fn(WebNativeEvent)>),
 }
 
 trait IntoCowStr<'a> {
@@ -386,8 +386,8 @@ macro_rules! def_component_attrs {
                             pub fn $listenident(mut self, f: impl Fn(TypedEvent::<$listentype, <$builder as AssociatedNativeElement>::NativeElement>) + 'static, updated: bool) -> Self {
                                 self.raw.set_attr(
                                     $listennative,
-                                    Attr::Handler(std::rc::Rc::new(move |e: Event| f(
-                                        TypedEvent::<$listentype, <$builder as AssociatedNativeElement>::NativeElement>::new(e.dyn_into::<$listentype>().unwrap())
+                                    Attr::Handler(std::rc::Rc::new(move |e: WebNativeEvent| f(
+                                        TypedEvent::<$listentype, <$builder as AssociatedNativeElement>::NativeElement>::new(e.event.dyn_into::<$listentype>().unwrap(), e.current_target)
                                     ))),
                                     updated
                                 );

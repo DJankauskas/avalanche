@@ -1,6 +1,10 @@
-use crate::any_ref::DynRef;
 #[doc(inline)]
 pub use crate::vdom::Root;
+use crate::{
+    any_ref::DynRef,
+    shared::Shared,
+    vdom::{mark_node_dirty, ComponentId, VDom},
+};
 use std::any::Any;
 
 /// An opaque handle whose underlying type is determined by the current `Renderer`.
@@ -11,7 +15,12 @@ pub type NativeHandle = Box<dyn Any>;
 pub trait Renderer {
     /// Given a component and its native type, generate its native representation and return
     /// an opaque `NativeHandle` to it.
-    fn create_component(&mut self, native_type: &NativeType, component: DynRef) -> NativeHandle;
+    fn create_component(
+        &mut self,
+        native_type: &NativeType,
+        component: DynRef,
+        dispatch_native_event: DispatchNativeEvent,
+    ) -> NativeHandle;
 
     /// Appends the component with handle `child_handle` into the component with
     /// handle `parent_handle`'s children.
@@ -83,12 +92,14 @@ pub trait Renderer {
     );
 
     /// Updates the `component`'s corresponding native handle so that the representation
-    /// and result match.
+    /// and result match. The method may be provided an event that is dispatched
+    /// to the component via a `Root` method.
     fn update_component(
         &mut self,
         native_type: &NativeType,
         native_handle: &mut NativeHandle,
         component: DynRef,
+        event: Option<NativeEvent>,
     );
 
     /// Logs the given string to a platform-appropriate destination.
@@ -109,4 +120,49 @@ pub trait Scheduler {
 pub struct NativeType {
     pub handler: &'static str,
     pub name: &'static str,
+}
+
+/// The event data and type of an event dispatched to a native component.
+pub struct NativeEvent {
+    /// Data of the event being dispatched to a component.
+    pub event: Box<dyn Any>,
+    /// Name of the event being dispatched.
+    pub name: &'static str,
+}
+
+#[derive(Clone)]
+/// Allow native components to set up dispatching events to themselves.
+pub struct DispatchNativeEvent {
+    /// The component to which the native event should be dispatched.
+    pub(crate) component_id: ComponentId,
+    /// The ui tree to which the event should be dispatched.
+    pub(crate) vdom: Shared<VDom>,
+    /// The scheduler needed for hook rerendering.
+    pub(crate) scheduler: Shared<dyn Scheduler>,
+}
+
+impl DispatchNativeEvent {
+    /// Triggers a rerender of the component tree within this call,
+    /// passing the event to the proper native component.
+    pub fn dispatch(&self, native_event: NativeEvent) {
+        let self_clone = self.clone();
+        let exec_event = move || {
+            let vdom_clone = self_clone.vdom.clone();
+            self_clone.vdom.exec_mut(move |vdom| {
+                mark_node_dirty(vdom, self_clone.component_id);
+                (vdom.update_vdom)(
+                    vdom,
+                    &vdom_clone,
+                    &self_clone.scheduler,
+                    Some((native_event, self_clone.component_id)),
+                );
+            })
+        };
+        if self.vdom.borrowed() {
+            self.scheduler
+                .exec_mut(|scheduler| scheduler.schedule_on_ui_thread(Box::new(exec_event)));
+        } else {
+            exec_event();
+        }
+    }
 }

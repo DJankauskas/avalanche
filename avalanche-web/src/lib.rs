@@ -1,16 +1,17 @@
-use avalanche::renderer::{NativeHandle, NativeType, Renderer, Scheduler};
-use avalanche::Component;
-use avalanche::shared::Shared;
 use avalanche::any_ref::DynRef;
+use avalanche::renderer::{
+    DispatchNativeEvent, NativeEvent, NativeHandle, NativeType, Renderer, Scheduler,
+};
+use avalanche::shared::Shared;
+use avalanche::Component;
 
 use std::collections::{HashMap, VecDeque};
-use std::rc::Rc;
 
 use crate::components::{Attr, RawElement, Text};
 use crate::events::Event;
 use gloo_events::{EventListener, EventListenerOptions};
 use wasm_bindgen::JsCast;
-use web_sys::Element;
+use web_sys::{Element, EventTarget};
 
 pub mod components;
 pub mod events;
@@ -27,7 +28,7 @@ pub fn mount<C: Component<'static> + Default>(element: Element) {
     let native_parent_handle = WebNativeHandle {
         children_offset: element.child_nodes().length(),
         node: element.into(),
-        listeners: Default::default(),
+        _listeners: Default::default(),
     };
 
     let root = avalanche::vdom::Root::new::<_, _, C>(
@@ -104,7 +105,7 @@ impl Scheduler for WebScheduler {
 
 struct WebNativeHandle {
     node: web_sys::Node,
-    listeners: HashMap<&'static str, EventListener>,
+    _listeners: HashMap<&'static str, EventListener>,
     /// position at which renderer indexing should begin
     // TODO: more memory-efficient implementation?
     children_offset: u32,
@@ -153,7 +154,12 @@ impl WebRenderer {
 }
 
 impl Renderer for WebRenderer {
-    fn create_component(&mut self, native_type: &NativeType, component: DynRef) -> NativeHandle {
+    fn create_component(
+        &mut self,
+        native_type: &NativeType,
+        component: DynRef,
+        dispatch_native_event: DispatchNativeEvent,
+    ) -> NativeHandle {
         let elem = match native_type.handler {
             "avalanche_web_text" => {
                 let text_node = match component.downcast_ref::<Text>() {
@@ -162,7 +168,7 @@ impl Renderer for WebRenderer {
                 };
                 WebNativeHandle {
                     node: web_sys::Node::from(text_node),
-                    listeners: HashMap::new(),
+                    _listeners: HashMap::new(),
                     children_offset: 0,
                 }
             }
@@ -188,7 +194,7 @@ impl Renderer for WebRenderer {
                         "input",
                         "#v",
                         false,
-                        Rc::new(|e| e.prevent_default()),
+                        |e| e.prevent_default(),
                         &mut listeners,
                     );
                 }
@@ -198,7 +204,7 @@ impl Renderer for WebRenderer {
                         "change",
                         "#c",
                         false,
-                        Rc::new(|e| e.prevent_default()),
+                        |e| e.prevent_default(),
                         &mut listeners,
                     );
                 }
@@ -227,8 +233,14 @@ impl Renderer for WebRenderer {
                                         }
                                     }
                                 }
-                                Attr::Handler(handler) => {
-                                    add_listener(&element, name, handler.clone(), &mut listeners)
+                                Attr::Handler(_) => {
+                                    let dispatcher = dispatch_native_event.clone();
+                                    add_listener(
+                                        &element,
+                                        name,
+                                        create_handler(name, dispatcher),
+                                        &mut listeners,
+                                    )
                                 }
                             }
                         }
@@ -251,8 +263,14 @@ impl Renderer for WebRenderer {
                                         }
                                     }
                                 }
-                                Attr::Handler(handler) => {
-                                    add_listener(&element, name, handler.clone(), &mut listeners)
+                                Attr::Handler(_) => {
+                                    let dispatcher = dispatch_native_event.clone();
+                                    add_listener(
+                                        &element,
+                                        name,
+                                        create_handler(name, dispatcher),
+                                        &mut listeners,
+                                    )
                                 }
                             }
                         }
@@ -265,8 +283,14 @@ impl Renderer for WebRenderer {
                                         element.set_attribute(name, prop).unwrap();
                                     }
                                 }
-                                Attr::Handler(handler) => {
-                                    add_listener(&element, name, handler.clone(), &mut listeners);
+                                Attr::Handler(_) => {
+                                    let dispatcher = dispatch_native_event.clone();
+                                    add_listener(
+                                        &element,
+                                        name,
+                                        create_handler(name, dispatcher),
+                                        &mut listeners,
+                                    )
                                 }
                             }
                         }
@@ -275,7 +299,7 @@ impl Renderer for WebRenderer {
 
                 WebNativeHandle {
                     node: web_sys::Node::from(element),
-                    listeners,
+                    _listeners: listeners,
                     children_offset: 0,
                 }
             }
@@ -290,6 +314,7 @@ impl Renderer for WebRenderer {
         native_type: &NativeType,
         native_handle: &mut NativeHandle,
         component: DynRef,
+        native_event: Option<NativeEvent>,
     ) {
         let web_handle = native_handle.downcast_mut::<WebNativeHandle>().unwrap();
         match native_type.handler {
@@ -299,6 +324,22 @@ impl Renderer for WebRenderer {
                 let raw_element = component
                     .downcast_ref::<RawElement>()
                     .expect("component of type RawElement");
+
+                if let Some(native_event) = native_event {
+                    match &raw_element.attrs[&native_event.name].0 {
+                        Attr::Handler(handler) => {
+                            handler(
+                                *native_event
+                                    .event
+                                    .downcast::<WebNativeEvent>()
+                                    .expect("web_sys::Event for native event"),
+                            );
+                        }
+                        Attr::Prop(_) => {
+                            // TODO: panic due to missing prop?
+                        }
+                    }
+                }
 
                 if raw_element.attrs_updated {
                     match raw_element.tag {
@@ -323,14 +364,7 @@ impl Renderer for WebRenderer {
                                                 update_generic_prop(&element, name, prop.as_deref())
                                             }
                                         },
-                                        Attr::Handler(handler) => {
-                                            update_listener(
-                                                &element,
-                                                name,
-                                                handler.clone(),
-                                                &mut web_handle.listeners,
-                                            );
-                                        }
+                                        _ => {}
                                     }
                                 }
                             }
@@ -352,14 +386,7 @@ impl Renderer for WebRenderer {
                                                 update_generic_prop(&element, name, prop.as_deref())
                                             }
                                         }
-                                        Attr::Handler(handler) => {
-                                            update_listener(
-                                                &element,
-                                                name,
-                                                handler.clone(),
-                                                &mut web_handle.listeners,
-                                            );
-                                        }
+                                        _ => {}
                                     }
                                 }
                             }
@@ -371,14 +398,7 @@ impl Renderer for WebRenderer {
                                         Attr::Prop(prop) => {
                                             update_generic_prop(&element, name, prop.as_deref())
                                         }
-                                        Attr::Handler(handler) => {
-                                            update_listener(
-                                                &element,
-                                                name,
-                                                handler.clone(),
-                                                &mut web_handle.listeners,
-                                            );
-                                        }
+                                        _ => {}
                                     }
                                 }
                             }
@@ -538,7 +558,7 @@ fn update_generic_prop(element: &Element, name: &str, prop: Option<&str>) {
 fn add_listener(
     element: &web_sys::Element,
     name: &'static str,
-    callback: Rc<dyn Fn(Event)>,
+    callback: impl Fn(Event) + 'static,
     listeners: &mut HashMap<&'static str, EventListener>,
 ) {
     add_named_listener(element, name, name, true, callback, listeners)
@@ -549,7 +569,7 @@ fn add_named_listener(
     event: &'static str,
     name: &'static str,
     passive: bool,
-    callback: Rc<dyn Fn(Event)>,
+    callback: impl Fn(Event) + 'static,
     listeners: &mut HashMap<&'static str, EventListener>,
 ) {
     let options = EventListenerOptions {
@@ -562,15 +582,22 @@ fn add_named_listener(
     listeners.insert(name, listener);
 }
 
-fn update_listener(
-    element: &web_sys::Element,
-    name: &'static str,
-    callback: Rc<dyn Fn(Event)>,
-    listeners: &mut HashMap<&'static str, EventListener>,
-) {
-    let _ = listeners.remove(name);
-    let listener = EventListener::new(element, name, move |event| callback(event.clone()));
-    listeners.insert(name, listener);
+fn create_handler(name: &'static str, dispatcher: DispatchNativeEvent) -> impl Fn(Event) + 'static {
+    move |event| {
+        dispatcher.dispatch(NativeEvent {
+            name,
+            event: Box::new(WebNativeEvent {
+                current_target: event.current_target(),
+                event,
+            }),
+        })
+    }
+}
+
+/// A crate for storing an event and memoized current_target for dispatch.
+pub(crate) struct WebNativeEvent {
+    event: Event,
+    current_target: Option<EventTarget>,
 }
 
 // Mdbook's testing doesn't quite work, so we inject our book test cases into the crate to make sure they compile.

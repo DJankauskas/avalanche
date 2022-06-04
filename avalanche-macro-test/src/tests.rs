@@ -1,5 +1,5 @@
 use avalanche::any_ref::DynRef;
-use avalanche::renderer::{NativeHandle, NativeType, Renderer, Scheduler};
+use avalanche::renderer::{NativeHandle, NativeType, Renderer, Scheduler, NativeEvent, DispatchNativeEvent};
 use avalanche::vdom::Root;
 use avalanche::{component, enclose, tracked, updated, Component, Tracked, View};
 
@@ -7,7 +7,7 @@ use avalanche::{component, enclose, tracked, updated, Component, Tracked, View};
 struct TestRenderer;
 
 impl Renderer for TestRenderer {
-    fn create_component(&mut self, _native_type: &NativeType, _component: DynRef) -> NativeHandle {
+    fn create_component(&mut self, _native_type: &NativeType, _component: DynRef, _dispatch_native_event: DispatchNativeEvent) -> NativeHandle {
         Box::new(())
     }
 
@@ -71,6 +71,7 @@ impl Renderer for TestRenderer {
         _native_type: &NativeType,
         _native_handle: &mut NativeHandle,
         _component: DynRef,
+        _native_event: Option<NativeEvent>
     ) {
     }
 }
