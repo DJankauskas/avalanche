@@ -127,5 +127,4 @@ Link!(
 
 ## Parameter type restrictions
 
-All parameters must implement `Clone`. This is true for all non-`mut` references, which is useful if you want to pass
-around a type that otherwise is not cloneable. It's also very useful for avoiding unnecessary cloning.
+All parameters must implement `Clone`. Note that all non-`mut` references implement `Clone`.
