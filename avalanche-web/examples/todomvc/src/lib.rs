@@ -74,7 +74,7 @@ fn Todo() -> View {
             let id = tracked!(item).id;
             TodoItem!(
                 key: tracked!(id),
-                item: &tracked!(item),
+                item: tracked!(item),
                 is_editing: *tracked!(editing) == Some(tracked!(id)),
                 toggle_completed: &enclose!(update_items; move || {
                     updated!(items);
@@ -216,7 +216,7 @@ fn TodoItem(item: &Item, is_editing: bool, toggle_completed: &dyn Fn(), set_edit
     Li!(
         class: format!(
             "{} {}",
-            if tracked!(&item).completed {
+            if tracked!(item).completed {
                 "completed"
             } else {
                 ""

@@ -63,7 +63,7 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
 
     for param in item_fn.sig.generics.params.iter() {
         if let GenericParam::Lifetime(lifetime_def) = param {
-            if let None = lifetime {
+            if lifetime.is_none() {
                 lifetime = Some(&lifetime_def.lifetime);
             } else {
                 abort!(lifetime_def, "only one lifetime parameter allowed in a component signature");
@@ -289,7 +289,7 @@ fn add_explicit_lifetime(lifetime: &mut Option<Lifetime>, ty: &mut Type) {
         Type::Reference(reference) => {
             // TODO: handle inference
             if let Some(l) = &reference.lifetime {
-                if l.ident.to_string() == "_" {
+                if l.ident == "_" {
                     reference.lifetime = None;
                 }
             }

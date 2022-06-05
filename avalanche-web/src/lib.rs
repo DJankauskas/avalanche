@@ -350,8 +350,8 @@ impl Renderer for WebRenderer {
                                 .expect("HTMLInputElement");
                             for (name, (attr, updated)) in raw_element.attrs.iter() {
                                 if *updated {
-                                    match attr {
-                                        Attr::Prop(prop) => match *name {
+                                    if let Attr::Prop(prop) = attr {
+                                        match *name {
                                             "value" => {
                                                 if let Some(prop) = prop {
                                                     input_element.set_value(prop);
@@ -363,8 +363,7 @@ impl Renderer for WebRenderer {
                                             _ => {
                                                 update_generic_prop(&element, name, prop.as_deref())
                                             }
-                                        },
-                                        _ => {}
+                                        }
                                     }
                                 }
                             }
@@ -376,17 +375,14 @@ impl Renderer for WebRenderer {
                                 .expect("HTMLTextAreaElement");
                             for (name, (attr, updated)) in raw_element.attrs.iter() {
                                 if *updated {
-                                    match attr {
-                                        Attr::Prop(prop) => {
-                                            if *name == "value" {
-                                                if let Some(prop) = prop {
-                                                    text_area_element.set_value(prop);
-                                                }
-                                            } else {
-                                                update_generic_prop(&element, name, prop.as_deref())
+                                    if let Attr::Prop(prop) = attr {
+                                        if *name == "value" {
+                                            if let Some(prop) = prop {
+                                                text_area_element.set_value(prop);
                                             }
+                                        } else {
+                                            update_generic_prop(&element, name, prop.as_deref())
                                         }
-                                        _ => {}
                                     }
                                 }
                             }
@@ -394,11 +390,8 @@ impl Renderer for WebRenderer {
                         _ => {
                             for (name, (attr, updated)) in raw_element.attrs.iter() {
                                 if *updated {
-                                    match attr {
-                                        Attr::Prop(prop) => {
-                                            update_generic_prop(&element, name, prop.as_deref())
-                                        }
-                                        _ => {}
+                                    if let Attr::Prop(prop) = attr {
+                                        update_generic_prop(&element, name, prop.as_deref())
                                     }
                                 }
                             }

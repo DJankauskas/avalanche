@@ -125,7 +125,7 @@ pub fn state<'a, T: 'static>(
     ctx: HookContext<'a>,
     f: fn() -> T,
 ) -> (Tracked<&'a T>, &'a StateSetter<T>) {
-    let (state, location) = internal_state(ctx, f);
+    let (state, _) = internal_state(ctx, f);
     let state = state.downcast_ref::<State<T>>().unwrap();
     let updated = state.gen.updated(ctx.gen);
     let state_ref = &state.val;
