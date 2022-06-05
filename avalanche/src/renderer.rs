@@ -71,26 +71,16 @@ pub trait Renderer {
         b: usize,
     );
 
-    /// Moves the child at position `old` to the position `new`.
-    /// # Panics
-    /// Panics if `old < len` or `new < len` where `len` is the number of children
-    fn move_child(
+
+    /// Truncates the number of the children to the length given, removing any children
+    /// greater in count than `len`.
+    fn truncate_children(
         &mut self,
         parent_type: &NativeType,
         parent_handle: &mut NativeHandle,
-        old: usize,
-        new: usize,
+        len: usize,
     );
-
-    /// Removes the component with the given `index` from the component
-    /// with handle `parent_handle`.
-    fn remove_child(
-        &mut self,
-        parent_type: &NativeType,
-        parent_handle: &mut NativeHandle,
-        index: usize,
-    );
-
+    
     /// Updates the `component`'s corresponding native handle so that the representation
     /// and result match. The method may be provided an event that is dispatched
     /// to the component via a `Root` method.

@@ -1,5 +1,7 @@
 use avalanche::any_ref::DynRef;
-use avalanche::renderer::{NativeHandle, NativeType, Renderer, Scheduler, NativeEvent, DispatchNativeEvent};
+use avalanche::renderer::{
+    DispatchNativeEvent, NativeEvent, NativeHandle, NativeType, Renderer, Scheduler,
+};
 use avalanche::vdom::Root;
 use avalanche::{component, enclose, tracked, updated, Component, Tracked, View};
 
@@ -7,7 +9,12 @@ use avalanche::{component, enclose, tracked, updated, Component, Tracked, View};
 struct TestRenderer;
 
 impl Renderer for TestRenderer {
-    fn create_component(&mut self, _native_type: &NativeType, _component: DynRef, _dispatch_native_event: DispatchNativeEvent) -> NativeHandle {
+    fn create_component(
+        &mut self,
+        _native_type: &NativeType,
+        _component: DynRef,
+        _dispatch_native_event: DispatchNativeEvent,
+    ) -> NativeHandle {
         Box::new(())
     }
 
@@ -49,20 +56,11 @@ impl Renderer for TestRenderer {
     ) {
     }
 
-    fn move_child(
+    fn truncate_children(
         &mut self,
-        _parent_type: &NativeType,
-        _parent_handle: &mut NativeHandle,
-        _old: usize,
-        _new: usize,
-    ) {
-    }
-
-    fn remove_child(
-        &mut self,
-        _parent_type: &NativeType,
-        _parent_handle: &mut NativeHandle,
-        _index: usize,
+        parent_type: &NativeType,
+        parent_handle: &mut NativeHandle,
+        len: usize,
     ) {
     }
 
@@ -71,7 +69,7 @@ impl Renderer for TestRenderer {
         _native_type: &NativeType,
         _native_handle: &mut NativeHandle,
         _component: DynRef,
-        _native_event: Option<NativeEvent>
+        _native_event: Option<NativeEvent>,
     ) {
     }
 }
@@ -85,14 +83,14 @@ impl Scheduler for TestScheduler {
 
 struct TestChildren {
     children: Vec<View>,
-    location: (u32, u32)
+    location: (u32, u32),
 }
 
 impl TestChildren {
     fn new() -> Self {
         Self {
             children: Vec::new(),
-            location: (0, 0)
+            location: (0, 0),
         }
     }
 
@@ -130,7 +128,7 @@ impl<'a> Component<'a> for TestChildren {
             name: "",
         })
     }
-    
+
     fn location(&self) -> Option<(u32, u32)> {
         Some(self.location)
     }
@@ -140,7 +138,7 @@ impl<'a> Component<'a> for TestChildren {
 fn test() {
     let native_parent = TestChildren {
         children: Vec::new(),
-        location: (0, 0)
+        location: (0, 0),
     };
     Root::new::<_, _, Test>(
         NativeType {

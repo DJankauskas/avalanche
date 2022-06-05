@@ -1,6 +1,6 @@
 use crate::any_ref::DynBox;
 use crate::hooks::{HookContext, RenderContext};
-use crate::renderer::{NativeEvent, DispatchNativeEvent};
+use crate::renderer::{DispatchNativeEvent, NativeEvent};
 use crate::{
     hooks::Gen,
     renderer::{NativeHandle, NativeType, Renderer, Scheduler},
@@ -29,7 +29,8 @@ pub(crate) struct VDom {
     /// The current state update generation.
     pub(crate) gen: Gen,
     /// Updates the vdom by rendering the root component and all descendents that are dirty.
-    pub(crate) update_vdom: fn(&mut VDom, &Shared<VDom>, &Shared<dyn Scheduler>, Option<(NativeEvent, ComponentId)>),
+    pub(crate) update_vdom:
+        fn(&mut VDom, &Shared<VDom>, &Shared<dyn Scheduler>, Option<(NativeEvent, ComponentId)>),
 }
 
 // separate wrapper types to keep data structures maintaining safety invariants as isolated as possible
@@ -270,13 +271,14 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
                 let dispatch_native_event = DispatchNativeEvent {
                     component_id: child_component_id,
                     vdom: context.component_pos.vdom.clone(),
-                    scheduler: context.scheduler.clone()
+                    scheduler: context.scheduler.clone(),
                 };
                 let native_component = native_type.map(|native_type| {
-                    let native_handle = context
-                        .vdom
-                        .renderer
-                        .create_component(&native_type, component.inner.as_ref(), dispatch_native_event);
+                    let native_handle = context.vdom.renderer.create_component(
+                        &native_type,
+                        component.inner.as_ref(),
+                        dispatch_native_event,
+                    );
                     NativeComponent {
                         native_handle,
                         native_type,
@@ -307,7 +309,9 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
                         Some((_, id)) => {
                             if *id == child_component_id {
                                 context.current_native_event.take().map(|(event, _)| event)
-                            } else { None }
+                            } else {
+                                None
+                            }
                         }
                         None => None,
                     };
@@ -484,11 +488,9 @@ pub(crate) fn update_native_children(
         }
     }
 
-    // Native children of `parent_handle` now consist of all new native children as well
-    // as leftover old ones. Remove those leftovers.
-    // TODO: implement and use a renderer truncate function.
-    for i in (new_native_children.len()..old_native_children.len()).rev() {
-        vdom.renderer.remove_child(parent_type, parent_handle, i);
+    if new_native_children.len() != old_native_children.len() {
+        vdom.renderer
+            .truncate_children(parent_type, parent_handle, new_native_children.len());
     }
 }
 
@@ -573,7 +575,7 @@ fn render_vdom<'a, C: Component<'a> + Default>(
     vdom: &mut VDom,
     shared_vdom: &Shared<VDom>,
     scheduler: &Shared<dyn Scheduler>,
-    mut current_native_event: Option<(NativeEvent, ComponentId)>
+    mut current_native_event: Option<(NativeEvent, ComponentId)>,
 ) {
     let mut parent_vnode = vdom.children.remove(&ComponentId::new()).unwrap();
     render_child(

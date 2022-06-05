@@ -495,41 +495,36 @@ impl Renderer for WebRenderer {
         }
     }
 
-    fn move_child(
+    fn truncate_children(
         &mut self,
         parent_type: &NativeType,
         parent_handle: &mut NativeHandle,
-        old: usize,
-        new: usize,
+        len: usize,
     ) {
         Self::assert_handler_avalanche_web(parent_type);
         let parent_handle = Self::handle_cast(parent_handle);
         let parent_element = Self::node_to_element(parent_handle.node.clone());
-        let curr_child_node = Self::get_child(&parent_element, old, parent_handle.children_offset);
-        let removed = parent_element
-            .remove_child(&curr_child_node)
-            .expect("successful remove");
-        let component_after_insert =
-            Self::try_get_child(&parent_element, new, parent_handle.children_offset);
-        parent_element
-            .insert_before(&removed, component_after_insert.as_ref())
-            .expect("insert success");
+        
+        // TODO: more efficient implementation
+        while let Some(node) = Self::try_get_child(&parent_element, len, parent_handle.children_offset) {
+            parent_element.remove_child(&node).expect("successful remove");
+        }
     }
-
-    fn remove_child(
-        &mut self,
-        parent_type: &NativeType,
-        parent_handle: &mut NativeHandle,
-        index: usize,
-    ) {
-        Self::assert_handler_avalanche_web(parent_type);
-        let parent_handle = Self::handle_cast(parent_handle);
-        let parent_element = Self::node_to_element(parent_handle.node.clone());
-        let child_node = Self::get_child(&parent_element, index, parent_handle.children_offset);
-        parent_element
-            .remove_child(&child_node)
-            .expect("successful remove");
-    }
+    
+    // fn remove_child(
+    //     &mut self,
+    //     parent_type: &NativeType,
+    //     parent_handle: &mut NativeHandle,
+    //     index: usize,
+    // ) {
+    //     Self::assert_handler_avalanche_web(parent_type);
+    //     let parent_handle = Self::handle_cast(parent_handle);
+    //     let parent_element = Self::node_to_element(parent_handle.node.clone());
+    //     let child_node = Self::get_child(&parent_element, index, parent_handle.children_offset);
+    //     parent_element
+    //         .remove_child(&child_node)
+    //         .expect("successful remove");
+    // }
 
     fn log(&self, string: &str) {
         let js_val: wasm_bindgen::JsValue = string.into();
