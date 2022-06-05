@@ -62,6 +62,8 @@ pub struct RenderContext<'a> {
 struct State<T: 'static> {
     val: T,
     gen: Gen,
+    /// For passing the setter into calling functions as a reference, eliminating the need for cloning.
+    setter: StateSetter<T>,
 }
 
 #[track_caller]
@@ -75,6 +77,7 @@ fn internal_state<'a, T: 'static>(
             SharedBox::new(Box::new(State {
                 val: f(),
                 gen: ctx.gen.next(),
+                setter: StateSetter::new(ctx.component_pos, ctx.scheduler.clone(), *location)
             }))
         })
     });
@@ -121,15 +124,14 @@ fn internal_state<'a, T: 'static>(
 pub fn state<'a, T: 'static>(
     ctx: HookContext<'a>,
     f: fn() -> T,
-) -> (Tracked<&'a T>, StateSetter<T>) {
+) -> (Tracked<&'a T>, &'a StateSetter<T>) {
     let (state, location) = internal_state(ctx, f);
     let state = state.downcast_ref::<State<T>>().unwrap();
     let updated = state.gen.updated(ctx.gen);
     let state_ref = &state.val;
     let tracked_state_ref = Tracked::new(state_ref, updated);
-    let updater = StateSetter::new(ctx.component_pos, ctx.scheduler.clone(), location);
 
-    (tracked_state_ref, updater)
+    (tracked_state_ref, &state.setter)
 }
 
 /// Provides a setter for a piece of state managed by [state].

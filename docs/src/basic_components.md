@@ -62,7 +62,7 @@ use avalanche::{component, tracked, View};
 use avalanche_web::components::{A, Text};
 
 #[component]
-fn Link(to: String, text: String) -> View {
+fn Link(to: &str, text: &str) -> View {
     A!(
         href: tracked!(to),
         [
@@ -73,10 +73,10 @@ fn Link(to: String, text: String) -> View {
 ```
 
 Notice that for the `href` and implicit `text` parameters, we pass `tracked!` parameters instead of just passing them by value.
-That's because when we say a parameter is, for example, a `String`, we actually receive a `Tracked<String>`. A `Tracked` value 
+That's because when we say a parameter is, for example, a `&str`, we actually receive a `Tracked<&str>`. A `Tracked` value 
 wraps an inner value with data on whether it's been updated since last render. `avalanche` uses this to allow for efficient re-rendering
-of components. Calling `tracked!` on a `Tracked` value gives us its inner value. Since `Text` and `A` expect `String`-like values, but 
-the `to` and `text` parameters are `Tracked<String>`, we use `tracked!()` to get `String` values.
+of components. Calling `tracked!` on a `Tracked` value gives us its inner value. Since `Text` and `A` expect `&str`-like values, but 
+the `to` and `text` parameters are `Tracked<&str>`, we use `tracked!()` to get `&str` values.
 
 We can then construct `Link` inside of other components:
 
@@ -86,7 +86,7 @@ use avalanche_web::components::{Text, Div};
 # use avalanche_web::components::A;
 # 
 # #[component]
-# fn Link(to: String, text: String) -> View {
+# fn Link(to: &str, text: &str) -> View {
 #     A!(
 #         href: tracked!(to),
 #         [
@@ -99,8 +99,8 @@ use avalanche_web::components::{Text, Div};
 fn Example() -> View {
     Div!([
         Link!(
-            to: "https://example.com".into(),
-            text: "example.com".into()
+            to: "https://example.com",
+            text: "example.com"
         ),
         Text!(" is a domain reserved for use in demos.")
     ])
@@ -127,7 +127,5 @@ Link!(
 
 ## Parameter type restrictions
 
-You might have noticed that we used the `String` type for our parameters, rather than the more generic `&str`. That's because 
-parameters are stored by avalanche and need to live longer than the function body, and are thus required to be `'static`. That means
-parameter types can't contain non-`'static` references. However, `static` references like `&'static str` are allowed.
-Also, parameter types must implement `Clone`.
+All parameters must implement `Clone`. This is true for all non-`mut` references, which is useful if you want to pass
+around a type that otherwise is not cloneable. It's also very useful for avoiding unnecessary cloning.

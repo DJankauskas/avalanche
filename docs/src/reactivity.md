@@ -104,8 +104,7 @@ within the `set` or `update` methods.
 
 Macros can lead to convenient code; for example, `Text!(format!("Hello, {} {}!", tracked!(title), tracked!(name)))` is a lot clearer than macro-free
 alternatives. However, when using non-`std` and `avalanche` macros, `#[component]` is unable to track their dependencies correctly, meaning
-parameters based on those macros may not update correctly. In the future, we may instead opt to consider those macros always updated (at the cost of 
-efficiency), or offer some syntax to specify tracked values explicitly for them. Either way, we recommend you avoid those macros for now. 
+parameters based on those macros may not update correctly. In the future, we may instead opt to consider those macros always updated (at the cost of significantly reduced efficiency), or offer some syntax to specify tracked values explicitly for them. Either way, we recommend you avoid those macros for now. 
 
 ## Rendering dynamic lists
 

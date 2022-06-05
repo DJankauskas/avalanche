@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::marker::PhantomData;
-use std::rc::Rc;
 
 use wasm_bindgen::JsCast;
 
@@ -97,7 +96,7 @@ impl<'a> Component<'a> for Text<'a> {
 
 pub(crate) enum Attr<'a> {
     Prop(Option<Cow<'a, str>>),
-    Handler(Rc<dyn Fn(WebNativeEvent)>),
+    Handler(Box<dyn Fn(WebNativeEvent) + 'a>),
 }
 
 trait IntoCowStr<'a> {
@@ -276,9 +275,6 @@ macro_rules! def_component {
         pub struct $tag<'a>(PhantomData<&'a ()>);
 
         ::avalanche::impl_any_ref!($tag<'a>);
-        /* unsafe impl<'a> ::avalanche::any_ref::AnyRef<'a> for $tag<'a> {
-            type Static = $tag<'static>;
-        } */
 
         // Dummy implenentation of Component for $tag
         // Used only for Builder; all tags create RawElements
@@ -383,10 +379,10 @@ macro_rules! def_component_attrs {
 
                     $(
                         $(
-                            pub fn $listenident(mut self, f: impl Fn(TypedEvent::<$listentype, <$builder as AssociatedNativeElement>::NativeElement>) + 'static, updated: bool) -> Self {
+                            pub fn $listenident(mut self, f: impl Fn(TypedEvent::<$listentype, <$builder as AssociatedNativeElement>::NativeElement>) + 'a, updated: bool) -> Self {
                                 self.raw.set_attr(
                                     $listennative,
-                                    Attr::Handler(std::rc::Rc::new(move |e: WebNativeEvent| f(
+                                    Attr::Handler(Box::new(move |e: WebNativeEvent| f(
                                         TypedEvent::<$listentype, <$builder as AssociatedNativeElement>::NativeElement>::new(e.event.dyn_into::<$listentype>().unwrap(), e.current_target)
                                     ))),
                                     updated
