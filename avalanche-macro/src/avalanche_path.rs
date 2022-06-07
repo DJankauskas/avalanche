@@ -10,7 +10,16 @@ thread_local!{
 fn init_avalanche_path() -> AvalanchePath {
     let found_crate = crate_name("avalanche").expect("crate avalanche found in `Cargo.toml`");
     match found_crate {
-        FoundCrate::Itself => AvalanchePath::Itself,
+        FoundCrate::Itself => {
+            // Doc tests expect avalanche items to be in avalanche, not in crate, even if they're within the avalanche crate
+            // Note that this solution is unstable but it's the best we can easily do at the moment
+            // TODO: more robust solution?
+            if std::env::var("UNSTABLE_RUSTDOC_TEST_LINE").is_ok() || std::env::var("UNSTABLE_RUSTDOC_TEST_PATH").is_ok() {
+                AvalanchePath::Named("avalanche".to_string())
+            } else {
+                AvalanchePath::Itself
+            }
+        }
         FoundCrate::Name(name) => AvalanchePath::Named(name),
     }
 }
