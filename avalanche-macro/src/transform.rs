@@ -12,10 +12,10 @@ use proc_macro_error::abort;
 use quote::{quote_spanned, ToTokens};
 use rand::random;
 
-use crate::macro_expr::{
+use crate::{macro_expr::{
     ComponentBuilder, ComponentFieldValue, EncloseBody, ExprList, MatchesBody, Tracked, Try,
     VecBody,
-};
+}, avalanche_path::get_avalanche_path};
 
 const EXPR_CONVERSION_ERROR: &str = "internal error: unable to process Expr within tracked";
 
@@ -110,10 +110,11 @@ fn parse_expr(stream: TokenStream) -> Expr {
 fn enable_expr_tracking(expr: &mut Expr, deps: &UnitDeps) {
     if deps.has_tracked {
         let expr_span = expr.span();
+        let avalanche_path = get_avalanche_path();
         let transformed = quote_spanned! { expr_span=>
             {
                 let mut __avalanche_internal_updated = false;
-                ::avalanche::Tracked::new(#expr, __avalanche_internal_updated)
+                #avalanche_path::Tracked::new(#expr, __avalanche_internal_updated)
             }
         };
         *expr = parse_expr(transformed);
@@ -248,6 +249,7 @@ impl Function {
 
     /// Returns the dependencies of a macro, and the transformed version of the input.
     fn mac(&mut self, mac: &mut syn::Macro, nested_tracked: bool) -> (UnitDeps, Option<Expr>) {
+        let avalanche_path = get_avalanche_path();
         let name = mac.path.segments.last().unwrap().ident.to_string();
         match &*name {
             "addr_of" | "addr_of_mut" => {
@@ -387,7 +389,7 @@ impl Function {
                         } else if is_expr_trivial {
                             quote_spanned! {mac_span=>
                                 #tracked_path!({
-                                    __avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::updated!(#expr);
+                                    __avalanche_internal_updated = __avalanche_internal_updated || #avalanche_path::updated!(#expr);
                                     #expr
                                 })
                             }
@@ -395,7 +397,7 @@ impl Function {
                             quote_spanned! {mac_span=>
                                 #tracked_path!({
                                     let value = #expr;
-                                    __avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::updated!(value);
+                                    __avalanche_internal_updated = __avalanche_internal_updated || #avalanche_path::updated!(value);
                                     value
                                 })
                             }
@@ -463,11 +465,11 @@ impl Function {
                             let column: u32 = random();
 
                             let transformed = parse_quote! {
-                                ::avalanche::__internal_identity! {{
-                                    let __avalanche_internal_built = <<#type_path as ::avalanche::Component>::Builder>::new();
+                                #avalanche_path::__internal_identity! {{
+                                    let __avalanche_internal_built = <<#type_path as #avalanche_path::Component>::Builder>::new();
                                     let __avalanche_internal_outer_updated = &mut __avalanche_internal_updated;
                                     let mut __avalanche_internal_updated = false;
-                                    ::avalanche::vdom::render_child(
+                                    #avalanche_path::vdom::render_child(
                                         __avalanche_internal_built
                                         #(.#prop_construct_expr)*
                                         .build((#line, #column)),
@@ -518,9 +520,10 @@ impl Function {
             }
         };
         let ident_dep = deps.tracked_deps.iter();
+        let avalanche_path = get_avalanche_path();
         let output = parse_quote! {
             {
-                #(__avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::updated!(#ident_dep);)*
+                #(__avalanche_internal_updated = __avalanche_internal_updated || #avalanche_path::updated!(#ident_dep);)*
                 #closure
             }
         };

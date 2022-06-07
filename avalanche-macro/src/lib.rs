@@ -1,6 +1,8 @@
+mod avalanche_path;
 mod macro_expr;
 mod transform;
 
+use avalanche_path::get_avalanche_path;
 use proc_macro::TokenStream;
 
 use proc_macro2::Span;
@@ -17,6 +19,8 @@ use transform::{Dependencies, Function, Scope, Var};
 #[proc_macro_attribute]
 pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     let mut item = parse_macro_input!(input as Item);
+
+    let avalanche_path = get_avalanche_path();
 
     let item_fn = match item {
         Item::Fn(ref mut fun) => fun,
@@ -66,12 +70,15 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
             if lifetime.is_none() {
                 lifetime = Some(&lifetime_def.lifetime);
             } else {
-                abort!(lifetime_def, "only one lifetime parameter allowed in a component signature");
+                abort!(
+                    lifetime_def,
+                    "only one lifetime parameter allowed in a component signature"
+                );
             };
         } else {
             abort!(
-                param, 
-                "only single lifetime parameter allowed"; 
+                param,
+                "only single lifetime parameter allowed";
                 note = "currently generic components are unsupported"
             );
         }
@@ -151,8 +158,8 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let any_ref_impl = match &lifetime {
-        Some(lifetime) => quote! { ::avalanche::impl_any_ref!(#name<#lifetime>); },
-        None => quote! { ::avalanche::impl_any_ref!(#name); },
+        Some(lifetime) => quote! { #avalanche_path::impl_any_ref!(#name<#lifetime>); },
+        None => quote! { #avalanche_path::impl_any_ref!(#name); },
     };
 
     // a lifetime that always exists for the Component<'a> imp;
@@ -232,15 +239,13 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
 
         #any_ref_impl
 
-        impl<#component_lifetime> ::avalanche::Component<#component_lifetime> for #name<#lifetime> {
+        impl<#component_lifetime> #avalanche_path::Component<#component_lifetime> for #name<#lifetime> {
             type Builder = #builder_name<#lifetime>;
 
             #( #render_body_attributes )*
             #[allow(clippy::eval_order_dependence, clippy::unit_arg)]
-            fn render(self, mut __avalanche_render_context: ::avalanche::RenderContext, __avalanche_hook_context: ::avalanche::HookContext) -> #return_type {
-                // let state = ::std::option::Option::unwrap(::std::any::Any::downcast_mut::<#state_name>(&mut **__avalanche_context.state));
-
-                #(let #param_ident = ::avalanche::Tracked::new(self.#param_ident, (&self.__internal_updates & #flag) != 0);)*
+            fn render(self, mut __avalanche_render_context: #avalanche_path::RenderContext, __avalanche_hook_context: #avalanche_path::HookContext) -> #return_type {
+                #(let #param_ident = #avalanche_path::Tracked::new(self.#param_ident, (&self.__internal_updates & #flag) != 0);)*
 
                 let mut __avalanche_internal_updated = false;
 

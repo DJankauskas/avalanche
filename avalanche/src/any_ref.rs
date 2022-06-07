@@ -35,13 +35,13 @@ unsafe impl<'a> AnyRef<'a> for () {
 #[macro_export]
 macro_rules! impl_any_ref {
     ($ident:ident) => {
-       unsafe impl<'a> ::avalanche::any_ref::AnyRef<'a> for $ident {
+       unsafe impl<'a> $crate::any_ref::AnyRef<'a> for $ident {
            type Static = $ident ;
        } 
     };
 
     ($ident:ident <$l:lifetime>) => {
-       unsafe impl<$l> ::avalanche::any_ref::AnyRef<$l> for $ident<$l> {
+       unsafe impl<$l> $crate::any_ref::AnyRef<$l> for $ident<$l> {
            type Static = $ident <'static>;
        } 
     };
