@@ -11,6 +11,9 @@ pub mod tracked;
 pub mod vdom;
 /// Facilities for dynamically typed, downcastable, data with lifetimes.
 pub mod any_ref;
+/// Testing avalanche rendering, tracking, and hooks.
+#[cfg(test)]
+mod tests;
 
 pub use hooks::{HookContext, RenderContext};
 

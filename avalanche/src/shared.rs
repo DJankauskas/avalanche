@@ -25,6 +25,12 @@ impl<T: ?Sized> Shared<T> {
     pub(crate) fn borrowed(&self) -> bool {
         self.rc.try_borrow_mut().is_err()
     }
+    
+    /// Returns true if the two instances of `Shared` point to the same allocation,
+    /// false otherwise.
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.rc, &other.rc)
+    }
 }
 
 impl<T: ?Sized> Shared<T> {
