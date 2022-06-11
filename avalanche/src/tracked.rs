@@ -157,7 +157,7 @@ impl<'a, T> Drop for VecMutRef<'a, T> {
 impl<T> Vec<T> {
     pub(crate) fn new(data: std::vec::Vec<T>, gen: Gen) -> Self {
         Self {
-            gens: vec![gen.next(); data.len()],
+            gens: vec![gen; data.len()],
             data,
             curr_gen: Cell::new(gen),
         }

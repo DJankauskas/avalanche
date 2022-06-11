@@ -111,9 +111,11 @@ impl Renderer for TestRenderer {
         if let (Some(_), Some(on_click)) = (event, &component.on_click) {
             on_click();
         }
-        if component.name_updated() {
-            panic!("Name must be static");
-        }
+        // TODO: uncomment when a create/update model is created where a component will not
+        // immediately be updated after creation
+        // if component.name_updated() {
+        //     panic!("Names must be static but {} was updated", component.name);
+        // }
         if component.value_updated() {
             handle.set_value(component.value.to_string());
         }

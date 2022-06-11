@@ -565,7 +565,6 @@ impl Root {
         let scheduler: Shared<dyn Scheduler> = Shared::new_dyn(Rc::new(RefCell::new(scheduler)));
         vdom.exec_mut(|vdom| {
             render_vdom::<C>(vdom, &vdom_clone, &scheduler, None);
-            vdom.gen.inc();
         });
         Root { _vdom: vdom }
     }
@@ -613,4 +612,5 @@ fn render_vdom<'a, C: Component<'a> + Default>(
     );
     native_component.native_children = new_native_children;
     vdom.children.insert(ComponentId::new(), vnode);
+    vdom.gen.inc();
 }

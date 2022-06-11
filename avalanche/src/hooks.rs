@@ -24,7 +24,7 @@ impl Gen {
     }
     pub(crate) fn next(mut self) -> Self {
         self.inc();
-        Gen { gen: self.gen }
+        self
     }
 
     pub(crate) fn inc(&mut self) {
@@ -76,7 +76,7 @@ fn internal_state<'a, T: 'static>(
         state.get_or_insert_with(*location, move || {
             SharedBox::new(Box::new(State {
                 val: f(),
-                gen: ctx.gen.next(),
+                gen: ctx.gen,
                 setter: StateSetter::new(ctx.component_pos, ctx.scheduler.clone(), *location)
             }))
         })
@@ -206,12 +206,11 @@ impl<T: 'static> StateSetter<T> {
                         .downcast_mut::<State<T>>()
                         .expect("state with setter's type");
                     f(&mut state.val, vdom_gen);
-                    state.gen = vdom_gen.next();
+                    state.gen = vdom_gen;
 
                     mark_node_dirty(vdom, component_id_copy);
                     (vdom.update_vdom)(vdom, &vdom_clone_2, &scheduler_clone, None);
 
-                    vdom.gen.inc();
                 })
             }));
         });

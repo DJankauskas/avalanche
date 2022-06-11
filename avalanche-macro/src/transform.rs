@@ -454,7 +454,6 @@ impl Function {
                                         #field_ident(#init_expr, false)
                                     }
                                 };
-                                let construct_expr = parse_expr(construct_expr);
                                 prop_construct_expr.push(construct_expr);
                                 macro_dependencies.extend(dependencies.clone());
                             }
