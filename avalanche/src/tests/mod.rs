@@ -189,31 +189,31 @@ fn basic_state_event() {
 }
 
 // TODO: test not working, debug later
-// #[component]
-// fn AddChildren() -> View {
-//     let (children, update_children) = vec(self, || vec!["c"]);
-//     println!("{:?}", tracked!(children).data);
-//     Native!(
-//         name: "a",
-//         on_click: move || update_children.update(|children| { children.insert(0, "b"); children.insert(2, "d") }),
-//         tracked!(children)
-//             .iter()
-//             .map(|child| { println!("Child {} is updated: {}", tracked!(child), updated!(child)); Native!(key: tracked!(child).to_string(), value: tracked!(child)) })
-//             .collect()
-//     )
-// }
+#[component]
+fn AddChildren() -> View {
+    let (children, update_children) = vec(self, || vec!["c"]);
+    println!("children updated? - {}, {}", updated!(children), updated!(tracked!(children).iter().next().unwrap()));
+    Native!(
+        name: "a",
+        on_click: move || update_children.update(|children| { children.insert(0, "b"); children.insert(2, "d") }),
+        tracked!(children)
+            .iter()
+            .map(|child| { println!("Child {} is updated: {}", tracked!(child), updated!(child)); Native!(key: tracked!(child).to_string(), name: tracked!(child)) })
+            .collect()
+    )
+}
 
-// #[test]
-// fn add_children() {
-//     test::<AddChildren>(vec!["a"], vec![Repr {
-//         name: "a".to_string(),
-//         value: String::new(),
-//         has_on_click: false,
-//         children: vec![
-//             Repr { name: "b".to_string(), value: String::new(), has_on_click: false, children: vec![] },
-//             Repr { name: "c".to_string(), value: String::new(), has_on_click: false, children: vec![] },
-//             Repr { name: "d".to_string(), value: String::new(), has_on_click: false, children: vec![] },
-//         ]
-//     }])
-// }
-//
+#[test]
+fn add_children() {
+    test::<AddChildren>(vec!["a"], vec![Repr {
+        name: "a".to_string(),
+        value: String::new(),
+        has_on_click: true,
+        children: vec![
+            Repr { name: "b".to_string(), value: String::new(), has_on_click: false, children: vec![] },
+            Repr { name: "c".to_string(), value: String::new(), has_on_click: false, children: vec![] },
+            Repr { name: "d".to_string(), value: String::new(), has_on_click: false, children: vec![] },
+        ]
+    }])
+}
+
