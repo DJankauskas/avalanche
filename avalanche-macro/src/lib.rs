@@ -177,11 +177,11 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
         }
 
         impl<#component_lifetime> #builder_name<#component_lifetime> where #( #param_type: ::std::clone::Clone ),* {
-            fn new() -> Self {
+            pub fn new() -> Self {
                 ::std::default::Default::default()
             }
 
-            fn build(self, location: (::std::primitive::u32, ::std::primitive::u32)) -> #name<#component_lifetime> {
+            pub fn build(self, location: (::std::primitive::u32, ::std::primitive::u32)) -> #name<#component_lifetime> {
                 #name::<#component_lifetime> {
                     __internal_gens: self.__internal_gens,
                     __key: self.__key,
@@ -191,14 +191,14 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }
 
-            fn key<T: ::std::string::ToString>(mut self, key: T, _gen: #avalanche_path::tracked::Gen<#component_lifetime>) -> Self {
+            pub fn key<T: ::std::string::ToString>(mut self, key: T, _gen: #avalanche_path::tracked::Gen<#component_lifetime>) -> Self {
                 self.__key = ::std::option::Option::Some(::std::string::ToString::to_string(&key));
                 self
             }
 
             #(
                 #(#param_attributes)*
-                fn #param_ident(mut self, val: #param_type, gen: #avalanche_path::tracked::Gen<#component_lifetime>) -> Self {
+                pub fn #param_ident(mut self, val: #param_type, gen: #avalanche_path::tracked::Gen<#component_lifetime>) -> Self {
                     self.__internal_gens[#index] = gen;
                     self.#param_ident = ::std::option::Option::Some(val);
                     self
@@ -207,7 +207,7 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
 
             #(
                 #(#last_param_attributes)*
-                fn __last(mut self, val: #last_param_type, gen: #avalanche_path::tracked::Gen<#component_lifetime>) -> Self {
+                pub fn __last(mut self, val: #last_param_type, gen: #avalanche_path::tracked::Gen<#component_lifetime>) -> Self {
                     self.__internal_gens[#last_index] = gen;
                     self.#last_param_ident = ::std::option::Option::Some(val);
                     self
