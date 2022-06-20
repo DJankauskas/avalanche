@@ -19,10 +19,11 @@ pub use hooks::{HookContext, RenderContext};
 
 use renderer::{NativeType};
 use shared::Shared;
+use tracked::Gen;
 use vdom::{ComponentId, VDom};
 use any_ref::{AnyRef};
 
-pub use hooks::{state, vec};
+pub use hooks::{state, store};
 pub use tracked::Tracked;
 
 /// An attribute macro used to define components.
@@ -165,7 +166,7 @@ pub trait Component<'a>: Sized + AnyRef<'a> {
         panic!("Cannot get children from a non-native component")
     }
 
-    fn updated(&self) -> bool;
+    fn updated(&self, gen: Gen) -> bool;
 
     fn native_type(&self) -> Option<NativeType> {
         None
@@ -190,7 +191,7 @@ impl<'a> Component<'a> for () {
             native_component_id: None,
         }
     }
-    fn updated(&self) -> bool {
+    fn updated(&self, _: Gen) -> bool {
         false
     }
 }

@@ -2,26 +2,37 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::marker::PhantomData;
+use std::cmp::max;
 
 use wasm_bindgen::JsCast;
 
 use crate::{events::*, WebNativeEvent};
-use avalanche::renderer::NativeType;
 use avalanche::{Component, HookContext, RenderContext, View};
+use avalanche::renderer::NativeType;
+use avalanche::tracked::Gen;
 
 /// Represents a text node.
 #[derive(Clone, PartialEq)]
 pub struct Text<'a> {
     pub(crate) text: Cow<'a, str>,
-    updated: bool,
+    gen: Gen<'a>,
     location: (u32, u32),
     key: Option<String>,
 }
-#[derive(Default)]
 pub struct TextBuilder<'a> {
     text: Option<Cow<'a, str>>,
-    updated: bool,
+    gen: Gen<'a>,
     key: Option<String>,
+}
+
+impl<'a> Default for TextBuilder<'a> {
+    fn default() -> Self {
+        Self {
+            text: None,
+            gen: Gen::escape_hatch_new(false),
+            key: None,
+        }
+    }
 }
 
 impl<'a> TextBuilder<'a> {
@@ -29,19 +40,19 @@ impl<'a> TextBuilder<'a> {
         Default::default()
     }
 
-    pub fn text<T: Into<Cow<'a, str>>>(mut self, text: T, updated: bool) -> Self {
+    pub fn text<T: Into<Cow<'a, str>>>(mut self, text: T, gen: Gen<'a>) -> Self {
         self.text = Some(text.into());
-        self.updated = updated;
+        self.gen = gen;
         self
     }
 
-    pub fn __last<T: Into<Cow<'a, str>>>(mut self, text: T, updated: bool) -> Self {
+    pub fn __last<T: Into<Cow<'a, str>>>(mut self, text: T, gen: Gen<'a>) -> Self {
         self.text = Some(text.into());
-        self.updated = updated;
+        self.gen = gen;
         self
     }
 
-    pub fn key<T: ToString>(mut self, key: T, _updated: bool) -> Self {
+    pub fn key<T: ToString>(mut self, key: T, _gen: Gen<'a>) -> Self {
         self.key = Some(key.to_string());
         self
     }
@@ -49,7 +60,7 @@ impl<'a> TextBuilder<'a> {
     pub fn build(self, location: (u32, u32)) -> Text<'a> {
         Text {
             text: self.text.unwrap(),
-            updated: self.updated,
+            gen: self.gen,
             key: self.key,
             location,
         }
@@ -57,10 +68,6 @@ impl<'a> TextBuilder<'a> {
 }
 
 avalanche::impl_any_ref!(Text<'a>);
-
-//unsafe impl<'a> AnyRef<'a> for Text<'a> {
-//    type Static = Text<'static>;
-// }
 
 impl<'a> Component<'a> for Text<'a> {
     type Builder = TextBuilder<'a>;
@@ -81,8 +88,8 @@ impl<'a> Component<'a> for Text<'a> {
         Vec::new()
     }
 
-    fn updated(&self) -> bool {
-        self.updated
+    fn updated(&self, curr_gen: Gen) -> bool {
+        self.gen >= curr_gen
     }
 
     fn location(&self) -> Option<(u32, u32)> {
@@ -140,14 +147,13 @@ impl<'a> IntoCowStr<'a> for Cow<'a, str> {
     }
 }
 
-#[derive(Default)]
 #[doc(hidden)]
 pub struct RawElement<'a> {
-    /// The `bool` represents whether the attr was updated.
-    pub(crate) attrs: HashMap<&'static str, (Attr<'a>, bool)>,
-    pub(crate) attrs_updated: bool,
+    /// The `Gen<'a>` represents the generation on which the attr was last updated
+    pub(crate) attrs: HashMap<&'static str, (Attr<'a>, Gen<'a>)>,
+    pub(crate) max_gen: Gen<'a>, 
     pub(crate) children: Vec<View>,
-    pub(crate) children_updated: bool,
+    pub(crate) children_gen: Gen<'a>,
     pub(crate) value_controlled: bool,
     pub(crate) checked_controlled: bool,
     pub(crate) key: Option<String>,
@@ -155,15 +161,31 @@ pub struct RawElement<'a> {
     pub(crate) tag: &'static str,
 }
 
+impl<'a> Default for RawElement<'a> {
+    fn default() -> Self {
+        Self {
+            attrs: Default::default(),
+            max_gen: Gen::escape_hatch_new(false),
+            children: Default::default(),
+            children_gen: Gen::escape_hatch_new(false),
+            value_controlled: Default::default(),
+            checked_controlled: Default::default(),
+            key: Default::default(),
+            location: Default::default(),
+            tag: Default::default(),
+        }
+    }
+}
+
 impl<'a> RawElement<'a> {
-    fn set_attr(&mut self, name: &'static str, attr: Attr<'a>, updated: bool) {
-        self.attrs.insert(name, (attr, updated));
-        self.attrs_updated |= updated;
+    fn set_attr(&mut self, name: &'static str, attr: Attr<'a>, gen: Gen<'a>) {
+        self.attrs.insert(name, (attr, gen));
+        self.max_gen = max(self.max_gen, gen);
     }
 
-    fn set_children(&mut self, children: Vec<View>, updated: bool) {
+    fn set_children(&mut self, children: Vec<View>, gen: Gen<'a>) {
         self.children = children;
-        self.children_updated = updated;
+        self.children_gen = gen;
     }
 }
 
@@ -180,8 +202,8 @@ impl<'a> Component<'a> for RawElement<'a> {
         self.children
     }
 
-    fn updated(&self) -> bool {
-        self.attrs_updated || self.children_updated
+    fn updated(&self, curr_gen: Gen) -> bool {
+        max(self.max_gen, self.children_gen) >= curr_gen
     }
 
     fn native_type(&self) -> Option<NativeType> {
@@ -285,7 +307,7 @@ macro_rules! def_component {
                 unreachable!()
             }
 
-            fn updated(&self) -> bool {
+            fn updated(&self, _: Gen) -> bool {
                 unreachable!()
             }
         }
@@ -305,23 +327,23 @@ macro_rules! def_component {
                 self.raw
             }
 
-            pub fn key<S: ToString>(mut self, key: S, _updated: bool) -> Self {
+            pub fn key<S: ToString>(mut self, key: S, _gen: Gen<'a>) -> Self {
                 self.raw.key = Some(key.to_string());
                 self
             }
 
-            pub fn child(mut self, child: View, updated: bool) -> Self {
-                self.raw.set_children(vec![child], updated);
+            pub fn child(mut self, child: View, gen: Gen<'a>) -> Self {
+                self.raw.set_children(vec![child], gen);
                 self
             }
 
-            pub fn children<T: Into<Vec<View>>>(mut self, children: T, updated: bool) -> Self {
-                self.raw.set_children(children.into(), updated);
+            pub fn children<T: Into<Vec<View>>>(mut self, children: T, gen: Gen<'a>) -> Self {
+                self.raw.set_children(children.into(), gen);
                 self
             }
 
-            pub fn __last<T: Into<Vec<View>>>(mut self, children: T, updated: bool) -> Self {
-                self.raw.set_children(children.into(), updated);
+            pub fn __last<T: Into<Vec<View>>>(mut self, children: T, gen: Gen<'a>) -> Self {
+                self.raw.set_children(children.into(), gen);
                 self
             }
         }
@@ -354,11 +376,11 @@ macro_rules! def_component_attrs {
             ($builder:ident) => {
                 impl<$l> $builder<$l> {
                     $(
-                        pub fn $propident<T>(mut self, val: T, updated: bool) -> Self where T : Into<$proptype> {
+                        pub fn $propident<T>(mut self, val: T, gen: Gen<'a>) -> Self where T : Into<$proptype> {
                             self.raw.set_attr(
                                 $propnative,
                                 Attr::Prop(Some(Into::<$proptype>::into(val).into_cow_str())),
-                                updated
+                                gen
                             );
                             self
                         }
@@ -366,11 +388,11 @@ macro_rules! def_component_attrs {
 
                     $(
                         $(
-                            pub fn $boolpropident(mut self, val: bool, updated: bool) -> Self {
+                            pub fn $boolpropident(mut self, val: bool, gen: Gen<'a>) -> Self {
                                 self.raw.set_attr(
                                     $boolpropnative,
                                     Attr::Prop(val.then(|| Cow::Borrowed($boolpropnative))),
-                                    updated
+                                    gen
                                 );
                                 self
                             }
@@ -379,13 +401,13 @@ macro_rules! def_component_attrs {
 
                     $(
                         $(
-                            pub fn $listenident(mut self, f: impl Fn(TypedEvent::<$listentype, <$builder as AssociatedNativeElement>::NativeElement>) + 'a, updated: bool) -> Self {
+                            pub fn $listenident(mut self, f: impl Fn(TypedEvent::<$listentype, <$builder as AssociatedNativeElement>::NativeElement>) + 'a, gen: Gen<'a>) -> Self {
                                 self.raw.set_attr(
                                     $listennative,
                                     Attr::Handler(Box::new(move |e: WebNativeEvent| f(
                                         TypedEvent::<$listentype, <$builder as AssociatedNativeElement>::NativeElement>::new(e.event.dyn_into::<$listentype>().unwrap(), e.current_target)
                                     ))),
-                                    updated
+                                    gen
                                 );
                                 self
                             }
@@ -1660,19 +1682,19 @@ def_component_attrs! {
 add_input_attrs! {InputBuilder}
 
 impl<'a> InputBuilder<'a> {
-    pub fn value<S: Into<Cow<'a, str>>>(mut self, val: S, updated: bool) -> Self {
+    pub fn value<S: Into<Cow<'a, str>>>(mut self, val: S, gen: Gen<'a>) -> Self {
         self.raw.value_controlled = true;
         self.raw
-            .set_attr("value", Attr::Prop(Some(val.into())), updated);
+            .set_attr("value", Attr::Prop(Some(val.into())), gen);
         self
     }
 
-    pub fn checked(mut self, val: bool, updated: bool) -> Self {
+    pub fn checked(mut self, val: bool, gen: Gen<'a>) -> Self {
         self.raw.checked_controlled = true;
         self.raw.set_attr(
             "checked",
             Attr::Prop(val.then(|| Cow::Borrowed("checked"))),
-            updated,
+            gen,
         );
         self
     }
@@ -1688,10 +1710,10 @@ add_form_field_attrs! {TextAreaBuilder}
 add_textinput_attrs! {TextAreaBuilder}
 
 impl<'a> TextAreaBuilder<'a> {
-    pub fn value<S: Into<Cow<'a, str>>>(mut self, val: S, updated: bool) -> Self {
+    pub fn value<S: Into<Cow<'a, str>>>(mut self, val: S, gen: Gen<'a>) -> Self {
         self.raw.value_controlled = true;
         self.raw
-            .set_attr("value", Attr::Prop(Some(val.into())), updated);
+            .set_attr("value", Attr::Prop(Some(val.into())), gen);
         self
     }
 }

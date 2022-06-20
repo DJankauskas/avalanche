@@ -11,7 +11,7 @@ use crate::{
     component,
     renderer::{NativeType, Scheduler},
     shared::Shared,
-    state, tracked, updated, vec, Component, View,
+    state, tracked, updated, store, Component, View, Tracked,
 };
 
 use self::{native_mock::Native, renderer::TestRenderer};
@@ -191,11 +191,11 @@ fn basic_state_event() {
 // TODO: test not working, debug later
 #[component]
 fn AddChildren() -> View {
-    let (children, update_children) = vec(self, || vec!["c"]);
+    let (children, update_children) = store(self, |gen| vec![Tracked::new("c", gen)]);
     println!("children updated? - {}, {}", updated!(children), updated!(tracked!(children).iter().next().unwrap()));
     Native!(
         name: "a",
-        on_click: move || update_children.update(|children| { children.insert(0, "b"); children.insert(2, "d") }),
+        on_click: move || update_children.update(|children, gen| { children.insert(0, Tracked::new("b", gen)); children.insert(2, Tracked::new("d", gen)) }),
         tracked!(children)
             .iter()
             .map(|child| { println!("Child {} is updated: {}", tracked!(child), updated!(child)); Native!(key: tracked!(child).to_string(), name: tracked!(child)) })

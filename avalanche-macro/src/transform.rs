@@ -15,7 +15,7 @@ use rand::random;
 use crate::{macro_expr::{
     ComponentBuilder, ComponentFieldValue, EncloseBody, ExprList, MatchesBody, Tracked, Try,
     VecBody,
-}, avalanche_path::get_avalanche_path};
+}, avalanche_path::{get_avalanche_path}};
 
 const EXPR_CONVERSION_ERROR: &str = "internal error: unable to process Expr within tracked";
 
@@ -113,8 +113,8 @@ fn enable_expr_tracking(expr: &mut Expr, deps: &UnitDeps) {
         let avalanche_path = get_avalanche_path();
         let transformed = quote_spanned! { expr_span=>
             {
-                let mut __avalanche_internal_updated = false;
-                #avalanche_path::Tracked::new(#expr, __avalanche_internal_updated)
+                let mut __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
+                #avalanche_path::Tracked::new(#expr, __avalanche_internal_gen)
             }
         };
         *expr = parse_expr(transformed);
@@ -389,7 +389,7 @@ impl Function {
                         } else if is_expr_trivial {
                             quote_spanned! {mac_span=>
                                 #tracked_path!({
-                                    __avalanche_internal_updated = __avalanche_internal_updated || #avalanche_path::updated!(#expr);
+                                    __avalanche_internal_gen = ::std::cmp::max(__avalanche_internal_gen, (#expr).__avalanche_internal_gen);
                                     #expr
                                 })
                             }
@@ -397,18 +397,18 @@ impl Function {
                             quote_spanned! {mac_span=>
                                 #tracked_path!({
                                     let value = #expr;
-                                    __avalanche_internal_updated = __avalanche_internal_updated || #avalanche_path::updated!(value);
+                                    __avalanche_internal_gen = ::std::cmp::max(__avalanche_internal_gen, value.__avalanche_internal_gen);
                                     value
                                 })
                             }
                         }
                     } else if nested_tracked {
-                        quote_spanned! {mac_span=> #tracked_path!(#expr)}
+                        quote_spanned! {mac_span=> #tracked_path!(internal #expr; __avalanche_hook_context)}
                     } else {
                         quote_spanned! {mac_span=>
                             {
-                                let updated = #tracked_path!(#expr);
-                                __avalanche_internal_updated = __avalanche_internal_updated || updated;
+                                let updated = #tracked_path!(internal #expr; __avalanche_hook_context);
+                                __avalanche_internal_gen = ::std::cmp::max(__avalanche_internal_gen, (#expr).__avalanche_internal_gen);
                                 updated
                             }
                         }
@@ -440,18 +440,18 @@ impl Function {
                                 let construct_expr = if dependencies.has_tracked {
                                     quote_spanned! { field_span=>
                                         #field_ident({
-                                            __avalanche_internal_updated = false;
+                                            __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
                                             #init_expr
                                         }, 
                                         {
-                                            *__avalanche_internal_outer_updated = *__avalanche_internal_outer_updated || __avalanche_internal_updated;
-                                            __avalanche_internal_updated
+                                            *__avalanche_internal_outer_gen = ::std::cmp::max(*__avalanche_internal_outer_gen, __avalanche_internal_gen);
+                                            __avalanche_internal_gen
                                             
                                         })
                                     }
                                 } else {
                                     quote_spanned! { field_span=>
-                                        #field_ident(#init_expr, false)
+                                        #field_ident(#init_expr, #avalanche_path::tracked::Gen::escape_hatch_new(false))
                                     }
                                 };
                                 prop_construct_expr.push(construct_expr);
@@ -466,8 +466,8 @@ impl Function {
                             let transformed = parse_quote! {
                                 #avalanche_path::__internal_identity! {{
                                     let __avalanche_internal_built = <<#type_path as #avalanche_path::Component>::Builder>::new();
-                                    let __avalanche_internal_outer_updated = &mut __avalanche_internal_updated;
-                                    let mut __avalanche_internal_updated = false;
+                                    let __avalanche_internal_outer_gen = &mut __avalanche_internal_gen;
+                                    let mut __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
                                     #avalanche_path::vdom::render_child(
                                         __avalanche_internal_built
                                         #(.#prop_construct_expr)*
@@ -492,6 +492,7 @@ impl Function {
     /// Allow providing dependencies to closures being indirectly executed by functions.
     /// Returns trabsformed closure expr, which handles marking a closure as updated
     fn closure(&mut self, closure: &mut syn::ExprClosure, args_deps: UnitDeps) -> (UnitDeps, Expr) {
+        let avalanche_path = get_avalanche_path();
         let mut closure_scope = Scope::function();
 
         for input in closure.inputs.iter() {
@@ -514,15 +515,14 @@ impl Function {
         let closure_body = &closure.body;
         closure.body = parse_quote! {
             {
-                let mut __avalanche_internal_updated = false;
+                let mut __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
                 #closure_body
             }
         };
         let ident_dep = deps.tracked_deps.iter();
-        let avalanche_path = get_avalanche_path();
         let output = parse_quote! {
             {
-                #(__avalanche_internal_updated = __avalanche_internal_updated || #avalanche_path::updated!(#ident_dep);)*
+                #(__avalanche_internal_gen = ::std::cmp::max(__avalanche_internal_gen, #ident_dep.__avalanche_internal_gen);)*
                 #closure
             }
         };

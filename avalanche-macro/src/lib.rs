@@ -91,11 +91,10 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     let mut param_ident = Vec::with_capacity(inputs_len);
     let mut param_type = Vec::with_capacity(inputs_len);
     let mut param_attributes = Vec::with_capacity(inputs_len);
-    let mut flag = Vec::with_capacity(inputs_len);
+    let mut index = Vec::with_capacity(inputs_len);
 
     // process render code
     for (i, param) in item_fn.sig.inputs.iter_mut().enumerate() {
-        let update_bit_pattern = 2u64.pow(i as u32);
         match param {
             syn::FnArg::Receiver(rec) => {
                 abort!(rec, "receiver not allowed");
@@ -117,7 +116,7 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
                 param_ident.push(ident);
                 param_type.push(&param.ty);
                 param_attributes.push(&ident.attrs);
-                flag.push(update_bit_pattern);
+                index.push(i);
             }
         }
     }
@@ -126,7 +125,7 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     let last_param_ident = param_ident.last().into_iter();
     let last_param_type = param_type.last().into_iter();
     let last_param_attributes = param_attributes.last().into_iter();
-    let last_flag = flag.last();
+    let last_index = index.last();
 
     function.scopes.push(param_scope);
 
@@ -140,15 +139,18 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     let render_body_attributes = &item_fn.attrs;
     let visibility = &item_fn.vis;
 
+    // a lifetime that always exists for the Component<'a> impl
+    let component_lifetime = lifetime.unwrap_or_else(|| Lifetime::new("'a", Span::call_site()));
+
     let component_default_impl = if inputs_len == 0 {
-        lifetime = None;
         Some(quote! {
-            impl ::std::default::Default for #name {
+            impl<#component_lifetime> ::std::default::Default for #name<#component_lifetime> {
                 fn default() -> Self {
                     Self {
-                        __internal_updates: 0,
+                        __internal_gens: [],
                         __key: None,
-                        __location: (0, 0)
+                        __location: (0, 0),
+                        __phantom: ::std::marker::PhantomData,
                     }
                 }
             }
@@ -157,59 +159,47 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
         None
     };
 
-    let any_ref_impl = match &lifetime {
-        Some(lifetime) => quote! { #avalanche_path::impl_any_ref!(#name<#lifetime>); },
-        None => quote! { #avalanche_path::impl_any_ref!(#name); },
-    };
-
-    // a lifetime that always exists for the Component<'a> imp;
-    let component_lifetime = lifetime
-        .clone()
-        .unwrap_or_else(|| Lifetime::new("'a", Span::call_site()));
-    let lifetime_iter: Vec<_> = lifetime.as_ref().into_iter().collect();
-
     let component = quote! {
-        #visibility struct #builder_name<#lifetime> {
-            __internal_updates: ::std::primitive::u64,
+        #visibility struct #builder_name<#component_lifetime> {
+            __internal_gens: [#avalanche_path::tracked::Gen<#component_lifetime>; #inputs_len],
             __key: ::std::option::Option<::std::string::String>,
             #(#param_ident: ::std::option::Option<#param_type>),*
         }
 
-        impl<#lifetime> ::std::default::Default for #builder_name<#lifetime> {
+        impl<#component_lifetime> ::std::default::Default for #builder_name<#component_lifetime> {
             fn default() -> Self {
                 Self {
-                    __internal_updates: 0,
+                    __internal_gens: [#avalanche_path::tracked::Gen::escape_hatch_new(false); #inputs_len],
                     __key: ::std::option::Option::None,
                     #(#param_ident: ::std::option::Option::None),*
                 }
             }
         }
 
-        impl<#lifetime> #builder_name<#lifetime> where #( #param_type: ::std::clone::Clone ),* {
+        impl<#component_lifetime> #builder_name<#component_lifetime> where #( #param_type: ::std::clone::Clone ),* {
             fn new() -> Self {
                 ::std::default::Default::default()
             }
 
-            fn build(self, location: (::std::primitive::u32, ::std::primitive::u32)) -> #name<#lifetime> {
-                #name::<#lifetime> {
-                    __internal_updates: self.__internal_updates,
+            fn build(self, location: (::std::primitive::u32, ::std::primitive::u32)) -> #name<#component_lifetime> {
+                #name::<#component_lifetime> {
+                    __internal_gens: self.__internal_gens,
                     __key: self.__key,
                     __location: location,
+                    __phantom: ::std::marker::PhantomData,
                     #(#param_ident: ::std::option::Option::unwrap(self.#param_ident)),*
                 }
             }
 
-            fn key<T: ::std::string::ToString>(mut self, key: T, _updated: ::std::primitive::bool) -> Self {
+            fn key<T: ::std::string::ToString>(mut self, key: T, _gen: #avalanche_path::tracked::Gen<#component_lifetime>) -> Self {
                 self.__key = ::std::option::Option::Some(::std::string::ToString::to_string(&key));
                 self
             }
 
             #(
                 #(#param_attributes)*
-                fn #param_ident(mut self, val: #param_type, updated: ::std::primitive::bool) -> Self {
-                    if updated {
-                        self.__internal_updates |= #flag;
-                    }
+                fn #param_ident(mut self, val: #param_type, gen: #avalanche_path::tracked::Gen<#component_lifetime>) -> Self {
+                    self.__internal_gens[#index] = gen;
                     self.#param_ident = ::std::option::Option::Some(val);
                     self
                 }
@@ -217,10 +207,8 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
 
             #(
                 #(#last_param_attributes)*
-                fn __last(mut self, val: #last_param_type, updated: ::std::primitive::bool) -> Self {
-                    if updated {
-                        self.__internal_updates |= #last_flag;
-                    }
+                fn __last(mut self, val: #last_param_type, gen: #avalanche_path::tracked::Gen<#component_lifetime>) -> Self {
+                    self.__internal_gens[#last_index] = gen;
                     self.#last_param_ident = ::std::option::Option::Some(val);
                     self
                 }
@@ -228,32 +216,38 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
         }
 
         #[derive(::std::clone::Clone)]
-        #visibility struct #name #(<#lifetime_iter>)* {
-            __internal_updates: ::std::primitive::u64,
+        #visibility struct #name<#component_lifetime> {
+            __internal_gens: [#avalanche_path::tracked::Gen<#component_lifetime>; #inputs_len],
             __key: std::option::Option<::std::string::String>,
             __location: (::std::primitive::u32, ::std::primitive::u32),
+            __phantom: ::std::marker::PhantomData<&#component_lifetime ()>,
             #(#param_ident: #param_type),*
         }
 
         #component_default_impl
 
-        #any_ref_impl
+        #avalanche_path::impl_any_ref!(#name<#component_lifetime>);
 
-        impl<#component_lifetime> #avalanche_path::Component<#component_lifetime> for #name<#lifetime> {
-            type Builder = #builder_name<#lifetime>;
+        impl<#component_lifetime> #avalanche_path::Component<#component_lifetime> for #name<#component_lifetime> {
+            type Builder = #builder_name<#component_lifetime>;
 
             #( #render_body_attributes )*
             #[allow(clippy::eval_order_dependence, clippy::unit_arg)]
             fn render(self, mut __avalanche_render_context: #avalanche_path::RenderContext, __avalanche_hook_context: #avalanche_path::HookContext) -> #return_type {
-                #(let #param_ident = #avalanche_path::Tracked::new(self.#param_ident, (&self.__internal_updates & #flag) != 0);)*
+                #(let #param_ident = #avalanche_path::tracked::Tracked::new(self.#param_ident, self.__internal_gens[#index]);)*
 
-                let mut __avalanche_internal_updated = false;
+                let mut __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
 
                 #render_body
             }
 
-            fn updated(&self) -> ::std::primitive::bool {
-                self.__internal_updates != 0
+            fn updated(&self, curr_gen: #avalanche_path::tracked::Gen) -> ::std::primitive::bool {
+                for gen in self.__internal_gens {
+                    if gen >= curr_gen {
+                        return true;
+                    }
+                }
+                return false;
             }
 
             fn key(&self) -> ::std::option::Option<String> {

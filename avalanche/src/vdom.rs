@@ -2,7 +2,7 @@ use crate::any_ref::DynBox;
 use crate::hooks::{HookContext, RenderContext};
 use crate::renderer::{DispatchNativeEvent, NativeEvent};
 use crate::{
-    hooks::Gen,
+    tracked::InternalGen,
     renderer::{NativeHandle, NativeType, Renderer, Scheduler},
 };
 use crate::{ChildId, Component, ComponentPos, View};
@@ -27,7 +27,7 @@ pub(crate) struct VDom {
     /// actual native components.
     pub(crate) renderer: Box<dyn Renderer>,
     /// The current state update generation.
-    pub(crate) gen: Gen,
+    pub(crate) gen: InternalGen,
     /// Updates the vdom by rendering the root component and all descendents that are dirty.
     pub(crate) update_vdom:
         fn(&mut VDom, &Shared<VDom>, &Shared<dyn Scheduler>, Option<(NativeEvent, ComponentId)>),
@@ -180,7 +180,7 @@ struct DynComponent<'a> {
 }
 
 impl<'a> DynComponent<'a> {
-    fn new<C: Component<'a>>(component: C) -> Self {
+    fn new<C: Component<'a>>(component: C, gen: InternalGen) -> Self {
         fn get_children<'a, C: Component<'a>>(c: DynBox<'a>) -> Vec<View> {
             c.downcast::<C>().unwrap().children()
         }
@@ -202,7 +202,7 @@ impl<'a> DynComponent<'a> {
         }
 
         Self {
-            updated: component.updated(),
+            updated: component.updated(gen.into()),
             native_type: component.native_type(),
             inner: DynBox::new(component),
             get_children: get_children::<C>,
@@ -319,6 +319,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
                         &native_component.native_type,
                         &mut native_component.native_handle,
                         component.inner.as_ref(),
+                        context.vdom.gen.into(),
                         current_native_event,
                     );
                     let new_children = component.children();
@@ -356,7 +357,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
                     }
 
                     let child_hook_context = HookContext {
-                        gen: context.vdom.gen,
+                        gen: context.vdom.gen.into(),
                         state: &shared_state,
                         component_pos: ComponentPos {
                             component_id: child_component_id,
@@ -409,7 +410,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
     }
 
     // Call the type-erased implementation of the function
-    render_child(DynComponent::new(component), context)
+    render_child(DynComponent::new(component, context.vdom.gen), context)
 }
 
 /// Remove a vnode from `vdom`, along with all of its descendents.
@@ -557,7 +558,7 @@ impl Root {
             children,
             curr_component_id,
             renderer: Box::new(renderer),
-            gen: Gen::new(),
+            gen: InternalGen::new(),
             update_vdom: render_vdom::<C>,
         };
         let vdom = Shared::new(vdom);

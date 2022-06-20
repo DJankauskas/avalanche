@@ -1,9 +1,9 @@
-use std::{any::Any, marker::PhantomData, panic::Location};
+use std::{marker::PhantomData, panic::Location};
 
 use crate::{
-    renderer::{Scheduler, NativeEvent},
+    renderer::{NativeEvent, Scheduler},
     shared::Shared,
-    tracked,
+    tracked::{Gen, InternalGen},
     vdom::{
         mark_node_dirty,
         wrappers::{ComponentStateAccess, SharedBox},
@@ -12,36 +12,12 @@ use crate::{
     ComponentPos, Tracked,
 };
 
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub(crate) struct Gen {
-    pub(crate) gen: u32,
-}
-
-// TODO: support wrap edge cases
-impl Gen {
-    pub(crate) fn new() -> Self {
-        Gen { gen: 0 }
-    }
-    pub(crate) fn next(mut self) -> Self {
-        self.inc();
-        self
-    }
-
-    pub(crate) fn inc(&mut self) {
-        self.gen = self.gen.wrapping_add(1);
-    }
-
-    pub(crate) fn updated(self, current_gen: Gen) -> bool {
-        self.gen >= current_gen.gen
-    }
-}
-
 /// Provides a hook with component-specific state.
 ///
 /// Accessed by passing `self` as the first parameter in a hook call.
 #[derive(Copy, Clone)]
 pub struct HookContext<'a> {
-    pub(crate) gen: Gen,
+    pub gen: Gen<'a>,
     pub(crate) state: &'a Shared<ComponentStateAccess<'a>>,
     pub(crate) component_pos: ComponentPos<'a>,
     pub(crate) scheduler: &'a Shared<dyn Scheduler>,
@@ -59,29 +35,36 @@ pub struct RenderContext<'a> {
     pub(crate) current_native_event: &'a mut Option<(NativeEvent, ComponentId)>,
 }
 
-struct State<T: 'static> {
+/// Stores some state and its setter for `internal_state`.
+struct InternalState<T: 'static, S: 'static> {
     val: T,
-    gen: Gen,
-    /// For passing the setter into calling functions as a reference, eliminating the need for cloning.
-    setter: StateSetter<T>,
+    gen: InternalGen,
+    setter: S,
 }
 
+/// Provides common state storage and access for other state hooks.
 #[track_caller]
-fn internal_state<'a, T: 'static>(
+fn internal_state<'a, T: 'static, S: 'static>(
     ctx: HookContext<'a>,
     f: impl FnOnce() -> T,
-) -> (&'a dyn Any, Location<'static>) {
+    setter: S,
+) -> (&'a InternalState<T, S>, Location<'static>) {
     let location = Location::caller();
     let state_ref = ctx.state.exec_mut(|state| {
         state.get_or_insert_with(*location, move || {
-            SharedBox::new(Box::new(State {
+            SharedBox::new(Box::new(InternalState {
                 val: f(),
-                gen: ctx.gen,
-                setter: StateSetter::new(ctx.component_pos, ctx.scheduler.clone(), *location)
+                gen: ctx.gen.gen,
+                setter,
             }))
         })
     });
-    (state_ref, *location)
+    (
+        state_ref
+            .downcast_ref::<InternalState<T, S>>()
+            .expect("downcast to internal state"),
+        *location,
+    )
 }
 
 /// A hook that allows a component to keep persistent state across renders.
@@ -125,25 +108,31 @@ pub fn state<'a, T: 'static>(
     ctx: HookContext<'a>,
     f: fn() -> T,
 ) -> (Tracked<&'a T>, &'a StateSetter<T>) {
-    let (state, _) = internal_state(ctx, f);
-    let state = state.downcast_ref::<State<T>>().unwrap();
-    let updated = state.gen.updated(ctx.gen);
+    let location = Location::caller();
+    let setter = StateSetter {
+        internal_setter: InternalStateSetter::new(
+            ctx.component_pos,
+            ctx.scheduler.clone(),
+            *location,
+        ),
+    };
+    let (state, _) = internal_state(ctx, f, setter);
     let state_ref = &state.val;
-    let tracked_state_ref = Tracked::new(state_ref, updated);
+    let tracked_state_ref = Tracked::new(state_ref, state.gen.into());
 
     (tracked_state_ref, &state.setter)
 }
 
-/// Provides a setter for a piece of state managed by [state].
-pub struct StateSetter<T: 'static> {
+/// Internal state setter implementation for different hooks' setters.
+struct InternalStateSetter<T: 'static, S: 'static> {
     vdom: Shared<VDom>,
     component_id: ComponentId,
     scheduler: Shared<dyn Scheduler>,
     location: Location<'static>,
-    phantom: PhantomData<T>,
+    phantom: PhantomData<(T, S)>,
 }
 
-impl<T: 'static> Clone for StateSetter<T> {
+impl<T: 'static, S: 'static> Clone for InternalStateSetter<T, S> {
     fn clone(&self) -> Self {
         Self {
             vdom: self.vdom.clone(),
@@ -155,7 +144,7 @@ impl<T: 'static> Clone for StateSetter<T> {
     }
 }
 
-impl<T: 'static> StateSetter<T> {
+impl<T: 'static, S: 'static> InternalStateSetter<T, S> {
     fn new(
         component_pos: ComponentPos,
         scheduler: Shared<dyn Scheduler>,
@@ -168,16 +157,6 @@ impl<T: 'static> StateSetter<T> {
             location,
             phantom: PhantomData,
         }
-    }
-
-    /// Takes a function that modifies the state associated with the setter and
-    /// triggers a rerender of its associated component.
-    ///
-    /// The update is not performed immediately; its effect will only be accessible
-    /// on its component's rerender. Note that `update` always triggers a rerender, and the state value
-    /// is marked as updated, even if the given function performs no mutations.
-    pub fn update<F: FnOnce(&mut T) + 'static>(&self, f: F) {
-        self.update_with_gen(|val, _| f(val))
     }
 
     /// Same as `update`, but also provides the `Gen` the root is on before the state update completes
@@ -203,55 +182,75 @@ impl<T: 'static> StateSetter<T> {
                     };
                     let any_mut = shared_box.get_mut();
                     let state = any_mut
-                        .downcast_mut::<State<T>>()
+                        .downcast_mut::<InternalState<T, S>>()
                         .expect("state with setter's type");
-                    f(&mut state.val, vdom_gen);
+                    f(&mut state.val, vdom_gen.into());
                     state.gen = vdom_gen;
 
                     mark_node_dirty(vdom, component_id_copy);
                     (vdom.update_vdom)(vdom, &vdom_clone_2, &scheduler_clone, None);
-
                 })
             }));
         });
     }
 
+    /// Internal implementation of `StateSetter`'s set.
+    pub fn set(&self, val: T) {
+        self.update_with_gen(move |state, _| *state = val);
+    }
+}
+
+/// Provides a setter for a piece of state managed by [state].
+pub struct StateSetter<T: 'static> {
+    internal_setter: InternalStateSetter<T, Self>,
+}
+
+impl<T> StateSetter<T> {
+    /// Takes a function that modifies the state associated with the setter and
+    /// triggers a rerender of its associated component.
+    ///
+    /// The update is not performed immediately; its effect will only be accessible
+    /// on its component's rerender. Note that `update` always triggers a rerender, and the state value
+    /// is marked as updated, even if the given function performs no mutations.
+    #[inline]
+    pub fn update<F: FnOnce(&mut T) + 'static>(&self, f: F) {
+        self.internal_setter.update_with_gen(|val, _| f(val))
+    }
+    ///
     /// Sets the state to the given value.
     ///
     /// The update is not performed immediately; its effect will only be accessible
     /// on its component's rerender. Note that `set` always triggers a rerender, and the state value
     /// is marked as updated, even if the new state is equal to the old.
+    #[inline]
     pub fn set(&self, val: T) {
-        self.update(move |state| *state = val);
+        self.internal_setter.set(val);
     }
 }
 
-/// Like [state], but returns a reference to a [tracked::Vec].
+/// Like [state], but enables fine-grained reactivity by allowing the storage of
+/// nested [Tracked] values that can be created and updated by the provided [Gen] values.
 ///
-/// Takes in a function `F` that returns
-/// a default [Vec](std::vec::Vec). The return value has fine-grained tracking: instead of only the
-/// whole vec being updated or not updated, each individual element is also tracked. For more information on how that works see
-/// [tracked::Vec].
-///
-/// Note that `vec` returns a `Tracked<tracked::Vec>`, which is marked as updated if
-/// any of its children are updated. However, an individual element's update status overrides this where appropriate.
+/// Takes in a function `F` that accepts a [Gen] for initalization of tracked values. Like [state], returns a tracked reference to
+/// `T` and a [StoreSetter], which is like a [StateSetter] except the `update` function's callback is also provided a `Gen` for
+/// [Tracked] updates.
 ///
 /// ## Example
 /// ```rust
-/// use avalanche::{component, tracked, View, vec};
+/// use avalanche::{component, tracked, Tracked, View, store};
 /// use avalanche_web::components::{Div, H2, Button, Text};
 ///
 /// #[component]
 /// fn DynamicChildren() -> View {
-///     let (data, update_data) = vec(self, || vec!["child 1"]);
+///     let (data, update_data) = store(self, |gen| vec![Tracked::new("child 1", gen)]);
 ///     let children = tracked!(data)
 ///         .iter()
 ///         .enumerate()
-///         .map(|(n, text)| Text!(key: n.to_string(), *tracked!(text))).collect::<Vec<_>>();
+///         .map(|(n, text)| Text!(key: n.to_string(), tracked!(text))).collect::<Vec<_>>();
 ///
 ///     Div!([
 ///         Button!(
-///             on_click: move |_| update_data.update(|data| data.push("another child")),
+///             on_click: move |_| update_data.update(|data, gen| data.push(Tracked::new("another child", gen))),
 ///             child: Text!("+")
 ///         ),
 ///         Div!(tracked!(children))
@@ -259,64 +258,40 @@ impl<T: 'static> StateSetter<T> {
 /// }
 /// ```
 #[track_caller]
-pub fn vec<'a, T: 'static>(
+pub fn store<'a, T: 'static>(
     ctx: HookContext<'a>,
-    f: fn() -> Vec<T>,
-) -> (Tracked<&'a tracked::Vec<T>>, VecSetter<T>) {
-    let (state, location) = internal_state(ctx, || tracked::Vec::new(f(), ctx.gen));
-    let state = state.downcast_ref::<State<tracked::Vec<T>>>().unwrap();
-    state.val.curr_gen.set(ctx.gen);
-    let updated = state.gen.updated(ctx.gen);
+    f: fn(Gen) -> T,
+) -> (Tracked<&'a T>, &'a StoreSetter<T>) {
+    let setter = StoreSetter {
+        setter: InternalStateSetter::new(
+            ctx.component_pos,
+            ctx.scheduler.clone(),
+            *Location::caller(),
+        ),
+    };
+    let (state, _) = internal_state(ctx, move || f(ctx.gen), setter);
     let state_ref = &state.val;
-    let tracked_state_ref = Tracked::new(state_ref, updated);
-    let updater = VecSetter::new(ctx.component_pos, ctx.scheduler.clone(), location);
+    let tracked_state_ref = Tracked::new(state_ref, state.gen.into());
 
-    (tracked_state_ref, updater)
+    (tracked_state_ref, &state.setter)
 }
 
-/// Provides a setter for a piece of state managed by [vec](vec()).
-pub struct VecSetter<T: 'static> {
-    setter: StateSetter<tracked::Vec<T>>,
+/// Provides a setter for a piece of state managed by [store].
+pub struct StoreSetter<T: 'static> {
+    setter: InternalStateSetter<T, Self>,
 }
 
-impl<T> VecSetter<T> {
-    fn new(
-        component_pos: ComponentPos,
-        scheduler: Shared<dyn Scheduler>,
-        location: Location<'static>,
-    ) -> Self {
-        Self {
-            setter: StateSetter::new(component_pos, scheduler, location),
-        }
+impl<T> StoreSetter<T> {
+    /// Analogous to [StateSetter]'s `set` method.
+    #[inline]
+    pub fn set(&self, val: T) {
+        self.setter.set(val)
     }
 
-    /// Takes a function that modifies the vec associated with the setter and
-    /// triggers a rerender of its associated component.
-    ///
-    /// The update is not performed immediately; its effect will only be accessible
-    /// on its component's rerender. Note that `update` always triggers a rerender, and the state value
-    /// is marked as updated, even if the given function performs no mutations.
-    pub fn update<F: FnOnce(&mut tracked::Vec<T>) + 'static>(&self, f: F) {
-        self.setter.update_with_gen(|val, gen| {
-            val.curr_gen.set(gen);
-            f(val);
-        });
-    }
-
-    /// Sets the vec to the given value, marking all elements as updated.
-    ///
-    /// The update is not performed immediately; its effect will only be accessible
-    /// on its component's rerender. Note that `set` always triggers a rerender, and the state value
-    /// is marked as updated, even if the new state is equal to the old.
-    pub fn set(&self, val: Vec<T>) {
-        self.update(|vec| *vec = tracked::Vec::new(val, vec.curr_gen.get()))
-    }
-}
-
-impl<T> Clone for VecSetter<T> {
-    fn clone(&self) -> Self {
-        Self {
-            setter: self.setter.clone(),
-        }
+    /// Like [StateSetter]'s `update` method, but also passes a second `Gen` parameter for
+    /// passing to [Tracked] methods.
+    #[inline]
+    pub fn update<F: FnOnce(&mut T, Gen) + 'static>(&self, f: F) {
+        self.setter.update_with_gen(f);
     }
 }

@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::{
     renderer::{NativeEvent, Renderer},
-    shared::Shared,
+    shared::Shared, tracked::Gen,
 };
 
 use super::native_mock::{Native, Node, Root};
@@ -104,6 +104,7 @@ impl Renderer for TestRenderer {
         _native_type: &crate::renderer::NativeType,
         native_handle: &mut crate::renderer::NativeHandle,
         component: crate::any_ref::DynRef,
+        curr_gen: Gen,
         event: Option<crate::renderer::NativeEvent>,
     ) {
         let handle = native_handle.downcast_ref::<Node>().unwrap();
@@ -116,7 +117,7 @@ impl Renderer for TestRenderer {
         // if component.name_updated() {
         //     panic!("Names must be static but {} was updated", component.name);
         // }
-        if component.value_updated() {
+        if component.value_updated(curr_gen) {
             handle.set_value(component.value.to_string());
         }
     }

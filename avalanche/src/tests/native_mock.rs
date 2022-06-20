@@ -1,6 +1,6 @@
 use std::{collections::HashMap, rc::Rc};
 
-use crate::{impl_any_ref, renderer::NativeType, shared::Shared, Component, View};
+use crate::{impl_any_ref, renderer::NativeType, shared::Shared, Component, View, tracked::Gen};
 
 use super::native_repr::Repr;
 
@@ -141,7 +141,7 @@ pub(super) struct Native<'a> {
     pub children: Vec<View>,
     key: Option<String>,
     location: (u32, u32),
-    updated: u8,
+    gens: [Gen<'a>; 4],
 }
 
 impl<'a> Native<'a> {
@@ -153,57 +153,49 @@ impl<'a> Native<'a> {
             children: Vec::new(),
             key: None,
             location: (0, 0),
-            updated: 0,
+            gens: [Gen::escape_hatch_new(false); 4],
         }
     }
 
-    pub fn name(mut self, name: &'a str, updated: bool) -> Self {
+    pub fn name(mut self, name: &'a str, gen: Gen<'a>) -> Self {
         self.name = name;
-        if updated {
-            self.updated = self.updated | 1;
-        }
+        self.gens[0] = gen;
         self
     }
 
-    pub fn value(mut self, value: &'a str, updated: bool) -> Self {
+    pub fn value(mut self, value: &'a str, gen: Gen<'a>) -> Self {
         self.value = value;
-        if updated {
-            self.updated = self.updated | 2;
-        }
+        self.gens[1] = gen;
         self
     }
 
-    pub fn on_click(mut self, on_click: impl Fn() + 'a, updated: bool) -> Self {
+    pub fn on_click(mut self, on_click: impl Fn() + 'a, gen: Gen<'a>) -> Self {
         self.on_click = Some(Box::new(on_click));
-        if updated {
-            self.updated = self.updated | 4;
-        }
+        self.gens[2] = gen;
         self
     }
 
-    pub fn children(mut self, children: Vec<View>, updated: bool) -> Self {
+    pub fn children(mut self, children: Vec<View>, gen: Gen<'a>) -> Self {
         self.children = children;
-        if updated {
-            self.updated = self.updated | 8;
-        }
+        self.gens[3] = gen;
         self
     }
 
-    pub fn __last(self, children: Vec<View>, updated: bool) -> Self {
-        self.children(children, updated)
+    pub fn __last(self, children: Vec<View>, gen: Gen<'a>) -> Self {
+        self.children(children, gen)
     }
 
-    pub fn key(mut self, key: String, _updated: bool) -> Self {
+    pub fn key(mut self, key: String, _gen: Gen<'a>) -> Self {
         self.key = Some(key);
         self
     }
 
-    pub fn name_updated(&self) -> bool {
-        (self.updated & 1) != 0
+    pub fn name_updated(&self, curr_gen: Gen<'a>) -> bool {
+        self.gens[0] >= curr_gen
     }
 
-    pub fn value_updated(&self) -> bool {
-        (self.updated & 2) != 0
+    pub fn value_updated(&self, curr_gen: Gen<'a>) -> bool {
+        self.gens[1] >= curr_gen
     }
 
     pub fn build(mut self, location: (u32, u32)) -> Self {
@@ -221,8 +213,13 @@ impl<'a> Component<'a> for Native<'a> {
         unimplemented!()
     }
 
-    fn updated(&self) -> bool {
-        self.updated != 0
+    fn updated(&self, curr_gen: Gen) -> bool {
+        for gen in self.gens {
+            if gen >= curr_gen {
+                return true;
+            }
+        }
+        false
     }
 
     fn children(self) -> Vec<View> {

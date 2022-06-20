@@ -3,7 +3,7 @@ pub use crate::vdom::Root;
 use crate::{
     any_ref::DynRef,
     shared::Shared,
-    vdom::{mark_node_dirty, ComponentId, VDom},
+    vdom::{mark_node_dirty, ComponentId, VDom}, tracked::Gen,
 };
 use std::any::Any;
 
@@ -89,6 +89,7 @@ pub trait Renderer {
         native_type: &NativeType,
         native_handle: &mut NativeHandle,
         component: DynRef,
+        curr_gen: Gen,
         event: Option<NativeEvent>,
     );
 

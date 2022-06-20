@@ -1,9 +1,10 @@
+use avalanche::Component;
 use avalanche::any_ref::DynRef;
 use avalanche::renderer::{
     DispatchNativeEvent, NativeEvent, NativeHandle, NativeType, Renderer, Scheduler,
 };
 use avalanche::shared::Shared;
-use avalanche::Component;
+use avalanche::tracked::Gen;
 
 use std::collections::{HashMap, VecDeque};
 
@@ -314,6 +315,7 @@ impl Renderer for WebRenderer {
         native_type: &NativeType,
         native_handle: &mut NativeHandle,
         component: DynRef,
+        curr_gen: Gen,
         native_event: Option<NativeEvent>,
     ) {
         let web_handle = native_handle.downcast_mut::<WebNativeHandle>().unwrap();
@@ -341,15 +343,15 @@ impl Renderer for WebRenderer {
                     }
                 }
 
-                if raw_element.attrs_updated {
+                if raw_element.max_gen >= curr_gen {
                     match raw_element.tag {
                         "input" => {
                             let input_element = element
                                 .clone()
                                 .dyn_into::<web_sys::HtmlInputElement>()
                                 .expect("HTMLInputElement");
-                            for (name, (attr, updated)) in raw_element.attrs.iter() {
-                                if *updated {
+                            for (name, (attr, gen)) in raw_element.attrs.iter() {
+                                if *gen >= curr_gen {
                                     if let Attr::Prop(prop) = attr {
                                         match *name {
                                             "value" => {
@@ -373,8 +375,8 @@ impl Renderer for WebRenderer {
                                 .clone()
                                 .dyn_into::<web_sys::HtmlTextAreaElement>()
                                 .expect("HTMLTextAreaElement");
-                            for (name, (attr, updated)) in raw_element.attrs.iter() {
-                                if *updated {
+                            for (name, (attr, gen)) in raw_element.attrs.iter() {
+                                if *gen >= curr_gen {
                                     if let Attr::Prop(prop) = attr {
                                         if *name == "value" {
                                             if let Some(prop) = prop {
@@ -388,8 +390,8 @@ impl Renderer for WebRenderer {
                             }
                         }
                         _ => {
-                            for (name, (attr, updated)) in raw_element.attrs.iter() {
-                                if *updated {
+                            for (name, (attr, gen)) in raw_element.attrs.iter() {
+                                if *gen >= curr_gen {
                                     if let Attr::Prop(prop) = attr {
                                         update_generic_prop(&element, name, prop.as_deref())
                                     }
@@ -401,10 +403,8 @@ impl Renderer for WebRenderer {
             }
             "avalanche_web_text" => {
                 let new_text = component.downcast_ref::<Text>().expect("Text component");
-                if new_text.updated() {
-                    //TODO: compare with old text?
-                    web_handle.node.set_text_content(Some(&new_text.text));
-                }
+                // TODO: compare with old text?
+                web_handle.node.set_text_content(Some(&new_text.text));
             }
             _ => panic!("Custom handlers not implemented yet."),
         };

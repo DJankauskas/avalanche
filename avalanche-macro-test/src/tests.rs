@@ -2,6 +2,7 @@ use avalanche::any_ref::DynRef;
 use avalanche::renderer::{
     DispatchNativeEvent, NativeEvent, NativeHandle, NativeType, Renderer, Scheduler,
 };
+use avalanche::tracked::Gen;
 use avalanche::vdom::Root;
 use avalanche::{component, enclose, tracked, updated, Component, Tracked, View};
 
@@ -69,6 +70,7 @@ impl Renderer for TestRenderer {
         _native_type: &NativeType,
         _native_handle: &mut NativeHandle,
         _component: DynRef,
+        _curr_gen: Gen,
         _native_event: Option<NativeEvent>,
     ) {
     }
@@ -94,7 +96,7 @@ impl TestChildren {
         }
     }
 
-    fn __last(mut self, children: Vec<View>, _updated: bool) -> Self {
+    fn __last(mut self, children: Vec<View>, _gen: Gen<'_>) -> Self {
         self.children = children;
         self
     }
@@ -118,7 +120,7 @@ impl<'a> Component<'a> for TestChildren {
         self.children
     }
 
-    fn updated(&self) -> bool {
+    fn updated(&self, _curr_gen: Gen) -> bool {
         true
     }
 
@@ -153,9 +155,11 @@ fn test() {
 
 #[component]
 fn Test() -> View {
-    let a = Tracked::new(0u8, true);
-    let b = Tracked::new(0u8, false);
-    let c = Tracked::new(0u8, true);
+    let gen_updated = Gen::escape_hatch_new(true);
+    let gen_not_updated = Gen::escape_hatch_new(false);
+    let a = Tracked::new(0u8, gen_updated);
+    let b = Tracked::new(0u8, gen_not_updated);
+    let c = Tracked::new(0u8, gen_updated);
 
     TestChildren!(vec![
         Bare!(),
@@ -491,13 +495,13 @@ fn NestedBlocks(a: u8) -> View {
 
 #[component]
 fn NestedTracked(a: u8, b: u8) -> View {
-    let nested = Tracked::new(a, true);
+    let nested = Tracked::new(a, Gen::escape_hatch_new(true));
     let nested_val = tracked!(tracked!(nested));
     assert!(updated!(nested_val));
 
     // if a non updated value is nested within an updated one, accessing the non updated value
     // should report an updated value of false
-    let nested = Tracked::new(b, true);
+    let nested = Tracked::new(b, Gen::escape_hatch_new(true));
     let nested_val = tracked!(tracked!(nested));
     assert!(!updated!(nested_val));
 
