@@ -2,8 +2,8 @@ use crate::any_ref::DynBox;
 use crate::hooks::{HookContext, RenderContext};
 use crate::renderer::{DispatchNativeEvent, NativeEvent};
 use crate::{
-    tracked::InternalGen,
     renderer::{NativeHandle, NativeType, Renderer, Scheduler},
+    tracked::InternalGen,
 };
 use crate::{ChildId, Component, ComponentPos, View};
 
@@ -374,6 +374,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
                         },
                         scheduler: context.scheduler,
                         current_native_event: context.current_native_event,
+                        components_to_remove: context.components_to_remove,
                     };
 
                     let view: View = component.render(child_render_context, child_hook_context);
@@ -383,7 +384,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
                         .body_children
                         .retain(|_, BodyChild { id, used }| {
                             if !*used {
-                                remove_node(context.vdom, *id);
+                                context.components_to_remove.push(*id);
                             };
                             *used
                         });
@@ -578,6 +579,7 @@ fn render_vdom<'a, C: Component<'a> + Default>(
     mut current_native_event: Option<(NativeEvent, ComponentId)>,
 ) {
     let mut parent_vnode = vdom.children.remove(&ComponentId::new()).unwrap();
+    let mut components_to_remove = Vec::new();
     render_child(
         C::default(),
         &mut RenderContext {
@@ -589,6 +591,7 @@ fn render_vdom<'a, C: Component<'a> + Default>(
             },
             scheduler,
             current_native_event: &mut current_native_event,
+            components_to_remove: &mut components_to_remove,
         },
     );
     vdom.children.insert(ComponentId::new(), parent_vnode);
@@ -611,6 +614,12 @@ fn render_vdom<'a, C: Component<'a> + Default>(
         &mut native_component.native_handle,
         vdom,
     );
+
+    // Remove the vnodes marked for deletion
+    for component in components_to_remove {
+        remove_node(vdom, component);
+    }
+
     native_component.native_children = new_native_children;
     vdom.children.insert(ComponentId::new(), vnode);
     vdom.gen.inc();

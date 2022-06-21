@@ -28,11 +28,13 @@ pub struct HookContext<'a> {
 /// Accessed by passing `self` as the first parameter in a hook call.
 pub struct RenderContext<'a> {
     pub(crate) vdom: &'a mut VDom,
-    // vnode of parent
+    /// VNode of parent.
     pub(crate) vnode: &'a mut VNode,
     pub(crate) component_pos: ComponentPos<'a>,
     pub(crate) scheduler: &'a Shared<dyn Scheduler>,
     pub(crate) current_native_event: &'a mut Option<(NativeEvent, ComponentId)>,
+    /// components that need to be removed from the vdom at the end of a UI update iteration
+    pub(crate) components_to_remove: &'a mut Vec<ComponentId>,
 }
 
 /// Stores some state and its setter for `internal_state`.
