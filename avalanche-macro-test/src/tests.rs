@@ -155,6 +155,8 @@ fn test() {
 
 #[component]
 fn Test() -> View {
+    use visibility_test::PubCrate;
+
     let gen_updated = Gen::escape_hatch_new(true);
     let gen_not_updated = Gen::escape_hatch_new(false);
     let a = Tracked::new(0u8, gen_updated);
@@ -185,7 +187,9 @@ fn Test() -> View {
         ComplexTrait!(b: &tracked!(&b)),
         ParameterizedRef!(a: vec![&tracked!(a)]),
         ExplicitLifetime!(b: &tracked!(b)),
-        MixedLifetimes!(a: &tracked!(a), c: &tracked!(c))
+        MixedLifetimes!(a: &tracked!(a), c: &tracked!(c)),
+        UnusedLifetime!(a: tracked!(a)),
+        PubCrate!(a: tracked!(a), tracked!(b))
     ])
 }
 
@@ -569,4 +573,22 @@ fn MixedLifetimes<'a>(a: &u8, c: &'a u8) -> View {
     assert!(updated!(a) && updated!(c));
 
     ().into()
+}
+
+#[component]
+fn UnusedLifetime<'_a>(a: u8) -> View {
+    assert!(updated!(a));
+
+    ().into()
+}
+
+mod visibility_test {
+    use avalanche::{component, updated, View};
+
+    #[component]
+    pub(crate) fn PubCrate(a: u8, b: u8) -> View {
+        assert!(updated!(a) && !updated!(b));
+
+        ().into()
+    }
 }

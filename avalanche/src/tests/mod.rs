@@ -11,7 +11,7 @@ use crate::{
     component,
     renderer::{NativeType, Scheduler},
     shared::Shared,
-    state, tracked, updated, store, Component, View, Tracked,
+    state, store, tracked, updated, Component, Tracked, View,
 };
 
 use self::{native_mock::Native, renderer::TestRenderer};
@@ -188,11 +188,14 @@ fn basic_state_event() {
     );
 }
 
-// TODO: test not working, debug later
 #[component]
 fn AddChildren() -> View {
     let (children, update_children) = store(self, |gen| vec![Tracked::new("c", gen)]);
-    println!("children updated? - {}, {}", updated!(children), updated!(tracked!(children).iter().next().unwrap()));
+    println!(
+        "children updated? - {}, {}",
+        updated!(children),
+        updated!(tracked!(children).iter().next().unwrap())
+    );
     Native!(
         name: "a",
         on_click: move || update_children.update(|children, gen| { children.insert(0, Tracked::new("b", gen)); children.insert(2, Tracked::new("d", gen)) }),
@@ -205,15 +208,65 @@ fn AddChildren() -> View {
 
 #[test]
 fn add_children() {
-    test::<AddChildren>(vec!["a"], vec![Repr {
-        name: "a".to_string(),
-        value: String::new(),
-        has_on_click: true,
-        children: vec![
-            Repr { name: "b".to_string(), value: String::new(), has_on_click: false, children: vec![] },
-            Repr { name: "c".to_string(), value: String::new(), has_on_click: false, children: vec![] },
-            Repr { name: "d".to_string(), value: String::new(), has_on_click: false, children: vec![] },
-        ]
-    }])
+    test::<AddChildren>(
+        vec!["a"],
+        vec![Repr {
+            name: "a".to_string(),
+            value: String::new(),
+            has_on_click: true,
+            children: vec![
+                Repr {
+                    name: "b".to_string(),
+                    value: String::new(),
+                    has_on_click: false,
+                    children: vec![],
+                },
+                Repr {
+                    name: "c".to_string(),
+                    value: String::new(),
+                    has_on_click: false,
+                    children: vec![],
+                },
+                Repr {
+                    name: "d".to_string(),
+                    value: String::new(),
+                    has_on_click: false,
+                    children: vec![],
+                },
+            ],
+        }],
+    )
 }
 
+#[component]
+fn ReparentChild() -> View {
+    let (cond, set_cond) = state(self, || true);
+
+    let child = Native!(name: "child");
+
+    if *tracked!(cond) {
+        Native!(name: "old_parent", on_click: || set_cond.set(false), vec![child])
+    } else {
+        Native!(name: "new_parent", vec![child])
+    }
+}
+
+#[test]
+fn reparent_child() {
+    test::<ReparentChild>(
+        vec!["old_parent"],
+        vec![Repr {
+            name: "new_parent".into(),
+            value: String::new(),
+            has_on_click: false,
+            children: vec![
+                Repr {
+                    name: "child".into(),
+                    value: String::new(),
+                    has_on_click: false,
+                    children: vec![]
+                }
+            ],
+        }],
+    )
+}
