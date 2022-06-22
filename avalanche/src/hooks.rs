@@ -173,15 +173,14 @@ impl<T: 'static, S: 'static> InternalStateSetter<T, S> {
             scheduler.schedule_on_ui_thread(Box::new(move || {
                 vdom_clone.exec_mut(|vdom| {
                     let vdom_gen = vdom.gen;
-                    let vnode = &mut vdom.children.get_mut(&component_id_copy).unwrap();
-                    let shared_box = match vnode.state.get_mut(&location_copy) {
+                    let vnode = match vdom.children.get_mut(&component_id_copy) {
                         Some(vnode) => vnode,
                         None => {
-                            // TODO: emit warning of leak with callback associated with
-                            // removed node
+                            // TODO: emit warning
                             return;
                         }
                     };
+                    let shared_box = vnode.state.get_mut(&location_copy).expect("state at hook location");
                     let any_mut = shared_box.get_mut();
                     let state = any_mut
                         .downcast_mut::<InternalState<T, S>>()
