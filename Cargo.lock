@@ -8,7 +8,6 @@ version = "0.1.0"
 dependencies = [
  "avalanche-macro",
  "avalanche-web",
- "downcast-rs",
 ]
 
 [[package]]
@@ -90,12 +89,6 @@ name = "doc-comment"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
-
-[[package]]
-name = "downcast-rs"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 
 [[package]]
 name = "futures"
