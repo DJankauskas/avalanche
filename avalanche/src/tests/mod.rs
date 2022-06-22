@@ -244,28 +244,70 @@ fn ReparentChild() -> View {
 
     let child = Native!(name: "child");
 
-    if *tracked!(cond) {
-        Native!(name: "old_parent", on_click: || set_cond.set(false), vec![child])
+    let changing_parent = if *tracked!(cond) {
+        Native!(name: "old_parent",  vec![child])
     } else {
         Native!(name: "new_parent", vec![child])
-    }
+    };
+
+    let changing_child = Native!(name: "changing_child");
+
+    let (child_left, child_right) = if *tracked!(cond) {
+        (None, Some(changing_child))
+    } else {
+        (Some(changing_child), None)
+    };
+
+    Native!(name: "container", on_click: || set_cond.set(false), vec![
+        tracked!(changing_parent),
+        Native!(
+            name: "stable_parent_left",
+            vec![tracked!(child_left).into()]
+        ),
+        Native!(
+            name: "stable_parent_right",
+            vec![tracked!(child_right).into()]
+        ),
+    ])
 }
 
 #[test]
 fn reparent_child() {
     test::<ReparentChild>(
-        vec!["old_parent"],
+        vec!["container"],
         vec![Repr {
-            name: "new_parent".into(),
+            name: "container".into(),
             value: String::new(),
-            has_on_click: false,
+            has_on_click: true,
             children: vec![
                 Repr {
-                    name: "child".into(),
+                    name: "new_parent".into(),
                     value: String::new(),
                     has_on_click: false,
-                    children: vec![]
-                }
+                    children: vec![Repr {
+                        name: "child".into(),
+                        value: String::new(),
+                        has_on_click: false,
+                        children: vec![],
+                    }],
+                },
+                Repr {
+                    name: "stable_parent_left".into(),
+                    value: String::new(),
+                    has_on_click: false,
+                    children: vec![Repr {
+                        name: "changing_child".into(),
+                        value: String::new(),
+                        has_on_click: false,
+                        children: vec![],
+                    }],
+                },
+                Repr {
+                    name: "stable_parent_right".into(),
+                    value: String::new(),
+                    has_on_click: false,
+                    children: vec![],
+                },
             ],
         }],
     )
