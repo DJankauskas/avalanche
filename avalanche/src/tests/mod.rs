@@ -239,6 +239,42 @@ fn add_children() {
 }
 
 #[component]
+fn OptionalChildren() -> View {
+    let (children, update_children) = store(self, |gen| vec![Some(Tracked::new("a", gen)), None, Some(Tracked::new("c", gen))]);
+    
+    Native!(
+        name: "container",
+        on_click: || update_children.update(|children, gen| { children.swap(0,1); children[0] = Some(Tracked::new("b", gen)); children[2] = None; }),
+        tracked!(children).iter().map(|child| child.map(|child| Native!(name: tracked!(child), key: tracked!(child).to_string())).into()).collect()
+    )
+}
+
+#[test]
+fn optional_children() {
+    test::<OptionalChildren>(vec!["container"], vec![
+        Repr {
+            name: "container".into(),
+            value: String::new(),
+            has_on_click: true,
+            children: vec![
+                Repr {
+                    name: "b".into(),
+                    value: String::new(),
+                    has_on_click: false,
+                    children: vec![],
+                },
+                Repr {
+                    name: "a".into(),
+                    value: String::new(),
+                    has_on_click: false,
+                    children: vec![],
+                }
+            ]
+        }
+    ])
+}
+
+#[component]
 fn ReparentChild() -> View {
     let (cond, set_cond) = state(self, || true);
 
