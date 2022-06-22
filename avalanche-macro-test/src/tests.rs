@@ -166,6 +166,7 @@ fn Test() -> View {
     TestChildren!(vec![
         Bare!(),
         Identity!(a: tracked!(a)),
+        Local!(a: tracked!(a), b: tracked!(b)),
         ArrayIndex!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
         Binary!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
         Block!(a: tracked!(a), b: tracked!(b)),
@@ -209,6 +210,20 @@ fn Identity(a: u8) -> View {
     assert!(updated!(a));
     let a = tracked!(a);
     assert!(updated!(a));
+
+    ().into()
+}
+
+#[component]
+fn Local(a: u8, b: u8) -> View {
+    let a: Tracked<u8> = tracked!(a);
+    assert!(updated!(a));
+
+    let (a, c) = (tracked!(a), tracked!(b));
+    assert!(updated!(a) && updated!(c));
+    
+    let (a, c): (Tracked<u8>, Tracked<u8>) = (tracked!(a), tracked!(b));
+    assert!(updated!(a) && updated!(c));
 
     ().into()
 }

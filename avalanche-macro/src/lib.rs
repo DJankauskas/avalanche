@@ -107,6 +107,7 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
                     param_scope.vars.push(Var {
                         name: ident.ident.to_string(),
                         dependencies: dependencies.into(),
+                        span: ident.ident.span(),
                     });
                     ident
                 } else {
@@ -257,7 +258,7 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
-    // println!("{}", component);
+    // eprintln!("{}", component);
 
     component.into()
 }
