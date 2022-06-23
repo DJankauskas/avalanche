@@ -67,7 +67,7 @@ impl Scheduler for TestScheduler {
 
 /// Render the given component, apply click events to the components with the given names,
 /// then check if the final component tree is equivalent to the expected one.
-fn test<C: Component<'static> + Default>(events: Vec<&str>, expected: Vec<Repr>) {
+pub fn test<C: Component<'static> + Default>(events: Vec<&str>, expected: Vec<Repr>) {
     let mut root = Root::new();
     let root_node = root.create_node("root");
     let root = Shared::new(root);
@@ -186,6 +186,20 @@ fn basic_state_event() {
             children: vec![],
         }],
     );
+}
+
+#[component]
+fn RepeatHookCalls() -> View {
+    for _ in 0..5 {
+        let _ = state(self, || 2);
+    }
+    
+    ().into()
+}
+
+#[test]
+fn repeat_hook_calls() {
+    test::<RepeatHookCalls>(vec![], vec![]);
 }
 
 #[component]

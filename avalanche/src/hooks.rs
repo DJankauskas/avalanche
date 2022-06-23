@@ -89,18 +89,16 @@ fn internal_state<'a, T: 'static, S: 'static>(
 /// #[component]
 /// fn Counter() -> View {
 ///     let (count, set_count) = state(self, || 0);
-///     Div!(
-///         children: [
-///             H2!(
-///                 child: Text!("Counter!"),
-///             ),
-///             Button!(
-///                 on_click: move |_| set_count.update(|count| *count += 1),
-///                 child: Text!("+")
-///             ),
-///             Text!(tracked!(count).to_string())
-///         ]
-///     )
+///     Div!([
+///         H2!([
+///             Text!("Counter!"),
+///         ]),
+///         Button!(
+///             on_click: move |_| set_count.update(|count| *count += 1),
+///             child: Text!("+")
+///         ),
+///         Text!(tracked!(count).to_string())
+///     ])
 /// }
 /// ```
 /// *Adapted from the `avalanche_web`
