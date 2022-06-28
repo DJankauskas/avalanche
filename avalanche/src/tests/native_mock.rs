@@ -190,9 +190,9 @@ impl<'a> Native<'a> {
         self
     }
 
-    pub fn name_updated(&self, curr_gen: Gen<'a>) -> bool {
-        self.gens[0] >= curr_gen
-    }
+    // pub fn name_updated(&self, curr_gen: Gen<'a>) -> bool {
+    //     self.gens[0] >= curr_gen
+    // }
 
     pub fn value_updated(&self, curr_gen: Gen<'a>) -> bool {
         self.gens[1] >= curr_gen

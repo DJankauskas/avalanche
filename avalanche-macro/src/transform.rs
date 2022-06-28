@@ -429,7 +429,9 @@ impl Function {
                     return (unit_deps, None);
                 }
             }
-            "tracked" | "updated" => {
+            // TODO: factor out first part of the function
+            "tracked" | "tracked_keyed" | "updated" | "updated_keyed" => {
+                let is_keyed = matches!(&*name, "tracked_keyed" | "updated_keyed");
                 if let Ok(tracked) = mac.parse_body::<Tracked>() {
                     let mac_span = mac.span();
                     let mut unit_deps = UnitDeps::new();
@@ -456,40 +458,50 @@ impl Function {
                                     }
                                 }
                             };
-                            unit_deps.extend(self.expr(&mut expr, true));
+                            unit_deps.extend(self.expr(&mut expr, is_keyed));
                             expr
                         }
                     };
                     let tracked_path = &mac.path;
-                    let transformed = if &*name == "tracked" {
-                        if nested_tracked {
-                            quote_spanned! {mac_span=> #tracked_path!(#expr)}
-                        } else if is_expr_trivial {
-                            quote_spanned! {mac_span=>
-                                #tracked_path!({
-                                    __avalanche_internal_gen = ::std::cmp::max(__avalanche_internal_gen, (#expr).__avalanche_internal_gen);
-                                    #expr
-                                })
-                            }
-                        } else {
-                            quote_spanned! {mac_span=>
-                                #tracked_path!({
-                                    let value = #expr;
-                                    __avalanche_internal_gen = ::std::cmp::max(__avalanche_internal_gen, value.__avalanche_internal_gen);
-                                    value
-                                })
+                    let transformed = match &*name {
+                        "tracked" | "tracked_keyed" => {
+                            if nested_tracked {
+                                quote_spanned! {mac_span=> #tracked_path!(#expr)}
+                            } else if is_expr_trivial {
+                                quote_spanned! {mac_span=>
+                                    #tracked_path!({
+                                        __avalanche_internal_gen = ::std::cmp::max((#expr).__avalanche_internal_gen, __avalanche_internal_gen);
+                                        #expr
+                                    })
+                                }
+                            } else {
+                                quote_spanned! {mac_span=>
+                                    #tracked_path!({
+                                        let value = #expr;
+                                        __avalanche_internal_gen = ::std::cmp::max(__avalanche_internal_gen, value.__avalanche_internal_gen);
+                                        value
+                                    })
+                                }
                             }
                         }
-                    } else if nested_tracked {
-                        quote_spanned! {mac_span=> #tracked_path!(internal #expr; __avalanche_hook_context)}
-                    } else {
-                        quote_spanned! {mac_span=>
+                        "updated_keyed" => {
+                            quote_spanned! {mac_span=> #tracked_path!(@internal __avalanche_hook_context; (#expr).__avalanche_internal_gen)}
+                        }
+                        "updated" => quote_spanned! {mac_span=>
                             {
-                                let updated = #tracked_path!(internal #expr; __avalanche_hook_context);
-                                __avalanche_internal_gen = ::std::cmp::max(__avalanche_internal_gen, (#expr).__avalanche_internal_gen);
-                                updated
+                                let __avalanche_outer_gen = __avalanche_internal_gen;
+                                // Other tracked expressions in the parent expression but outside of the current instance of
+                                // updated!() should not influence the result
+                                __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
+                                // #expr may modify __avalanche_internal_gen so this is not a noop
+                                __avalanche_internal_gen = ::std::cmp::max((#expr).__avalanche_internal_gen, __avalanche_internal_gen);
+                                let __avalanche_updated = #tracked_path!(@internal __avalanche_hook_context; __avalanche_internal_gen);
+                                // Restore external gen, but update it if a higher one was found
+                                __avalanche_internal_gen = ::std::cmp::max(__avalanche_outer_gen, __avalanche_internal_gen);
+                                __avalanche_updated
                             }
-                        }
+                        },
+                        _ => unreachable!(),
                     };
                     let transformed = parse_expr(transformed);
                     unit_deps.has_tracked = true;
@@ -706,7 +718,7 @@ impl Function {
                 dependencies = Some(deps);
             }
             Expr::ForLoop(for_expr) => {
-                // create scope for the variables created by
+                // Create scope for the variables created by
                 // for pat in expr {}
                 let mut scope = Scope::new();
 
@@ -716,7 +728,7 @@ impl Function {
                 scope.vars = vars;
                 self.scopes.push(scope);
 
-                //get dependencies of the for expr
+                // Get dependencies of the for expr
                 dependencies = Some(self.block(&mut for_expr.body));
 
                 //variables created by pat no longer present
@@ -728,12 +740,12 @@ impl Function {
                 dependencies = Some(self.expr(&mut group.expr, nested_tracked));
             }
             Expr::If(if_expr) => {
-                //TODO: handle conditional dependency updates within block
+                // TODO: handle conditional dependency updates within block
 
-                //the value of an if else branch doess NOT directly depend on the condition
-                //as the actual dependencies are derived from the bodies, which are currently
-                //unified
-                //however, we must process it in order to account for let guards.
+                // the value of an if else branch doess NOT directly depend on the condition
+                // as the actual dependencies are derived from the bodies, which are currently
+                // unified
+                // however, we must process it in order to account for let guards.
 
                 //this scope is for variables created via let.
                 let mut if_scope = Scope::new();

@@ -4,7 +4,7 @@ use avalanche::renderer::{
 };
 use avalanche::tracked::Gen;
 use avalanche::vdom::Root;
-use avalanche::{component, enclose, tracked, updated, Component, Tracked, View};
+use avalanche::{component, enclose, tracked, tracked_keyed, updated, updated_keyed, Component, Tracked, View};
 
 /// A renderer that does nothing, to test render functions only
 struct TestRenderer;
@@ -522,7 +522,12 @@ fn NestedTracked(a: u8, b: u8) -> View {
     // should report an updated value of false
     let nested = Tracked::new(b, Gen::escape_hatch_new(true));
     let nested_val = tracked!(tracked!(nested));
-    assert!(!updated!(nested_val));
+    let nested_val_keyed = tracked_keyed!(tracked!(nested));
+    assert!(updated!(nested_val));
+    assert!(!updated!(nested_val_keyed));
+
+    assert!(updated!(tracked!(nested)));
+    assert!(!updated_keyed!(tracked!(nested)));
 
     ().into()
 }

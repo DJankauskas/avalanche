@@ -85,18 +85,48 @@ macro_rules! tracked {
     };
 }
 
-/// Returns whether the given [Tracked](crate::tracked::Tracked) value has been updated since the last render.
-/// It can only be called within a `#[component]` function.
-///
-/// It behaves similarly to [tracked](tracked!), so it returns `Tracked<bool>` in a `#[component]`
-/// context, and `bool` everywhere else. It does not take ownership of the input value.
+/// Like the [tracked](tracked!) macro, but more performant when changes to the _location_ of a [Tracked] value is not
+/// important, but its identity, or _key_, is. 
+/// 
+/// This is an experimental API.
+/// 
+/// For example, for a variable `vec` of type 
+/// `Tracked<Vec<Tracked<T>>`, in the expression `tracked!(tracked!(vec)[0])`, the location of the resulting value 
+/// is important because we retrieve it by index. However, with this construct, any change within `vec` will 
+/// mark the value as updated, even if what is at the zeroth index stayed the same.
+/// 
+/// However, when we know that the location of a tracked value 
+/// is either not important or always static, `keyed_tracked` becomes useful in enabling fine-grained reactivity.
+// TODO: is this the right approach? Also, better documentation + examples
+#[macro_export]
+macro_rules! tracked_keyed {
+    ($e:expr) => {
+        $e.__avalanche_internal_value
+    };
+}
+
+/// Returns whether the given [Tracked] value has been updated since the last render.
+/// 
+/// It can only be called within a `#[component]` function, and behaves similarly to [tracked](tracked!).
 #[macro_export]
 macro_rules! updated {
     ($e:expr) => { ::std::compile_error!("updated must be invoked within a #[component]") };
-    (internal $e:expr; $internal_ctxt:expr) => {
-        $internal_ctxt.gen <= $e.__avalanche_internal_gen
+    (@internal $internal_ctxt:expr; $gen:expr) => {
+        $internal_ctxt.gen <= $gen
     };
 }
+
+/// Like [updated], but with the tracking performance properties of [tracked_keyed].
+///
+/// This is an experimental API. 
+#[macro_export]
+macro_rules! updated_keyed {
+    ($e:expr) => { ::std::compile_error!("updated must be invoked within a #[component]") };
+    (@internal $internal_ctxt:expr; $gen:expr) => {
+        $internal_ctxt.gen <= $gen
+    };
+}
+
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 /// Represents the generation in which a value was last updated, which may be the generation of
