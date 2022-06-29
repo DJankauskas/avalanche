@@ -1,12 +1,21 @@
-use avalanche::renderer::{HasChildrenMarker, NativeHandle, NativeType, Renderer, Scheduler};
+use avalanche::any_ref::DynRef;
+use avalanche::renderer::{
+    DispatchNativeEvent, NativeEvent, NativeHandle, NativeType, Renderer, Scheduler,
+};
+use avalanche::tracked::Gen;
 use avalanche::vdom::Root;
-use avalanche::{Component, Tracked, View, component, enclose, tracked, updated};
+use avalanche::{component, enclose, tracked, tracked_keyed, updated, updated_keyed, Component, Tracked, View};
 
 /// A renderer that does nothing, to test render functions only
 struct TestRenderer;
 
 impl Renderer for TestRenderer {
-    fn create_component(&mut self, _native_type: &NativeType, _component: &View) -> NativeHandle {
+    fn create_component(
+        &mut self,
+        _native_type: &NativeType,
+        _component: DynRef,
+        _dispatch_native_event: DispatchNativeEvent,
+    ) -> NativeHandle {
         Box::new(())
     }
 
@@ -48,20 +57,11 @@ impl Renderer for TestRenderer {
     ) {
     }
 
-    fn move_child(
+    fn truncate_children(
         &mut self,
-        _parent_type: &NativeType,
-        _parent_handle: &mut NativeHandle,
-        _old: usize,
-        _new: usize,
-    ) {
-    }
-
-    fn remove_child(
-        &mut self,
-        _parent_type: &NativeType,
-        _parent_handle: &mut NativeHandle,
-        _index: usize,
+        parent_type: &NativeType,
+        parent_handle: &mut NativeHandle,
+        len: usize,
     ) {
     }
 
@@ -69,7 +69,9 @@ impl Renderer for TestRenderer {
         &mut self,
         _native_type: &NativeType,
         _native_handle: &mut NativeHandle,
-        _component: &View,
+        _component: DynRef,
+        _curr_gen: Gen,
+        _native_event: Option<NativeEvent>,
     ) {
     }
 }
@@ -83,19 +85,42 @@ impl Scheduler for TestScheduler {
 
 struct TestChildren {
     children: Vec<View>,
+    location: (u32, u32),
 }
 
-impl Component for TestChildren {
-    type Builder = ();
-
-    fn render(&self, context: avalanche::Context) -> View {
-        HasChildrenMarker {
-            children: self.children.clone(),
+impl TestChildren {
+    fn new() -> Self {
+        Self {
+            children: Vec::new(),
+            location: (0, 0),
         }
-        .into()
     }
 
-    fn updated(&self) -> bool {
+    fn __last(mut self, children: Vec<View>, _gen: Gen<'_>) -> Self {
+        self.children = children;
+        self
+    }
+
+    fn build(mut self, location: (u32, u32)) -> Self {
+        self.location = location;
+        self
+    }
+}
+
+avalanche::impl_any_ref! { TestChildren }
+
+impl<'a> Component<'a> for TestChildren {
+    type Builder = Self;
+
+    fn render(self, _: avalanche::hooks::RenderContext, _: avalanche::hooks::HookContext) -> View {
+        unimplemented!()
+    }
+
+    fn children(self) -> Vec<View> {
+        self.children
+    }
+
+    fn updated(&self, _curr_gen: Gen) -> bool {
         true
     }
 
@@ -105,16 +130,23 @@ impl Component for TestChildren {
             name: "",
         })
     }
+
+    fn location(&self) -> Option<(u32, u32)> {
+        Some(self.location)
+    }
 }
 
 #[test]
 fn test() {
     let native_parent = TestChildren {
         children: Vec::new(),
+        location: (0, 0),
     };
-    Root::new(
-        Test::default().into(),
-        native_parent.into(),
+    Root::new::<_, _, Test>(
+        NativeType {
+            handler: "",
+            name: "",
+        },
         Box::new(()),
         TestRenderer,
         TestScheduler,
@@ -123,13 +155,18 @@ fn test() {
 
 #[component]
 fn Test() -> View {
-    let a = Tracked::new(0u8, true);
-    let b = Tracked::new(0u8, false);
-    let c = Tracked::new(0u8, true);
+    use visibility_test::PubCrate;
 
-    TestChildren { children: vec![
+    let gen_updated = Gen::escape_hatch_new(true);
+    let gen_not_updated = Gen::escape_hatch_new(false);
+    let a = Tracked::new(0u8, gen_updated);
+    let b = Tracked::new(0u8, gen_not_updated);
+    let c = Tracked::new(0u8, gen_updated);
+
+    TestChildren!(vec![
         Bare!(),
         Identity!(a: tracked!(a)),
+        Local!(a: tracked!(a), b: tracked!(b)),
         ArrayIndex!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
         Binary!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
         Block!(a: tracked!(a), b: tracked!(b)),
@@ -145,8 +182,16 @@ fn Test() -> View {
         Macros!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
         NestedBlocks!(a: tracked!(a)),
         NestedTracked!(a: tracked!(a), b: tracked!(b)),
-        Updated!(a: tracked!(a), b: tracked!(b), c: tracked!(c))
-    ] }.into()
+        Updated!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
+        BasicRef!(a: &tracked!(a)),
+        ComplexRef!(a: &tracked!(a), bc: &[&tracked!(b), &tracked!(c)]),
+        ComplexTrait!(b: &tracked!(&b)),
+        ParameterizedRef!(a: vec![&tracked!(a)]),
+        ExplicitLifetime!(b: &tracked!(b)),
+        MixedLifetimes!(a: &tracked!(a), c: &tracked!(c)),
+        UnusedLifetime!(a: tracked!(a)),
+        PubCrate!(a: tracked!(a), tracked!(b))
+    ])
 }
 
 #[derive(Default)]
@@ -165,7 +210,21 @@ fn Identity(a: u8) -> View {
     assert!(updated!(a));
     let a = tracked!(a);
     assert!(updated!(a));
+
+    ().into()
+}
+
+#[component]
+fn Local(a: u8, b: u8) -> View {
+    let a: Tracked<u8> = tracked!(a);
+    assert!(updated!(a));
+
+    let (a, c) = (tracked!(a), tracked!(b));
+    assert!(updated!(a) && updated!(c));
     
+    let (a, c): (Tracked<u8>, Tracked<u8>) = (tracked!(a), tracked!(b));
+    assert!(updated!(a) && updated!(c));
+
     ().into()
 }
 
@@ -173,7 +232,7 @@ fn Identity(a: u8) -> View {
 fn ArrayIndex(a: u8, b: u8, c: u8) -> View {
     let arr = [tracked!(b)];
     assert!(!updated!(arr));
-    
+
     let arr = [tracked!(a), tracked!(b)];
     assert!(updated!(arr));
 
@@ -265,7 +324,7 @@ fn Closure(a: u8, b: u8) -> View {
         if true {
             match 1 {
                 1 => updated!(a),
-                _ => unreachable!()
+                _ => unreachable!(),
             };
         }
     };
@@ -292,7 +351,11 @@ fn If(a: u8, b: u8, c: u8) -> View {
     let x = if tracked!(a) == 0 { tracked!(b) } else { 5 };
     assert!(updated!(x));
 
-    let y = if tracked!(b) == 0 { tracked!(a) } else {tracked!(c)};
+    let y = if tracked!(b) == 0 {
+        tracked!(a)
+    } else {
+        tracked!(c)
+    };
     assert!(updated!(y));
 
     ().into()
@@ -324,17 +387,16 @@ fn Match(a: u8, b: u8, c: u8) -> View {
     };
     assert!(updated!(option));
 
-
     let y = match tracked!(b) {
         0 => "zero",
         1 => "one",
         _ => "other",
     };
     assert!(!updated!(y));
-    
+
     let z = match tracked!(b) {
         0 if tracked!(c) == 0 => "zero",
-        _ => "other"
+        _ => "other",
     };
     assert!(updated!(z));
 
@@ -344,7 +406,7 @@ fn Match(a: u8, b: u8, c: u8) -> View {
 #[component]
 fn Unary(a: u8) -> View {
     let b = !tracked!(a);
-    
+
     assert!(updated!(b));
 
     ().into()
@@ -390,7 +452,7 @@ fn Macros(a: u8, b: u8, c: u8) -> View {
     let formatted = format!("{} {}", tracked!(a), tracked!(b));
     assert!(updated!(formatted));
 
-    let formatted2 = format!("{} {d}", tracked!(b), d=tracked!(c));
+    let formatted2 = format!("{} {d}", tracked!(b), d = tracked!(c));
     assert!(updated!(formatted2));
 
     // testing matches!
@@ -402,7 +464,6 @@ fn Macros(a: u8, b: u8, c: u8) -> View {
 
     let matched = matches!(tracked!(b), 0 | 1 if tracked!(c) > 2,);
     assert!(updated!(matched));
-
 
     // testing vec!
     let vec = vec![tracked!(a)];
@@ -430,7 +491,7 @@ fn NestedBlocks(a: u8) -> View {
     let x = loop {
         break loop {
             break tracked!(a);
-        }
+        };
     };
     assert!(updated!(x));
 
@@ -443,10 +504,8 @@ fn NestedBlocks(a: u8) -> View {
     };
     assert!(updated!(y));
 
-    let closure = || {
-        loop {
-            break tracked!(a);
-        }
+    let closure = || loop {
+        break tracked!(a);
     };
     assert!(updated!(closure));
 
@@ -455,15 +514,20 @@ fn NestedBlocks(a: u8) -> View {
 
 #[component]
 fn NestedTracked(a: u8, b: u8) -> View {
-    let nested = Tracked::new(a, true);
+    let nested = Tracked::new(a, Gen::escape_hatch_new(true));
     let nested_val = tracked!(tracked!(nested));
     assert!(updated!(nested_val));
 
     // if a non updated value is nested within an updated one, accessing the non updated value
     // should report an updated value of false
-    let nested = Tracked::new(b, true);
+    let nested = Tracked::new(b, Gen::escape_hatch_new(true));
     let nested_val = tracked!(tracked!(nested));
-    assert!(!updated!(nested_val));
+    let nested_val_keyed = tracked_keyed!(tracked!(nested));
+    assert!(updated!(nested_val));
+    assert!(!updated!(nested_val_keyed));
+
+    assert!(updated!(tracked!(nested)));
+    assert!(!updated_keyed!(tracked!(nested)));
 
     ().into()
 }
@@ -488,4 +552,63 @@ fn Updated(a: u8, b: u8, c: u8) -> View {
     assert!(!updated!(y));
 
     ().into()
+}
+
+#[component]
+fn BasicRef(a: &u8) -> View {
+    assert!(updated!(a));
+    ().into()
+}
+
+#[component]
+fn ComplexRef(a: &u8, bc: &[&u8]) -> View {
+    assert!(updated!(a));
+    assert!(updated!(bc));
+
+    ().into()
+}
+
+#[component]
+fn ComplexTrait(b: &<&u8 as std::ops::Deref>::Target) -> View {
+    assert!(!updated!(b));
+    ().into()
+}
+
+#[component]
+fn ParameterizedRef(a: Vec<&u8>) -> View {
+    assert!(updated!(a));
+
+    ().into()
+}
+
+#[component]
+fn ExplicitLifetime<'a>(b: &'a u8) -> View {
+    assert!(!updated!(b));
+
+    ().into()
+}
+
+#[component]
+fn MixedLifetimes<'a>(a: &u8, c: &'a u8) -> View {
+    assert!(updated!(a) && updated!(c));
+
+    ().into()
+}
+
+#[component]
+fn UnusedLifetime<'_a>(a: u8) -> View {
+    assert!(updated!(a));
+
+    ().into()
+}
+
+mod visibility_test {
+    use avalanche::{component, updated, View};
+
+    #[component]
+    pub(crate) fn PubCrate(a: u8, b: u8) -> View {
+        assert!(updated!(a) && !updated!(b));
+
+        ().into()
+    }
 }

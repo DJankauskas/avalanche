@@ -19,6 +19,18 @@ impl<T: ?Sized> Shared<T> {
     pub(crate) fn new_dyn(val: Rc<RefCell<T>>) -> Self {
         Shared { rc: val }
     }
+
+    /// Returns true if the wrapped value is currently being borrowed,
+    /// false otherwise.
+    pub(crate) fn borrowed(&self) -> bool {
+        self.rc.try_borrow_mut().is_err()
+    }
+    
+    /// Returns true if the two instances of `Shared` point to the same allocation,
+    /// false otherwise.
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.rc, &other.rc)
+    }
 }
 
 impl<T: ?Sized> Shared<T> {

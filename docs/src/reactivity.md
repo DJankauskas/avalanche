@@ -32,7 +32,7 @@ fn Random() -> View {
                 ],
             ),
             Div!([
-                Text!(random::<u16>())
+                Text!(random::<u16>().to_string())
             ]) 
         ]
     )
@@ -65,7 +65,7 @@ fn Random() -> View {
                 ]
             ),
             Div!([
-                Text!(tracked!(value))
+                Text!(tracked!(value).to_string())
             ]) 
         ]
     )
@@ -104,8 +104,7 @@ within the `set` or `update` methods.
 
 Macros can lead to convenient code; for example, `Text!(format!("Hello, {} {}!", tracked!(title), tracked!(name)))` is a lot clearer than macro-free
 alternatives. However, when using non-`std` and `avalanche` macros, `#[component]` is unable to track their dependencies correctly, meaning
-parameters based on those macros may not update correctly. In the future, we may instead opt to consider those macros always updated (at the cost of 
-efficiency), or offer some syntax to specify tracked values explicitly for them. Either way, we recommend you avoid those macros for now. 
+parameters based on those macros may not update correctly. In the future, we may instead opt to consider those macros always updated (at the cost of significantly reduced efficiency), or offer some syntax to specify tracked values explicitly for them. Either way, we recommend you avoid those macros for now. 
 
 ## Rendering dynamic lists
 
@@ -131,18 +130,20 @@ fn List() -> View {
 Here, we use the standard iterator methods `map` and `collect` to turn a `Vec` of strings into a `Vec` of `View`s.
 
 However, notice that in the component `Text!(item)`, the implicit `text` parameter has no `tracked!` call, so if we later 
-update the element `"a"`, for example, that change won't be appropriately rendered. We can change that with the `vec` hook,
-which allows tracking individual elements of a `Vec`. `vec` takes in `self` and a closure that returns a default value of type `std::vec::Vec`. 
-It returns a `Tracked<&avalanche::tracked::Vec>` and a special vec setter, both of which enable individual elements to be tracked for updates. 
+update the element `"a"`, for example, that change won't be appropriately rendered. We can change that with the `store` hook,
+which enables storing state with fine-grained tracking. What that means is we can keep track of when specific elements of the
+state were last updated. This is possible with the `Tracked::new` method, which allows creating a tracked value with its wrapped
+value and what render cycle, or `Gen`, it was created on. The init function and `update` method of `store` provide a `Gen`, allowing
+us to create and modify tracked values.
 
 ```rust
 # use avalanche::{component, tracked, View};
 # use avalanche_web::components::{Ul, Li, Text};
-use avalanche::vec;
+use avalanche::{store, Tracked};
 
 #[component]
-fn List(items: Vec<String>) -> View {
-    let (items, update_items) = vec(self, || vec![String::from("a")]);
+fn List() -> View {
+    let (items, update_items) = store(self, |gen| vec![Tracked::new(("a"), gen)]);
 
     Ul!(
         tracked!(items).iter().map(|item| Li!(

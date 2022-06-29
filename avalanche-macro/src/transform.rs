@@ -1,8 +1,8 @@
 use proc_macro2::{Span, TokenStream};
-use std::{collections::HashSet, ops::Deref, ops::DerefMut};
+use std::{collections::HashSet, hash::Hash, ops::Deref, ops::DerefMut};
 use syn::{
     parse2, parse_quote, spanned::Spanned, token::Semi, Block, Expr, ExprPath, Ident, Lit, Pat,
-    Stmt,
+    PatType, Stmt,
 };
 
 // Span line and column information with proc macros is not available on stable
@@ -12,14 +12,17 @@ use proc_macro_error::abort;
 use quote::{quote_spanned, ToTokens};
 use rand::random;
 
-use crate::macro_expr::{
-    ComponentBuilder, ComponentFieldValue, EncloseBody, ExprList, MatchesBody, Tracked, Try,
-    VecBody,
+use crate::{
+    avalanche_path::get_avalanche_path,
+    macro_expr::{
+        ComponentBuilder, ComponentFieldValue, EncloseBody, ExprList, MatchesBody, Tracked, Try,
+        VecBody,
+    },
 };
 
 const EXPR_CONVERSION_ERROR: &str = "internal error: unable to process Expr within tracked";
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, Eq, PartialEq)]
 pub(crate) struct Dependencies(HashSet<Ident>);
 
 impl Dependencies {
@@ -46,16 +49,34 @@ impl DerefMut for Dependencies {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct Var {
-    pub(crate) name: String,
-    pub(crate) dependencies: UnitDeps,
+impl Hash for Dependencies {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for ident in self.0.iter() {
+            (*ident).hash(state);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
-struct Closure {
-    value_dependencies: Dependencies,
-    call_dependencies: Dependencies,
+pub(crate) struct Var {
+    pub(crate) name: String,
+    pub(crate) dependencies: UnitDeps,
+    pub(crate) span: Span,
+}
+
+impl PartialEq for Var {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name && self.dependencies == other.dependencies
+    }
+}
+
+impl Eq for Var {}
+
+impl Hash for Var {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+        self.dependencies.hash(state);
+    }
 }
 
 #[derive(Default, Debug)]
@@ -78,7 +99,7 @@ impl Scope {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Hash, Eq, PartialEq)]
 pub(crate) struct UnitDeps {
     /// The named tracked dependencies of a unit's value
     tracked_deps: Dependencies,
@@ -116,10 +137,11 @@ fn parse_expr(stream: TokenStream) -> Expr {
 fn enable_expr_tracking(expr: &mut Expr, deps: &UnitDeps) {
     if deps.has_tracked {
         let expr_span = expr.span();
+        let avalanche_path = get_avalanche_path();
         let transformed = quote_spanned! { expr_span=>
             {
-                let mut __avalanche_internal_updated = false;
-                ::avalanche::Tracked::new(#expr, __avalanche_internal_updated)
+                let mut __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
+                #avalanche_path::Tracked::new(#expr, __avalanche_internal_gen)
             }
         };
         *expr = parse_expr(transformed);
@@ -164,16 +186,20 @@ impl Function {
         let mut deps = UnitDeps::new();
 
         self.scopes.push(Scope::new());
-        for stmt in &mut block.stmts {
-            // don't include non-value deps, as only expr deps contribute to the dependencies of the block
-            let mut stmt_deps = self.stmt(stmt, false);
-            // remove variables internal to the block from the dependencies list, as they are not external dependencies
-            // TODO: fix let a = tracked!(a); currently this would not report a as a dependency
-            stmt_deps
-                .tracked_deps
-                .retain(|dep| self.get_var_function_scope(&dep.to_string()).is_none());
-            deps.extend(stmt_deps);
-        }
+        block.stmts = block
+            .stmts
+            .drain(..)
+            .flat_map(|stmt| {
+                // don't include non-value deps, as only expr deps contribute to the dependencies of the block
+                let (stmts, mut stmt_deps) = self.stmt(stmt, false);
+                // remove variables internal to the block from the dependencies list, as they are not external dependencies
+                stmt_deps
+                    .tracked_deps
+                    .retain(|dep| self.get_var_function_scope(&dep.to_string()).is_none());
+                deps.extend(stmt_deps);
+                stmts
+            })
+            .collect();
 
         self.scopes.pop();
         deps
@@ -183,16 +209,21 @@ impl Function {
         let mut deps = UnitDeps::new();
 
         self.scopes.push(Scope::new());
-        for stmt in &mut block.stmts {
-            // include non value deps, as they are relevant to the value of the closure
-            let mut stmt_deps = self.stmt(stmt, true);
-            // remove variables internal to the block from the dependencies list, as they are not external dependencies
-            // TODO: fix let a = tracked!(a); currently this would not report a as a dependency
-            stmt_deps
-                .tracked_deps
-                .retain(|dep| self.get_var_function_scope(&dep.to_string()).is_none());
-            deps.extend(stmt_deps);
-        }
+        block.stmts = block
+            .stmts
+            .drain(..)
+            .flat_map(|stmt| {
+                // include non value deps, as they are relevant to the value of the closure
+                let (stmts, mut stmt_deps) = self.stmt(stmt, true);
+                // remove variables internal to the block from the dependencies list, as they are not external dependencies
+                // TODO: fix let a = tracked!(a); currently this would not report a as a dependency
+                stmt_deps
+                    .tracked_deps
+                    .retain(|dep| self.get_var_function_scope(&dep.to_string()).is_none());
+                deps.extend(stmt_deps);
+                stmts
+            })
+            .collect();
 
         self.scopes.pop();
         deps.has_tracked = !deps.tracked_deps.is_empty();
@@ -201,45 +232,87 @@ impl Function {
 
     /// Statements with a ; have value (), which has no dependencies, but
     /// if `include_non_value_deps` is true `tracked!` dependencies will be included.
-    /// This is useful for closures.
-    fn stmt(&mut self, stmt: &mut Stmt, include_non_value_deps: bool) -> UnitDeps {
-        let deps = match stmt {
-            Stmt::Local(local) => {
-                let mut init_dependencies = match &mut local.init {
-                    Some(expr) => {
-                        let deps = self.expr(&mut expr.1, false);
-                        enable_expr_tracking(&mut expr.1, &deps);
-                        deps
+    /// This is useful for closures. Returns a vec of statements that the given statement
+    /// has been converted into, along with the statement's dependencies.
+    fn stmt(&mut self, mut stmt: Stmt, include_non_value_deps: bool) -> (Vec<Stmt>, UnitDeps) {
+        match stmt {
+            Stmt::Local(ref mut local) => {
+                let (stmts, mut init_dependencies, vars) = match &mut local.init {
+                    Some((_, expr)) => {
+                        let deps = self.expr(expr, false);
+                        let vars = from_pat(&local.pat, deps.clone());
+                        match &mut local.pat {
+                            // for a simple let name = expr; statement, create simpler codegen
+                            Pat::Ident(_) => {
+                                enable_expr_tracking(expr, &deps);
+                                (vec![stmt], deps, vars)
+                            }
+                            // the case of let x: Tracked<u8> = .. should be treated the same as let x = ..
+                            Pat::Type(PatType { pat, .. }) if matches!(**pat, Pat::Ident(_)) => {
+                                enable_expr_tracking(expr, &deps);
+                                (vec![stmt], deps, vars)
+                            }
+                            pat => {
+                                if deps.has_tracked {
+                                    // remove the type annotation given by the user, as it will have tracked types
+                                    // in incorrect positions due to inner codegen details.
+                                    if let Pat::Type(PatType { pat: inner_pat, .. }) = pat {
+                                        *pat = *inner_pat.clone();
+                                    }
+                                    let avalanche_path = get_avalanche_path();
+                                    let init_gen: Stmt = parse_quote! {
+                                        let mut __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
+                                    };
+                                    let mut stmts = Vec::with_capacity(vars.len() + 2);
+                                    let expr_span = expr.span();
+                                    stmts.push(init_gen);
+                                    stmts.push(stmt);
+                                    stmts.extend(vars.iter().map(|var| {
+                                    let var = Ident::new(&var.name, var.span);
+                                    let spanned_expr = quote_spanned! {expr_span=> #avalanche_path::tracked::Tracked::new(#var, __avalanche_internal_gen)};
+                                    parse_quote!{
+                                        let #var = #spanned_expr;
+                                    }
+                                }));
+                                    (stmts, deps, vars)
+                                } else {
+                                    (vec![stmt], deps, vars)
+                                }
+                            }
+                        }
                     }
-                    None => UnitDeps::new(),
+                    None => (vec![stmt], UnitDeps::new(), Vec::new()),
                 };
                 let scope = self.scopes.last_mut().unwrap();
-                let vars = from_pat(&local.pat, init_dependencies.clone());
                 scope.vars.extend(vars);
 
                 if !include_non_value_deps {
                     init_dependencies.has_tracked = false;
                 }
 
-                init_dependencies
+                (stmts, init_dependencies)
             }
-            Stmt::Item(item) => match item {
-                syn::Item::Macro(macro_item) => {
-                    let (mut deps, transformed) = self.mac(&mut macro_item.mac, false);
-                    if let Some(transformed) = transformed {
-                        *stmt = Stmt::Semi(transformed, Semi(Span::call_site()));
+            Stmt::Item(ref mut item) => {
+                let deps = match item {
+                    syn::Item::Macro(macro_item) => {
+                        let (mut deps, transformed) = self.mac(&mut macro_item.mac, false);
+                        if let Some(transformed) = transformed {
+                            stmt = Stmt::Semi(transformed, Semi(Span::call_site()));
+                        }
+                        if !include_non_value_deps {
+                            deps.has_tracked = false;
+                        }
+                        deps
                     }
-                    if !include_non_value_deps {
-                        deps.has_tracked = false;
-                    }
-                    deps
-                }
-                _ => UnitDeps::new(),
-            },
-            Stmt::Expr(expr) => {
-                self.expr(expr, false)
+                    _ => UnitDeps::new(),
+                };
+                (vec![stmt], deps)
             }
-            Stmt::Semi(expr, _) => {
+            Stmt::Expr(ref mut expr) => {
+                let deps = self.expr(expr, false);
+                (vec![stmt], deps)
+            }
+            Stmt::Semi(ref mut expr, _) => {
                 let mut escape_expr = self.escape_expr(expr, false);
                 if !escape_expr.escape {
                     enable_expr_tracking(expr, &escape_expr.dependencies);
@@ -247,14 +320,14 @@ impl Function {
                 if !(include_non_value_deps || escape_expr.escape) {
                     escape_expr.dependencies.has_tracked = false;
                 }
-                escape_expr.dependencies
+                (vec![stmt], escape_expr.dependencies)
             }
-        };
-        deps
+        }
     }
 
     /// Returns the dependencies of a macro, and the transformed version of the input.
     fn mac(&mut self, mac: &mut syn::Macro, nested_tracked: bool) -> (UnitDeps, Option<Expr>) {
+        let avalanche_path = get_avalanche_path();
         let name = mac.path.segments.last().unwrap().ident.to_string();
         match &*name {
             "addr_of" | "addr_of_mut" => {
@@ -356,8 +429,11 @@ impl Function {
                     return (unit_deps, None);
                 }
             }
-            "tracked" | "updated" => {
+            // TODO: factor out first part of the function
+            "tracked" | "tracked_keyed" | "updated" | "updated_keyed" => {
+                let is_keyed = matches!(&*name, "tracked_keyed" | "updated_keyed");
                 if let Ok(tracked) = mac.parse_body::<Tracked>() {
+                    let mac_span = mac.span();
                     let mut unit_deps = UnitDeps::new();
                     let is_expr_trivial = matches!(
                         tracked,
@@ -382,41 +458,50 @@ impl Function {
                                     }
                                 }
                             };
-                            unit_deps.extend(self.expr(&mut expr, true));
+                            unit_deps.extend(self.expr(&mut expr, is_keyed));
                             expr
                         }
                     };
                     let tracked_path = &mac.path;
-                    let expr_span = expr.span();
-                    let transformed = if &*name == "tracked" {
-                        if nested_tracked {
-                            quote_spanned! {expr_span=> #tracked_path!(#expr)}
-                        } else if is_expr_trivial {
-                            quote_spanned! {expr_span=>
-                                #tracked_path!({
-                                    __avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::updated!(#expr);
-                                    #expr
-                                })
-                            }
-                        } else {
-                            quote_spanned! {expr_span=>
-                                #tracked_path!({
-                                    let value = #expr;
-                                    __avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::updated!(value);
-                                    value
-                                })
+                    let transformed = match &*name {
+                        "tracked" | "tracked_keyed" => {
+                            if nested_tracked {
+                                quote_spanned! {mac_span=> #tracked_path!(#expr)}
+                            } else if is_expr_trivial {
+                                quote_spanned! {mac_span=>
+                                    #tracked_path!({
+                                        __avalanche_internal_gen = ::std::cmp::max((#expr).__avalanche_internal_gen, __avalanche_internal_gen);
+                                        #expr
+                                    })
+                                }
+                            } else {
+                                quote_spanned! {mac_span=>
+                                    #tracked_path!({
+                                        let value = #expr;
+                                        __avalanche_internal_gen = ::std::cmp::max(__avalanche_internal_gen, value.__avalanche_internal_gen);
+                                        value
+                                    })
+                                }
                             }
                         }
-                    } else if nested_tracked {
-                        quote_spanned! {expr_span=> #tracked_path!(#expr)}
-                    } else {
-                        quote_spanned! {expr_span=>
+                        "updated_keyed" => {
+                            quote_spanned! {mac_span=> #tracked_path!(@internal __avalanche_hook_context; (#expr).__avalanche_internal_gen)}
+                        }
+                        "updated" => quote_spanned! {mac_span=>
                             {
-                                let updated = #tracked_path!(#expr);
-                                __avalanche_internal_updated = __avalanche_internal_updated || updated;
-                                updated
+                                let __avalanche_outer_gen = __avalanche_internal_gen;
+                                // Other tracked expressions in the parent expression but outside of the current instance of
+                                // updated!() should not influence the result
+                                __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
+                                // #expr may modify __avalanche_internal_gen so this is not a noop
+                                __avalanche_internal_gen = ::std::cmp::max((#expr).__avalanche_internal_gen, __avalanche_internal_gen);
+                                let __avalanche_updated = #tracked_path!(@internal __avalanche_hook_context; __avalanche_internal_gen);
+                                // Restore external gen, but update it if a higher one was found
+                                __avalanche_internal_gen = ::std::cmp::max(__avalanche_outer_gen, __avalanche_internal_gen);
+                                __avalanche_updated
                             }
-                        }
+                        },
+                        _ => unreachable!(),
                     };
                     let transformed = parse_expr(transformed);
                     unit_deps.has_tracked = true;
@@ -429,7 +514,7 @@ impl Function {
                         Ok(mut init) => {
                             if let Some(trailing_init) = init.trailing_init {
                                 init.named_init.push(ComponentFieldValue {
-                                    name: Ident::new("__last", Span::call_site()),
+                                    name: Ident::new("__last", trailing_init.span()),
                                     colon_token: Default::default(),
                                     value: trailing_init,
                                 })
@@ -444,20 +529,21 @@ impl Function {
                                 let field_span = field.span();
                                 let construct_expr = if dependencies.has_tracked {
                                     quote_spanned! { field_span=>
+                                        #field_ident({
+                                            __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
+                                            #init_expr
+                                        },
                                         {
-                                            let __avalanche_internal_outer_updated = &mut __avalanche_internal_updated;
-                                            let mut __avalanche_internal_updated = false;
-                                            let __avalanche_internal_built = __avalanche_internal_built.#field_ident(#init_expr, __avalanche_internal_updated);
-                                            *__avalanche_internal_outer_updated = *__avalanche_internal_outer_updated || __avalanche_internal_updated;
-                                            __avalanche_internal_built
-                                        }
+                                            *__avalanche_internal_outer_gen = ::std::cmp::max(*__avalanche_internal_outer_gen, __avalanche_internal_gen);
+                                            __avalanche_internal_gen
+
+                                        })
                                     }
                                 } else {
                                     quote_spanned! { field_span=>
-                                        __avalanche_internal_built.#field_ident(#init_expr, false)
+                                        #field_ident(#init_expr, #avalanche_path::tracked::Gen::escape_hatch_new(false))
                                     }
                                 };
-                                let construct_expr = parse_expr(construct_expr);
                                 prop_construct_expr.push(construct_expr);
                                 macro_dependencies.extend(dependencies.clone());
                             }
@@ -468,13 +554,17 @@ impl Function {
                             let column: u32 = random();
 
                             let transformed = parse_quote! {
-                                ::avalanche::__internal_identity! {
-                                    ::std::convert::Into::<::avalanche::View>::into({
-                                        let __avalanche_internal_built = <<#type_path as ::avalanche::Component>::Builder>::new();
-                                        #(let __avalanche_internal_built = #prop_construct_expr;)*
-                                        __avalanche_internal_built.build((#line, #column))
-                                    })
-                                }
+                                #avalanche_path::__internal_identity! {{
+                                    let __avalanche_internal_built = <<#type_path as #avalanche_path::Component>::Builder>::new();
+                                    let __avalanche_internal_outer_gen = &mut __avalanche_internal_gen;
+                                    let mut __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
+                                    #avalanche_path::vdom::render_child(
+                                        __avalanche_internal_built
+                                        #(.#prop_construct_expr)*
+                                        .build((#line, #column)),
+                                        &mut __avalanche_render_context
+                                    )
+                                }}
                             };
 
                             return (macro_dependencies, Some(transformed));
@@ -492,6 +582,7 @@ impl Function {
     /// Allow providing dependencies to closures being indirectly executed by functions.
     /// Returns trabsformed closure expr, which handles marking a closure as updated
     fn closure(&mut self, closure: &mut syn::ExprClosure, args_deps: UnitDeps) -> (UnitDeps, Expr) {
+        let avalanche_path = get_avalanche_path();
         let mut closure_scope = Scope::function();
 
         for input in closure.inputs.iter() {
@@ -514,14 +605,14 @@ impl Function {
         let closure_body = &closure.body;
         closure.body = parse_quote! {
             {
-                let mut __avalanche_internal_updated = false;
+                let mut __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
                 #closure_body
             }
         };
         let ident_dep = deps.tracked_deps.iter();
         let output = parse_quote! {
             {
-                #(__avalanche_internal_updated = __avalanche_internal_updated || ::avalanche::updated!(#ident_dep);)*
+                #(__avalanche_internal_gen = ::std::cmp::max(__avalanche_internal_gen, #ident_dep.__avalanche_internal_gen);)*
                 #closure
             }
         };
@@ -627,7 +718,7 @@ impl Function {
                 dependencies = Some(deps);
             }
             Expr::ForLoop(for_expr) => {
-                // create scope for the variables created by
+                // Create scope for the variables created by
                 // for pat in expr {}
                 let mut scope = Scope::new();
 
@@ -637,7 +728,7 @@ impl Function {
                 scope.vars = vars;
                 self.scopes.push(scope);
 
-                //get dependencies of the for expr
+                // Get dependencies of the for expr
                 dependencies = Some(self.block(&mut for_expr.body));
 
                 //variables created by pat no longer present
@@ -649,12 +740,12 @@ impl Function {
                 dependencies = Some(self.expr(&mut group.expr, nested_tracked));
             }
             Expr::If(if_expr) => {
-                //TODO: handle conditional dependency updates within block
+                // TODO: handle conditional dependency updates within block
 
-                //the value of an if else branch doess NOT directly depend on the condition
-                //as the actual dependencies are derived from the bodies, which are currently
-                //unified
-                //however, we must process it in order to account for let guards.
+                // the value of an if else branch doess NOT directly depend on the condition
+                // as the actual dependencies are derived from the bodies, which are currently
+                // unified
+                // however, we must process it in order to account for let guards.
 
                 //this scope is for variables created via let.
                 let mut if_scope = Scope::new();
@@ -729,7 +820,7 @@ impl Function {
                 // macro
 
                 if path.path.is_ident("self") {
-                    path.path = Ident::new("__avalanche_context", path.path.span()).into()
+                    path.path = Ident::new("__avalanche_hook_context", path.path.span()).into()
                 }
             }
             Expr::Range(range) => {
@@ -767,7 +858,7 @@ impl Function {
                 let mut deps = struct_expr
                     .rest
                     .as_mut()
-                    .map(|mut rest| self.expr(&mut rest, nested_tracked));
+                    .map(|rest| self.expr(rest, nested_tracked));
                 for field in struct_expr.fields.iter_mut() {
                     match &mut deps {
                         Some(deps) => {
@@ -829,42 +920,33 @@ struct EscapeExprRet {
     escape: bool,
 }
 
-#[derive(Debug, Clone)]
-struct Atom {
-    name: String,
-    sub: Option<Vec<usize>>,
-}
-
-impl From<String> for Atom {
-    fn from(string: String) -> Self {
-        Atom {
-            name: string,
-            sub: None,
-        }
-    }
-}
-
 fn from_pat(lhs: &Pat, rhs: UnitDeps) -> Vec<Var> {
     match lhs {
-        Pat::Box(box_) => {
-           return from_pat(&box_.pat, rhs)
-        }
+        Pat::Box(box_) => return from_pat(&box_.pat, rhs),
         Pat::Ident(ident) => {
             return vec![Var {
                 name: ident.ident.to_string(),
                 dependencies: rhs,
+                span: ident.span(),
             }]
         }
         Pat::Lit(_) => {}
         Pat::Macro(_) => {}
-        Pat::Or(_) => {}
+        Pat::Or(or_pat) => {
+            let mut vars = HashSet::new();
+            for pat in or_pat.cases.iter() {
+                vars.extend(from_pat(pat, rhs.clone()));
+            }
+            return vars.into_iter().collect();
+        }
         Pat::Path(path) => {
             let segments = &path.path.segments;
             if segments.len() == 1 {
-                let ident_name = segments.first().unwrap().ident.to_string();
+                let ident = &segments.first().unwrap().ident;
                 return vec![Var {
-                    name: ident_name,
+                    name: ident.to_string(),
                     dependencies: rhs,
+                    span: ident.span(),
                 }];
             }
         }
@@ -1017,10 +1099,11 @@ fn from_expr(expr: &Expr, rhs: UnitDeps) -> Vec<Var> {
         Expr::Path(path) => {
             let segments = &path.path.segments;
             if segments.len() == 1 {
-                let name = segments.first().unwrap().ident.to_string();
+                let ident = &segments.first().unwrap().ident;
                 return vec![Var {
-                    name,
+                    name: ident.to_string(),
                     dependencies: rhs,
+                    span: ident.span(),
                 }];
             }
         }

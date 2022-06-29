@@ -100,7 +100,7 @@ impl ToTokens for MatchesBody {
 /// This is an incomplete representation of the body of
 /// a [`vec!`] macro, consisting of its expressions.
 pub(crate) enum VecBody {
-    Repeat(VecRepeat),
+    Repeat(Box<VecRepeat>),
     Literal(Punctuated<Expr, Token![,]>),
 }
 
@@ -138,11 +138,11 @@ impl Parse for VecBody {
         };
         let n_expr = input.parse()?;
 
-        let vec = VecBody::Repeat(VecRepeat {
+        let vec = VecBody::Repeat(Box::new(VecRepeat {
             expr,
             semicolon_token,
             n_expr,
-        });
+        }));
 
         Ok(vec)
     }

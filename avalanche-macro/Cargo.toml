@@ -3,7 +3,7 @@ name = "avalanche-macro"
 version = "0.1.0"
 authors = ["Darius Jankauskas <d5926j@gmail.com>"]
 repository = "https://github.com/DJankauskas/avalanche"
-hopepage = "https://github.com/DJankauskas/avalanche"
+homepage = "https://github.com/DJankauskas/avalanche"
 keywords = ["reactive"]
 categories = ["gui"]
 description = "Proc macro implementation crate for avalanche"
@@ -19,6 +19,7 @@ proc-macro = true
 quote = "1.0"
 proc-macro2 = { version = "1.0", default-features = false }
 proc-macro-error = "1.0.3"
+proc-macro-crate = "1.1"
 rand = "0.7"
 
 [dependencies.syn]

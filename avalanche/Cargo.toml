@@ -3,7 +3,7 @@ name = "avalanche"
 version = "0.1.0"
 authors = ["Darius Jankauskas <d5926j@gmail.com>"]
 repository = "https://github.com/DJankauskas/avalanche"
-hopepage = "https://github.com/DJankauskas/avalanche"
+homepage = "https://github.com/DJankauskas/avalanche"
 keywords = ["reactive"]
 categories = ["gui"]
 description = "A platform-independent reactive GUI library"
@@ -14,7 +14,6 @@ rust-version = "1.56"
 
 [dependencies]
 avalanche-macro = {version = "^0.1.0", path = '../avalanche-macro'}
-downcast-rs = "1.1"
 
 [dev-dependencies]
 avalanche-web = {version = "^0.1.0", path = '../avalanche-web'}

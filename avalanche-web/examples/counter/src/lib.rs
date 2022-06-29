@@ -21,7 +21,7 @@ fn Counter() -> View {
             on_click: move |_| set_count.update(|count| *count += 1),
             child: Text!("+")
         ),
-        Text!(tracked!(count))
+        Text!(tracked!(count).to_string())
     ])
 }
 
