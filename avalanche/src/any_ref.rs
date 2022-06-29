@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 
 /// A trait that signals a type supports type erasure within the `DynBox` and
-/// `DynAny` types. End users should not need to implement this trait, except if
+/// `DynRef` types. End users should not need to implement this trait, except if
 /// implementing custom native components.
 
 /// Safety: Static must be either the type for which this is implemented,
@@ -24,8 +24,9 @@ unsafe impl<'a> AnyRef<'a> for () {
     type Static = ();
 }
 
-/// This macro should only be used by implementors of native components.
-/// Implement `AnyRef<'a>` for either a `'static` type or a type parameterized
+/// Implements `AnyRef`, which is needed for types implementing `Component` without `#[component]`.
+/// 
+/// Implements `AnyRef<'a>` for either a `'static` type or a type parameterized
 /// by one lifetime parameter. For a `'static` type `T`, implement with 
 /// `impl_any_ref!(T)`, and for a type `T` parameterized with a lifetime parameter,
 /// implement with `impl_any_ref!(T<'a>)`. Note that this macro does not currently support
@@ -36,7 +37,7 @@ unsafe impl<'a> AnyRef<'a> for () {
 macro_rules! impl_any_ref {
     ($ident:ident) => {
        unsafe impl<'a> $crate::any_ref::AnyRef<'a> for $ident {
-           type Static = $ident ;
+           type Static = $ident;
        } 
     };
 

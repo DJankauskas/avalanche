@@ -7,9 +7,10 @@ use std::cmp::max;
 use wasm_bindgen::JsCast;
 
 use crate::{events::*, WebNativeEvent};
-use avalanche::{Component, HookContext, RenderContext, View};
+use avalanche::{Component, View};
 use avalanche::renderer::NativeType;
 use avalanche::tracked::Gen;
+use avalanche::hooks::{HookContext, RenderContext};
 
 /// Represents a text node.
 #[derive(Clone, PartialEq)]

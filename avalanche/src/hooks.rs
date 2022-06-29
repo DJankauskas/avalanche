@@ -23,9 +23,7 @@ pub struct HookContext<'a> {
     pub(crate) scheduler: &'a Shared<dyn Scheduler>,
 }
 
-/// Provides a hook with component-specific state.
-///
-/// Accessed by passing `self` as the first parameter in a hook call.
+/// Provides a component with component-specific state.
 pub struct RenderContext<'a> {
     pub(crate) vdom: &'a mut VDom,
     /// VNode of parent.

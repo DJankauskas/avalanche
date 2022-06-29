@@ -96,7 +96,9 @@ macro_rules! tracked {
 /// mark the value as updated, even if what is at the zeroth index stayed the same.
 /// 
 /// However, when we know that the location of a tracked value 
-/// is either not important or always static, `keyed_tracked` becomes useful in enabling fine-grained reactivity.
+/// is either not important or always static, `keyed_tracked` should be used instead for values coming
+/// from the `store` hook to enable more efficient, fine-grained updates. 
+///
 // TODO: is this the right approach? Also, better documentation + examples
 #[macro_export]
 macro_rules! tracked_keyed {

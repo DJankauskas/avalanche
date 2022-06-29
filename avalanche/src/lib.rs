@@ -15,7 +15,7 @@ pub mod any_ref;
 #[cfg(test)]
 mod tests;
 
-pub use hooks::{HookContext, RenderContext};
+use hooks::{HookContext, RenderContext};
 
 use renderer::{NativeType};
 use shared::Shared;
@@ -33,9 +33,9 @@ pub use tracked::Tracked;
 /// It generates a `struct` implementing [Component](Component) with the name of the input function, and a builder struct.
 /// The function's name should start with a capital ASCII character.
 ///
-/// The function can optionally take parameters. Parameter types must be `Clone` and `'static`.
+/// The function can optionally take parameters. Parameter types must implement `Clone`.
 /// Parameters must have concrete types: they cannot use the `impl Trait`
-/// syntax. Components cannot be `async` or generic.
+/// syntax. Components currently cannot be `async` or generic over types.
 ///
 /// A component must return a [View] describing what it will render.
 /// Components are invoked with the same syntax as function calls, except with
@@ -78,20 +78,21 @@ pub use tracked::Tracked;
 ///
 /// ## Eschew third-party macros
 /// Unfortunately, macros are syntax extensions and `component` cannot keep track of tracked variables in most of them.
-/// All `std` macros (like [vec!](std::vec!()) and [format!](std::format!())) and `avalanche` macros (like [enclose!()])
+/// All `std` macros (like [vec!](std::vec!()) and [format!](std::format!())) and `avalanche` macros (like [enclose!])
 /// work well, but any others may lead to parameters being incorrectly marked as not updated.
 #[doc(inline)]
 pub use avalanche_macro::component;
 
-/// Takes a list of identifiers terminated by a semicolon and expression. Each identifier is
-/// cloned, and made available to the expression. The macro evaluates to that expression.
-/// This is useful for passing things like state and setters to multiple component props.
+/// Clones provided identifiers and passes them to the given expression. 
+/// The macro evaluates to that expression.
+/// This is useful for passing data to multiple different sources that require `'static` data.
 /// # Example
 /// ```rust
 /// # use avalanche::enclose;
 /// let message = "Enclose me!".to_owned();
-/// let closure1 = enclose!(message; move || println!("{}", message));
-/// let closure2 = enclose!(message; move || eprintln!("{}", message));
+/// let second_message = String::new();
+/// let closure1 = enclose!(message; move || println!("{message}"));
+/// let closure2 = enclose!(message, second_message; move || println!("{message} again and {second_message}"));
 /// ```
 #[macro_export]
 macro_rules! enclose {
@@ -136,7 +137,7 @@ impl View {
 }
 
 impl From<()> for View {
-    fn from(_: ()) -> Self {
+    fn from((): ()) -> Self {
         Self {
             id: None,
             native_component_id: None,
@@ -145,8 +146,8 @@ impl From<()> for View {
 }
 
 impl From<Option<View>> for View {
-    fn from(val: Option<View>) -> Self {
-        match val {
+    fn from(opt: Option<View>) -> Self {
+        match opt {
             Some(val) => val,
             None => ().into()
         }
@@ -196,11 +197,10 @@ impl<'a> Component<'a> for () {
     }
 }
 
-#[doc(hidden)]
 /// Internal data structure that stores what tree a component
 /// belongs to, and its position within it
 #[derive(Copy, Clone)]
-pub struct ComponentPos<'a> {
+pub(crate) struct ComponentPos<'a> {
     /// Shared value ONLY for passing to UseState
     /// within the render function this value is mutably borrowed,
     /// so exec and exec_mut will panic

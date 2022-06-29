@@ -105,7 +105,7 @@ pub trait Scheduler {
     fn schedule_on_ui_thread(&mut self, f: Box<dyn FnOnce()>);
 }
 
-/// Describes the native element type a given [`Component`] corresponds to.
+/// Describes the native element type a given [Component](crate::Component) corresponds to.
 /// The meaning of its fields is up to a particular renderer implementation to define.
 #[derive(Copy, Clone)]
 pub struct NativeType {

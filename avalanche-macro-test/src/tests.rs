@@ -112,7 +112,7 @@ avalanche::impl_any_ref! { TestChildren }
 impl<'a> Component<'a> for TestChildren {
     type Builder = Self;
 
-    fn render(self, _: avalanche::RenderContext, _: avalanche::HookContext) -> View {
+    fn render(self, _: avalanche::hooks::RenderContext, _: avalanche::hooks::HookContext) -> View {
         unimplemented!()
     }
 
