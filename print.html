@@ -300,7 +300,7 @@ and want to allow a custom destination and text to be specified. We can add <cod
 use avalanche_web::components::{A, Text};
 
 #[component]
-fn Link(to: String, text: String) -&gt; View {
+fn Link(to: &amp;str, text: &amp;str) -&gt; View {
     A!(
         href: tracked!(to),
         [
@@ -311,10 +311,10 @@ fn Link(to: String, text: String) -&gt; View {
 <span class="boring">}
 </span></code></pre></pre>
 <p>Notice that for the <code>href</code> and implicit <code>text</code> parameters, we pass <code>tracked!</code> parameters instead of just passing them by value.
-That's because when we say a parameter is, for example, a <code>String</code>, we actually receive a <code>Tracked&lt;String&gt;</code>. A <code>Tracked</code> value 
+That's because when we say a parameter is, for example, a <code>&amp;str</code>, we actually receive a <code>Tracked&lt;&amp;str&gt;</code>. A <code>Tracked</code> value 
 wraps an inner value with data on whether it's been updated since last render. <code>avalanche</code> uses this to allow for efficient re-rendering
-of components. Calling <code>tracked!</code> on a <code>Tracked</code> value gives us its inner value. Since <code>Text</code> and <code>A</code> expect <code>String</code>-like values, but 
-the <code>to</code> and <code>text</code> parameters are <code>Tracked&lt;String&gt;</code>, we use <code>tracked!()</code> to get <code>String</code> values.</p>
+of components. Calling <code>tracked!</code> on a <code>Tracked</code> value gives us its inner value. Since <code>Text</code> and <code>A</code> expect <code>&amp;str</code>-like values, but 
+the <code>to</code> and <code>text</code> parameters are <code>Tracked&lt;&amp;str&gt;</code>, we use <code>tracked!()</code> to get <code>&amp;str</code> values.</p>
 <p>We can then construct <code>Link</code> inside of other components:</p>
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
@@ -324,7 +324,7 @@ use avalanche_web::components::{Text, Div};
 <span class="boring">use avalanche_web::components::A;
 </span><span class="boring">
 </span><span class="boring">#[component]
-</span><span class="boring">fn Link(to: String, text: String) -&gt; View {
+</span><span class="boring">fn Link(to: &amp;str, text: &amp;str) -&gt; View {
 </span><span class="boring">    A!(
 </span><span class="boring">        href: tracked!(to),
 </span><span class="boring">        [
@@ -337,8 +337,8 @@ use avalanche_web::components::{Text, Div};
 fn Example() -&gt; View {
     Div!([
         Link!(
-            to: &quot;https://example.com&quot;.into(),
-            text: &quot;example.com&quot;.into()
+            to: &quot;https://example.com&quot;,
+            text: &quot;example.com&quot;
         ),
         Text!(&quot; is a domain reserved for use in demos.&quot;)
     ])
@@ -360,10 +360,7 @@ fn Example() -&gt; View {
 )
 </code></pre>
 <h2><a class="header" href="#parameter-type-restrictions" id="parameter-type-restrictions">Parameter type restrictions</a></h2>
-<p>You might have noticed that we used the <code>String</code> type for our parameters, rather than the more generic <code>&amp;str</code>. That's because 
-parameters are stored by avalanche and need to live longer than the function body, and are thus required to be <code>'static</code>. That means
-parameter types can't contain non-<code>'static</code> references. However, <code>static</code> references like <code>&amp;'static str</code> are allowed.
-Also, parameter types must implement <code>Clone</code>.</p>
+<p>All parameters must implement <code>Clone</code>. Note that all non-<code>mut</code> references implement <code>Clone</code>.</p>
 <h1><a class="header" href="#hooks-state-and-control-flow" id="hooks-state-and-control-flow">Hooks, State, and Control Flow</a></h1>
 <p>Earlier, we described components as pure functions. Hooks allow us 
 to introduce external data, state, and other impure data into our components.</p>
@@ -389,7 +386,7 @@ fn Counter() -&gt; View {
                 Text!(&quot;+&quot;)
             ]
         ),
-        Text!(0)
+        Text!(0.to_string())
     ])
 }
 <span class="boring">}
@@ -408,7 +405,7 @@ use avalanche_web::components::{Div, H2, Button, Text};
 
 #[component]
 fn Counter() -&gt; View {
-    let (count, set_count) = state::&lt;u64, _&gt;(self, || 0);
+    let (count, set_count) = state::&lt;u64&gt;(self, || 0);
 
     Div!([
         H2!([
@@ -420,7 +417,7 @@ fn Counter() -&gt; View {
                 Text!(&quot;+&quot;)
             ]
         ),
-        Text!(tracked!(count))
+        Text!(tracked!(count).to_string())
     ])
 }
 <span class="boring">}
@@ -514,7 +511,7 @@ fn Random() -&gt; View {
                 ],
             ),
             Div!([
-                Text!(random::&lt;u16&gt;())
+                Text!(random::&lt;u16&gt;().to_string())
             ]) 
         ]
     )
@@ -548,7 +545,7 @@ fn Random() -&gt; View {
                 ]
             ),
             Div!([
-                Text!(tracked!(value))
+                Text!(tracked!(value).to_string())
             ]) 
         ]
     )
@@ -575,8 +572,7 @@ within the <code>set</code> or <code>update</code> methods.</p>
 <h3><a class="header" href="#avoid-third-party-macros" id="avoid-third-party-macros">Avoid third-party macros</a></h3>
 <p>Macros can lead to convenient code; for example, <code>Text!(format!(&quot;Hello, {} {}!&quot;, tracked!(title), tracked!(name)))</code> is a lot clearer than macro-free
 alternatives. However, when using non-<code>std</code> and <code>avalanche</code> macros, <code>#[component]</code> is unable to track their dependencies correctly, meaning
-parameters based on those macros may not update correctly. In the future, we may instead opt to consider those macros always updated (at the cost of 
-efficiency), or offer some syntax to specify tracked values explicitly for them. Either way, we recommend you avoid those macros for now. </p>
+parameters based on those macros may not update correctly. In the future, we may instead opt to consider those macros always updated (at the cost of significantly reduced efficiency), or offer some syntax to specify tracked values explicitly for them. Either way, we recommend you avoid those macros for now. </p>
 <h2><a class="header" href="#rendering-dynamic-lists" id="rendering-dynamic-lists">Rendering dynamic lists</a></h2>
 <p>Rendering more heavily dynamic content is where the tracked system shines. But first, a pitfall:
 here's a potential first attempt at rendering a list of dynamic children:</p>
@@ -600,19 +596,21 @@ fn List() -&gt; View {
 </span></code></pre></pre>
 <p>Here, we use the standard iterator methods <code>map</code> and <code>collect</code> to turn a <code>Vec</code> of strings into a <code>Vec</code> of <code>View</code>s.</p>
 <p>However, notice that in the component <code>Text!(item)</code>, the implicit <code>text</code> parameter has no <code>tracked!</code> call, so if we later 
-update the element <code>&quot;a&quot;</code>, for example, that change won't be appropriately rendered. We can change that with the <code>vec</code> hook,
-which allows tracking individual elements of a <code>Vec</code>. <code>vec</code> takes in <code>self</code> and a closure that returns a default value of type <code>std::vec::Vec</code>. 
-It returns a <code>Tracked&lt;&amp;avalanche::tracked::Vec&gt;</code> and a special vec setter, both of which enable individual elements to be tracked for updates. </p>
+update the element <code>&quot;a&quot;</code>, for example, that change won't be appropriately rendered. We can change that with the <code>store</code> hook,
+which enables storing state with fine-grained tracking. What that means is we can keep track of when specific elements of the
+state were last updated. This is possible with the <code>Tracked::new</code> method, which allows creating a tracked value with its wrapped
+value and what render cycle, or <code>Gen</code>, it was created on. The init function and <code>update</code> method of <code>store</code> provide a <code>Gen</code>, allowing
+us to create and modify tracked values.</p>
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span><span class="boring">use avalanche::{component, tracked, View};
 </span><span class="boring">use avalanche_web::components::{Ul, Li, Text};
-</span>use avalanche::vec;
+</span>use avalanche::{store, Tracked};
 
 #[component]
-fn List(items: Vec&lt;String&gt;) -&gt; View {
-    let (items, update_items) = vec(self, || vec![String::from(&quot;a&quot;)]);
+fn List() -&gt; View {
+    let (items, update_items) = store(self, |gen| vec![Tracked::new((&quot;a&quot;), gen)]);
 
     Ul!(
         tracked!(items).iter().map(|item| Li!(

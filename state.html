@@ -188,7 +188,7 @@ fn Counter() -&gt; View {
                 Text!(&quot;+&quot;)
             ]
         ),
-        Text!(0)
+        Text!(0.to_string())
     ])
 }
 <span class="boring">}
@@ -207,7 +207,7 @@ use avalanche_web::components::{Div, H2, Button, Text};
 
 #[component]
 fn Counter() -&gt; View {
-    let (count, set_count) = state::&lt;u64, _&gt;(self, || 0);
+    let (count, set_count) = state::&lt;u64&gt;(self, || 0);
 
     Div!([
         H2!([
@@ -219,7 +219,7 @@ fn Counter() -&gt; View {
                 Text!(&quot;+&quot;)
             ]
         ),
-        Text!(tracked!(count))
+        Text!(tracked!(count).to_string())
     ])
 }
 <span class="boring">}

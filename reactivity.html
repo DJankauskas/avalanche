@@ -194,7 +194,7 @@ fn Random() -&gt; View {
                 ],
             ),
             Div!([
-                Text!(random::&lt;u16&gt;())
+                Text!(random::&lt;u16&gt;().to_string())
             ]) 
         ]
     )
@@ -228,7 +228,7 @@ fn Random() -&gt; View {
                 ]
             ),
             Div!([
-                Text!(tracked!(value))
+                Text!(tracked!(value).to_string())
             ]) 
         ]
     )
@@ -255,8 +255,7 @@ within the <code>set</code> or <code>update</code> methods.</p>
 <h3><a class="header" href="#avoid-third-party-macros" id="avoid-third-party-macros">Avoid third-party macros</a></h3>
 <p>Macros can lead to convenient code; for example, <code>Text!(format!(&quot;Hello, {} {}!&quot;, tracked!(title), tracked!(name)))</code> is a lot clearer than macro-free
 alternatives. However, when using non-<code>std</code> and <code>avalanche</code> macros, <code>#[component]</code> is unable to track their dependencies correctly, meaning
-parameters based on those macros may not update correctly. In the future, we may instead opt to consider those macros always updated (at the cost of 
-efficiency), or offer some syntax to specify tracked values explicitly for them. Either way, we recommend you avoid those macros for now. </p>
+parameters based on those macros may not update correctly. In the future, we may instead opt to consider those macros always updated (at the cost of significantly reduced efficiency), or offer some syntax to specify tracked values explicitly for them. Either way, we recommend you avoid those macros for now. </p>
 <h2><a class="header" href="#rendering-dynamic-lists" id="rendering-dynamic-lists">Rendering dynamic lists</a></h2>
 <p>Rendering more heavily dynamic content is where the tracked system shines. But first, a pitfall:
 here's a potential first attempt at rendering a list of dynamic children:</p>
@@ -280,19 +279,21 @@ fn List() -&gt; View {
 </span></code></pre></pre>
 <p>Here, we use the standard iterator methods <code>map</code> and <code>collect</code> to turn a <code>Vec</code> of strings into a <code>Vec</code> of <code>View</code>s.</p>
 <p>However, notice that in the component <code>Text!(item)</code>, the implicit <code>text</code> parameter has no <code>tracked!</code> call, so if we later 
-update the element <code>&quot;a&quot;</code>, for example, that change won't be appropriately rendered. We can change that with the <code>vec</code> hook,
-which allows tracking individual elements of a <code>Vec</code>. <code>vec</code> takes in <code>self</code> and a closure that returns a default value of type <code>std::vec::Vec</code>. 
-It returns a <code>Tracked&lt;&amp;avalanche::tracked::Vec&gt;</code> and a special vec setter, both of which enable individual elements to be tracked for updates. </p>
+update the element <code>&quot;a&quot;</code>, for example, that change won't be appropriately rendered. We can change that with the <code>store</code> hook,
+which enables storing state with fine-grained tracking. What that means is we can keep track of when specific elements of the
+state were last updated. This is possible with the <code>Tracked::new</code> method, which allows creating a tracked value with its wrapped
+value and what render cycle, or <code>Gen</code>, it was created on. The init function and <code>update</code> method of <code>store</code> provide a <code>Gen</code>, allowing
+us to create and modify tracked values.</p>
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span><span class="boring">use avalanche::{component, tracked, View};
 </span><span class="boring">use avalanche_web::components::{Ul, Li, Text};
-</span>use avalanche::vec;
+</span>use avalanche::{store, Tracked};
 
 #[component]
-fn List(items: Vec&lt;String&gt;) -&gt; View {
-    let (items, update_items) = vec(self, || vec![String::from(&quot;a&quot;)]);
+fn List() -&gt; View {
+    let (items, update_items) = store(self, |gen| vec![Tracked::new((&quot;a&quot;), gen)]);
 
     Ul!(
         tracked!(items).iter().map(|item| Li!(

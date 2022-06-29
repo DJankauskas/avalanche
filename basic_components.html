@@ -221,7 +221,7 @@ and want to allow a custom destination and text to be specified. We can add <cod
 use avalanche_web::components::{A, Text};
 
 #[component]
-fn Link(to: String, text: String) -&gt; View {
+fn Link(to: &amp;str, text: &amp;str) -&gt; View {
     A!(
         href: tracked!(to),
         [
@@ -232,10 +232,10 @@ fn Link(to: String, text: String) -&gt; View {
 <span class="boring">}
 </span></code></pre></pre>
 <p>Notice that for the <code>href</code> and implicit <code>text</code> parameters, we pass <code>tracked!</code> parameters instead of just passing them by value.
-That's because when we say a parameter is, for example, a <code>String</code>, we actually receive a <code>Tracked&lt;String&gt;</code>. A <code>Tracked</code> value 
+That's because when we say a parameter is, for example, a <code>&amp;str</code>, we actually receive a <code>Tracked&lt;&amp;str&gt;</code>. A <code>Tracked</code> value 
 wraps an inner value with data on whether it's been updated since last render. <code>avalanche</code> uses this to allow for efficient re-rendering
-of components. Calling <code>tracked!</code> on a <code>Tracked</code> value gives us its inner value. Since <code>Text</code> and <code>A</code> expect <code>String</code>-like values, but 
-the <code>to</code> and <code>text</code> parameters are <code>Tracked&lt;String&gt;</code>, we use <code>tracked!()</code> to get <code>String</code> values.</p>
+of components. Calling <code>tracked!</code> on a <code>Tracked</code> value gives us its inner value. Since <code>Text</code> and <code>A</code> expect <code>&amp;str</code>-like values, but 
+the <code>to</code> and <code>text</code> parameters are <code>Tracked&lt;&amp;str&gt;</code>, we use <code>tracked!()</code> to get <code>&amp;str</code> values.</p>
 <p>We can then construct <code>Link</code> inside of other components:</p>
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
@@ -245,7 +245,7 @@ use avalanche_web::components::{Text, Div};
 <span class="boring">use avalanche_web::components::A;
 </span><span class="boring">
 </span><span class="boring">#[component]
-</span><span class="boring">fn Link(to: String, text: String) -&gt; View {
+</span><span class="boring">fn Link(to: &amp;str, text: &amp;str) -&gt; View {
 </span><span class="boring">    A!(
 </span><span class="boring">        href: tracked!(to),
 </span><span class="boring">        [
@@ -258,8 +258,8 @@ use avalanche_web::components::{Text, Div};
 fn Example() -&gt; View {
     Div!([
         Link!(
-            to: &quot;https://example.com&quot;.into(),
-            text: &quot;example.com&quot;.into()
+            to: &quot;https://example.com&quot;,
+            text: &quot;example.com&quot;
         ),
         Text!(&quot; is a domain reserved for use in demos.&quot;)
     ])
@@ -281,10 +281,7 @@ fn Example() -&gt; View {
 )
 </code></pre>
 <h2><a class="header" href="#parameter-type-restrictions" id="parameter-type-restrictions">Parameter type restrictions</a></h2>
-<p>You might have noticed that we used the <code>String</code> type for our parameters, rather than the more generic <code>&amp;str</code>. That's because 
-parameters are stored by avalanche and need to live longer than the function body, and are thus required to be <code>'static</code>. That means
-parameter types can't contain non-<code>'static</code> references. However, <code>static</code> references like <code>&amp;'static str</code> are allowed.
-Also, parameter types must implement <code>Clone</code>.</p>
+<p>All parameters must implement <code>Clone</code>. Note that all non-<code>mut</code> references implement <code>Clone</code>.</p>
 
                     </main>
 
