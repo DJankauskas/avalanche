@@ -25,26 +25,26 @@ unsafe impl<'a> AnyRef<'a> for () {
 }
 
 /// Implements `AnyRef`, which is needed for types implementing `Component` without `#[component]`.
-/// 
+///
 /// Implements `AnyRef<'a>` for either a `'static` type or a type parameterized
-/// by one lifetime parameter. For a `'static` type `T`, implement with 
+/// by one lifetime parameter. For a `'static` type `T`, implement with
 /// `impl_any_ref!(T)`, and for a type `T` parameterized with a lifetime parameter,
 /// implement with `impl_any_ref!(T<'a>)`. Note that this macro does not currently support
-/// generic types. 
-// Safety: the restrictions on macro inputs, as well as how they are used, 
+/// generic types.
+// Safety: the restrictions on macro inputs, as well as how they are used,
 // ensures that implementations satisfy the requirements of `AnyRef`.
 #[macro_export]
 macro_rules! impl_any_ref {
     ($ident:ident) => {
-       unsafe impl<'a> $crate::any_ref::AnyRef<'a> for $ident {
-           type Static = $ident;
-       } 
+        unsafe impl<'a> $crate::any_ref::AnyRef<'a> for $ident {
+            type Static = $ident;
+        }
     };
 
     ($ident:ident <$l:lifetime>) => {
-       unsafe impl<$l> $crate::any_ref::AnyRef<$l> for $ident<$l> {
-           type Static = $ident <'static>;
-       } 
+        unsafe impl<$l> $crate::any_ref::AnyRef<$l> for $ident<$l> {
+            type Static = $ident<'static>;
+        }
     };
 }
 
@@ -59,12 +59,11 @@ unsafe fn transmute<T, U>(val: T) -> U {
     std::mem::transmute_copy::<T, U>(&manually_drop)
 }
 
-
 // DynBox works by casting potentially non-'static data to a type
 // that is guaranteed to be 'static, using an unsafe trait to maintain
 // the invariant that such a cast must be legal and provide the 'static
 // type. At downcasting, if downcasting to the 'static type succeeds,
-// the cast is performed in reverse. A PhantomData instance taking in 
+// the cast is performed in reverse. A PhantomData instance taking in
 // a lifetime is used to ensure a DynBox or DynRef cannot outlast the
 // data it is holding or referencing.
 
@@ -75,7 +74,6 @@ pub struct DynBox<'a> {
     /// Uses lifetime and introduces covariance and contravariance
     _phantom: PhantomData<Cell<&'a ()>>,
 }
-
 
 impl<'a> DynBox<'a> {
     pub(crate) fn new<T: AnyRef<'a>>(val: T) -> Self {
@@ -89,9 +87,12 @@ impl<'a> DynBox<'a> {
             _phantom: PhantomData,
         }
     }
-    
+
     pub(crate) fn as_ref<'r>(&'r self) -> DynRef<'a, 'r> {
-        DynRef { data: &*self.data, _phantom: PhantomData }
+        DynRef {
+            data: &*self.data,
+            _phantom: PhantomData,
+        }
     }
 
     /// Attempts to downcast a `DynBox` to a concrete value.
@@ -118,13 +119,38 @@ impl<'a> Debug for DynBox<'a> {
     }
 }
 
+#[test]
+fn dyn_box_test() {
+    struct Data<'a> {
+        _data: &'a str,
+    }
+    impl_any_ref!(Data<'a>);
+
+    let local_string = String::from("local");
+    let data = Data {
+        _data: &local_string,
+    };
+
+    let dyn_box = DynBox::new(data);
+    assert!(dyn_box.as_ref().downcast_ref::<()>().is_none());
+    let _data = dyn_box.downcast::<Data>().unwrap();
+}
+
+/// ```compile_fail
+/// struct Data<'a>(&'a T);
+/// impl_any_ref!(Data<'a>);
+/// fn contravariance<'a>(dyn_box: DynBox<'static>) {
+///     let _ = dyn_box.downcast::<Data<'a>>();
+/// }
+/// ```
+struct _CompileFailTests;
+
 /// A reference to type-erased data.
 pub struct DynRef<'a, 'r> {
     data: &'r dyn Any,
     /// Uses lifetime and introduces covariance and contravariance
     _phantom: PhantomData<Cell<&'a ()>>,
 }
-
 
 impl<'a, 'r> DynRef<'a, 'r> {
     /// Returns some reference to the inner value if it is of type `T`, or `None` if it isn’t.
@@ -136,14 +162,14 @@ impl<'a, 'r> DynRef<'a, 'r> {
                 // be the case by the bounds on the new function.
                 let val = unsafe { transmute::<&T::Static, &T>(val) };
                 Some(val)
-            },
-            None => None
+            }
+            None => None,
         }
     }
 }
 
 impl<'a, 'r> Debug for DynRef<'a, 'r> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DynRefp").finish_non_exhaustive()
+        f.debug_struct("DynRef").finish_non_exhaustive()
     }
 }

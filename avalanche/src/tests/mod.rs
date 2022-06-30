@@ -190,16 +190,29 @@ fn basic_state_event() {
 
 #[component]
 fn RepeatHookCalls() -> View {
-    for _ in 0..5 {
-        let _ = state(self, || 2);
-    }
+    // 5 state hook calls to cause a resize of the component's state HashMap,
+    // testing to ensure this is memory safe and works correctly
+    let (a, set_a) = state(self, || "a");
+    let (b, _) = state(self, || "b");
+    let (c, _) = state(self, || "c");
+    let (d, _) = state(self, || "d");
+    let (e, _) = state(self, || "e");
     
-    ().into()
+    Native!(
+        name: "repeat", 
+        value: &format!("{}{}{}{}{}", tracked!(a), tracked!(b), tracked!(c), tracked!(d), tracked!(e)),
+        on_click: || set_a.set("")
+    )
 }
 
 #[test]
 fn repeat_hook_calls() {
-    test::<RepeatHookCalls>(vec![], vec![]);
+    test::<RepeatHookCalls>(vec!["repeat"], vec![Repr{
+        name: "repeat".into(),
+        value: "bcde".into(),
+        has_on_click: true,
+        children: vec![],
+    }]);
 }
 
 #[component]
