@@ -15,12 +15,12 @@ fn init_avalanche_path() -> AvalanchePath {
             // Note that this solution is unstable but it's the best we can easily do at the moment
             // TODO: more robust solution?
             if std::env::var("UNSTABLE_RUSTDOC_TEST_LINE").is_ok() || std::env::var("UNSTABLE_RUSTDOC_TEST_PATH").is_ok() {
-                AvalanchePath::Named("avalanche".to_string())
+                AvalanchePath::Name("avalanche".to_string())
             } else {
                 AvalanchePath::Itself
             }
         }
-        FoundCrate::Name(name) => AvalanchePath::Named(name),
+        FoundCrate::Name(name) => AvalanchePath::Name(name),
     }
 }
 
@@ -35,14 +35,14 @@ pub(crate) fn get_avalanche_path() -> impl ToTokens {
 #[derive(Clone)]
 enum AvalanchePath {
     Itself,
-    Named(String),
+    Name(String),
 }
 
 impl ToTokens for AvalanchePath {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
             AvalanchePath::Itself => tokens.extend(quote! { crate }),
-            AvalanchePath::Named(name) => {
+            AvalanchePath::Name(name) => {
                 let ident = Ident::new(name, Span::call_site());
                 tokens.extend(quote! { :: #ident })
             }

@@ -9,8 +9,8 @@ had a `tracked!()` value that was updated.
 ## Handling impurity
 
 The tracked system relies on _purity_, or the idea that a component's output should only be the result of its input parameters. 
-Not doing that will lead to some issues. Take this first naive, impure attempt at introducing a random number to a component, using 
-the `rand` crate's `random` function, which uses thread-local state in its implementation. 
+Not doing that will lead to some issues. Take this first naive, impure attempt at introducing a random number to a 
+component, using the `rand` crate's `random` function, which uses thread-local state in its implementation. 
 
 Here, we'll try to show a random number, and generate a new one every time we click a button.
 
@@ -23,16 +23,18 @@ use rand::random;
 fn Random() -> View {
     let (_, trigger_update) = state(self, || ());
 
-    Div!(
+    Div(
+        self,
         [
-            Button!(
-                on_click: move |_| trigger_update.set(()),
+            Button(
+                self,
+                on_click = move |_| trigger_update.set(()),
                 [
-                    Text!("Generate new number")
+                    Text(self, "Generate new number")
                 ],
             ),
-            Div!([
-                Text!(random::<u16>().to_string())
+            Div(self, [
+                Text(self, random::<u16>().to_string())
             ]) 
         ]
     )
@@ -41,10 +43,10 @@ fn Random() -> View {
 However, if you try out the example for yourself, you'll notice that the number doesn't actually update. A reasonable explanation for this would be
 we're not actually modifying `trigger_update`'s state, or that its current value is equal to the previous one. However, calling a state setter _always_ 
 triggers a component rerender. Rather, the reason is that `random::<u16>()` is not `Tracked`, so it's considered a constant. This leads to an important rule: 
-a component's parameter will only update if it has a `tracked!()` call with an updated `Tracked` value. `Text!(random::<u16>())` doesn't have a `tracked!()`
+a component's parameter will only update if it has a `tracked!()` call with an updated `Tracked` value. `Text(self, random::<u16>().to_string())` doesn't have a `tracked!()`
 call, so it will never update.
 
-The issue here is that `random` is an impure function, but avalanche doesn't know that. The solution is to use hooks to introduce impurity, like we did with 
+The issue here is that `random` is an impure function, but avalanche doesn't know that. The solution is to use hooks to contain impurity, like we did with 
 the counter example.
 
 ```rust
@@ -56,16 +58,18 @@ use rand::random;
 fn Random() -> View {
     let (value, set_value) = state(self, || random::<u16>());
 
-    Div!(
+    Div(
+        self,
         [
-            Button!(
-                on_click: move |_| set_value.set(random()),
+            Button(
+                self,
+                on_click = move |_| set_value.set(random()),
                 [
-                    Text!("Generate new number")
+                    Text(self, "Generate new number")
                 ]
             ),
-            Div!([
-                Text!(tracked!(value).to_string())
+            Div(self, [
+                Text(self, tracked!(value).to_string())
             ]) 
         ]
     )
@@ -102,7 +106,7 @@ within the `set` or `update` methods.
 
 ### Avoid third-party macros
 
-Macros can lead to convenient code; for example, `Text!(format!("Hello, {} {}!", tracked!(title), tracked!(name)))` is a lot clearer than macro-free
+Macros can lead to convenient code; for example, `Text(self, format!("Hello, {} {}!", tracked!(title), tracked!(name)))` is a lot clearer than macro-free
 alternatives. However, when using non-`std` and `avalanche` macros, `#[component]` is unable to track their dependencies correctly, meaning
 parameters based on those macros may not update correctly. In the future, we may instead opt to consider those macros always updated (at the cost of significantly reduced efficiency), or offer some syntax to specify tracked values explicitly for them. Either way, we recommend you avoid those macros for now. 
 
@@ -118,10 +122,12 @@ here's a potential first attempt at rendering a list of dynamic children:
 #[component]
 fn List() -> View {
     let (items, update_items) = state(self, || vec![String::from("a")]);
-    Ul!(
-        tracked!(items).iter().map(|item| Li!(
-            key: item,
-            [Text!(item)]
+    Ul(
+        self,
+        tracked!(items).iter().map(|item| Li(
+            self,
+            key = item,
+            [Text(self, item)]
         )).collect::<Vec<_>>()
     )
 }
@@ -129,7 +135,7 @@ fn List() -> View {
 
 Here, we use the standard iterator methods `map` and `collect` to turn a `Vec` of strings into a `Vec` of `View`s.
 
-However, notice that in the component `Text!(item)`, the implicit `text` parameter has no `tracked!` call, so if we later 
+However, notice that in the component `Text(self, item)`, the implicit `text` parameter has no `tracked!` call, so if we later 
 update the element `"a"`, for example, that change won't be appropriately rendered. We can change that with the `store` hook,
 which enables storing state with fine-grained tracking. What that means is we can keep track of when specific elements of the
 state were last updated. This is possible with the `Tracked::new` method, which allows creating a tracked value with its wrapped
@@ -143,12 +149,14 @@ use avalanche::{store, Tracked};
 
 #[component]
 fn List() -> View {
-    let (items, update_items) = store(self, |gen| vec![Tracked::new(("a"), gen)]);
+    let (items, update_items) = store(self, |gen| vec![Tracked::new("a", gen)]);
 
-    Ul!(
-        tracked!(items).iter().map(|item| Li!(
-            key: tracked!(item),
-            [Text!(tracked!(item))]
+    Ul(
+        self,
+        tracked!(items).iter().map(|item| Li(
+            self,
+            key = tracked!(item),
+            [Text(self, tracked!(item))]
         )).collect::<Vec<_>>()
     )
 }
@@ -160,18 +168,20 @@ Now the `iter` method on `items` returns elements of type `Tracked<&String>` rat
 
 So far, this explanation has only applied previous concepts, but there's the important new concept of keys. Every avalanche component has a special `String` `key` parameter. Whenever a particular call site `Component!` in code may be called more than once, it is required to specify a key to disambiguate the multiple instantiations; this is enforced with a runtime panic if not specified. Note that the key must be added on the topmost level, so in our example above,
 ```rust,ignore
-Li!(
-    key: tracked!(item),
+Li(
+    self,
+    key = tracked!(item),
     [
-        Text!(tracked!(item))
+        Text(self, tracked!(item))
     ]
 )
 ```
 is good but this is not:
 ```rust,ignore
-Li!([
-    Text!(
-        key: tracked!(item),
+Li(self, [
+    Text(
+        self,
+        key = tracked!(item),
         tracked!(item)
     )
 ])

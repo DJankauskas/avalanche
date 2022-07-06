@@ -1,4 +1,4 @@
-use avalanche::{component, View, tracked, state};
+use avalanche::{component, state, tracked, View};
 use avalanche_web::components::{Button, Div, Text, H2};
 use wasm_bindgen::prelude::*;
 
@@ -13,16 +13,18 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 #[component]
 fn Counter() -> View {
     let (count, set_count) = state(self, || 0);
-    Div!([
-        H2!(
-            child: Text!("Counter!"),
-        ),
-        Button!(
-            on_click: move |_| set_count.update(|count| *count += 1),
-            child: Text!("+")
-        ),
-        Text!(tracked!(count).to_string())
-    ])
+    Div(
+        self,
+        [
+            H2(self, child = Text(self, "Counter!")),
+            Button(
+                self,
+                on_click = move |_| set_count.update(|count| *count += 1),
+                child = Text(self, "+"),
+            ),
+            Text(self, tracked!(count).to_string()),
+        ],
+    )
 }
 
 // This is like the `main` function, except for JavaScript.
@@ -32,6 +34,6 @@ pub fn main_js() {
     // It's disabled in release mode so it doesn't bloat up the file size.
     #[cfg(debug_assertions)]
     console_error_panic_hook::set_once();
-    
+
     avalanche_web::mount_to_body::<Counter>();
 }

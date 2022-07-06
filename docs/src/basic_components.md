@@ -3,20 +3,23 @@
 Components are the building blocks of `avalanche` apps.
 They're represented as functions since they're fundamentally meant to be pure:
 they take in inputs and describe a UI as their output. They're so fundamental that
-this tutorial is mostly a component tutorial. 
+this book is largely a component tutorial. 
 
 ## Creating components
 
 Though components are written as functions, `avalanche` implements some quality-of-life and performance features
-not possible with functions. If we call a component that takes no parameters called `Comp`, for example, we'll call
-it with `Comp!()`. These macro calls only work inside other components, and they return the `View` type.
+not possible with functions. This requires the use of specialized syntax.
+If we call a component that takes no parameters called `Comp`, for example, we'll call
+it with `Comp(self)`. These component calls only work within the bodies of other components, and they return the 
+`View` type.
 
 
 ## Passing parameters to components
 
 Most components have parameters, and they're named. For example, in the components below, we pass `href` by name. However, the last 
 parameter in a function definition can be supplied without a name as the last parameter in a call. 
-For `Text`, that's the `text` parameter, which takes a value that implements `ToString`. 
+For `Text`, that's the `text` parameter, which takes something convertible to a `Cow<'_, str>`, 
+meaning you can pass it either a `String` or a `&str`. 
 For every other `avalanche_web` component, the unnamed last parameter is `children`, which takes an `Into<Vec<View>>`.
 Below are two versions of a link component. One passes `text` and `children` explicitly, while the other does it implicitly, as is idiomatic. 
 
@@ -28,20 +31,22 @@ const FIRST_SITE: &str = "http://info.cern.ch/hypertext/WWW/TheProject.html";
 
 #[component]
 fn LinkExplicit() -> View {
-    A!(
-        href: FIRST_SITE,
-        children: [
-            Text!(text: "The first website")
+    A(
+        self,
+        href = FIRST_SITE,
+        children = [
+            Text(self, text = "The first website")
         ]
     )
 }
 
 #[component]
 fn LinkImplicit() -> View {
-    A!(
-        href: FIRST_SITE,
+    A(
+        self,
+        href = FIRST_SITE,
         [
-            Text!("The first website")
+            Text(self, "The first website")
         ]
     )
 }
@@ -63,10 +68,11 @@ use avalanche_web::components::{A, Text};
 
 #[component]
 fn Link(to: &str, text: &str) -> View {
-    A!(
-        href: tracked!(to),
+    A(
+        self,
+        href = tracked!(to),
         [
-            Text!(tracked!(text))
+            Text(self, tracked!(text))
         ]
     )
 }
@@ -87,22 +93,24 @@ use avalanche_web::components::{Text, Div};
 # 
 # #[component]
 # fn Link(to: &str, text: &str) -> View {
-#     A!(
-#         href: tracked!(to),
+#     A(
+#         self,
+#         href = tracked!(to),
 #         [
-#             Text!(tracked!(text))
+#             Text(self, tracked!(text))
 #         ]
 #     )
 # }
 
 #[component]
 fn Example() -> View {
-    Div!([
-        Link!(
-            to: "https://example.com",
-            text: "example.com"
+    Div(self, [
+        Link(
+            self,
+            to = "https://example.com",
+            text = "example.com"
         ),
-        Text!(" is a domain reserved for use in demos.")
+        Text(self, " is a domain reserved for use in demos.")
     ])
 }
 ```
@@ -117,14 +125,17 @@ When rendered, the above is equivalent to the HTML below.
 </div>
 ```
 
-Within component calls, parameter order does not matter, so we could've also called `Link!` with `to` and `text` swapped:
+Within component calls, parameter order does not matter (except for what the implict last parameter is), 
+so we could've also called `Link` with `to` and `text` swapped:
 ```rust,ignore
-Link!(
-    text: "example.com".into(),
-    to: "https://example.com".into()
+Link(
+    self,
+    text = "example.com".into(),
+    to = "https://example.com".into()
 )
 ```
 
 ## Parameter type restrictions
 
-All parameters must implement `Clone`. Note that all non-`mut` references implement `Clone`.
+All parameters must implement `Clone`. Note that all non-`mut` references implement `Clone`, making this restriction
+generally easy to deal with in practice.

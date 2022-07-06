@@ -9,9 +9,9 @@ but some have not been implemented yet. If you're missing one, please [file an i
 
 [Every global event](https://developer.mozilla.org/en-US/docs/Web/API/GlobalEventHandlers) is settable as a parameter
 on every non-`Text` `avalanche_web` component. Each event handling parameter takes a function of type `impl Fn(TypedEvent<E, C>)`
-where `E` is the `web_sys` type for the handler's event type and `C` is `web_sys`'s native type for the component's native `web_sys` type.
+where `E` is the `web_sys` type for the handler's event and `C` is `web_sys`'s native type for the component's native DOM element.
 
-Often, we don't need the event, so we omit it, hence closures like `on_click: move |_| ...`.
+Often, we don't need the event, so we omit it, hence closures like `on_click = move |_| ...`.
 
 ## Input elements
 
@@ -26,9 +26,10 @@ use avalanche_web::components::Input;
 fn ControlledInput() -> View {
     let (text, set_text) = state(self, || String::new());
 
-    Input!(
-        value: tracked!(text).clone(),
-        on_input: move |e| set_text.set(e.current_target().unwrap().value())
+    Input(
+        self,
+        value = tracked!(text).clone(),
+        on_input = move |e| set_text.set(e.current_target().unwrap().value())
     )
 }
 ```
