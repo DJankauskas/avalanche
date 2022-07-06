@@ -109,7 +109,7 @@ fn minimal() {
 
 #[component]
 fn MinimalNative() -> View {
-    Native!(name: "minimal", value: "a")
+    Native(self, name = "minimal", value = "a")
 }
 
 #[test]
@@ -127,14 +127,24 @@ fn minimal_native() {
 
 #[component]
 fn MinimalChildren() -> View {
-    Native!(
-        name: "minimal children",
+    Native(
+        self,
+        name = "minimal children",
         vec![
             ().into(),
-            Native!(name: "a"),
+            Native(self, name = "a"),
             ().into(),
-            Native!(name: "b", vec![Native!(name: "c", value: "nested child", on_click: || {})])
-        ]
+            Native(
+                self,
+                name = "b",
+                vec![Native(
+                    self,
+                    name = "c",
+                    value = "nested child",
+                    on_click = || {},
+                )],
+            ),
+        ],
     )
 }
 
@@ -172,7 +182,12 @@ fn minimal_children() {
 #[component]
 fn BasicStateEvent() -> View {
     let (status, set_status) = state(self, || "default");
-    Native!(name: "a", value: tracked!(status), on_click: move || set_status.set("clicked"))
+    Native(
+        self,
+        name = "a",
+        value = tracked!(status),
+        on_click = move || set_status.set("clicked"),
+    )
 }
 
 #[test]
@@ -197,22 +212,33 @@ fn RepeatHookCalls() -> View {
     let (c, _) = state(self, || "c");
     let (d, _) = state(self, || "d");
     let (e, _) = state(self, || "e");
-    
-    Native!(
-        name: "repeat", 
-        value: &format!("{}{}{}{}{}", tracked!(a), tracked!(b), tracked!(c), tracked!(d), tracked!(e)),
-        on_click: || set_a.set("")
+
+    Native(
+        self,
+        name = "repeat",
+        value = &format!(
+            "{}{}{}{}{}",
+            tracked!(a),
+            tracked!(b),
+            tracked!(c),
+            tracked!(d),
+            tracked!(e)
+        ),
+        on_click = || set_a.set(""),
     )
 }
 
 #[test]
 fn repeat_hook_calls() {
-    test::<RepeatHookCalls>(vec!["repeat"], vec![Repr{
-        name: "repeat".into(),
-        value: "bcde".into(),
-        has_on_click: true,
-        children: vec![],
-    }]);
+    test::<RepeatHookCalls>(
+        vec!["repeat"],
+        vec![Repr {
+            name: "repeat".into(),
+            value: "bcde".into(),
+            has_on_click: true,
+            children: vec![],
+        }],
+    );
 }
 
 #[component]
@@ -223,13 +249,26 @@ fn AddChildren() -> View {
         updated!(children),
         updated!(tracked!(children).iter().next().unwrap())
     );
-    Native!(
-        name: "a",
-        on_click: move || update_children.update(|children, gen| { children.insert(0, Tracked::new("b", gen)); children.insert(2, Tracked::new("d", gen)) }),
+    Native(
+        self,
+        name = "a",
+        on_click = move || {
+            update_children.update(|children, gen| {
+                children.insert(0, Tracked::new("b", gen));
+                children.insert(2, Tracked::new("d", gen))
+            })
+        },
         tracked!(children)
             .iter()
-            .map(|child| { println!("Child {} is updated: {}", tracked!(child), updated!(child)); Native!(key: tracked!(child).to_string(), name: tracked!(child)) })
-            .collect()
+            .map(|child| {
+                println!("Child {} is updated: {}", tracked!(child), updated!(child));
+                Native(
+                    self,
+                    key = tracked!(child).to_string(),
+                    name = tracked!(child),
+                )
+            })
+            .collect(),
     )
 }
 
@@ -267,19 +306,46 @@ fn add_children() {
 
 #[component]
 fn OptionalChildren() -> View {
-    let (children, update_children) = store(self, |gen| vec![Some(Tracked::new("a", gen)), None, Some(Tracked::new("c", gen))]);
-    
-    Native!(
-        name: "container",
-        on_click: || update_children.update(|children, gen| { children.swap(0,1); children[0] = Some(Tracked::new("b", gen)); children[2] = None; }),
-        tracked!(children).iter().map(|child| child.map(|child| Native!(name: tracked!(child), key: tracked!(child).to_string())).into()).collect()
+    let (children, update_children) = store(self, |gen| {
+        vec![
+            Some(Tracked::new("a", gen)),
+            None,
+            Some(Tracked::new("c", gen)),
+        ]
+    });
+
+    Native(
+        self,
+        name = "container",
+        on_click = || {
+            update_children.update(|children, gen| {
+                children.swap(0, 1);
+                children[0] = Some(Tracked::new("b", gen));
+                children[2] = None;
+            })
+        },
+        tracked!(children)
+            .iter()
+            .map(|child| {
+                child
+                    .map(|child| {
+                        Native(
+                            self,
+                            name = tracked!(child),
+                            key = tracked!(child).to_string(),
+                        )
+                    })
+                    .into()
+            })
+            .collect(),
     )
 }
 
 #[test]
 fn optional_children() {
-    test::<OptionalChildren>(vec!["container"], vec![
-        Repr {
+    test::<OptionalChildren>(
+        vec!["container"],
+        vec![Repr {
             name: "container".into(),
             value: String::new(),
             has_on_click: true,
@@ -295,25 +361,25 @@ fn optional_children() {
                     value: String::new(),
                     has_on_click: false,
                     children: vec![],
-                }
-            ]
-        }
-    ])
+                },
+            ],
+        }],
+    )
 }
 
 #[component]
 fn ReparentChild() -> View {
     let (cond, set_cond) = state(self, || true);
 
-    let child = Native!(name: "child");
+    let child = Native(self, name = "child");
 
     let changing_parent = if *tracked!(cond) {
-        Native!(name: "old_parent",  vec![child])
+        Native(self, name = "old_parent", vec![child])
     } else {
-        Native!(name: "new_parent", vec![child])
+        Native(self, name = "new_parent", vec![child])
     };
 
-    let changing_child = Native!(name: "changing_child");
+    let changing_child = Native(self, name = "changing_child");
 
     let (child_left, child_right) = if *tracked!(cond) {
         (None, Some(changing_child))
@@ -321,17 +387,24 @@ fn ReparentChild() -> View {
         (Some(changing_child), None)
     };
 
-    Native!(name: "container", on_click: || set_cond.set(false), vec![
-        tracked!(changing_parent),
-        Native!(
-            name: "stable_parent_left",
-            vec![tracked!(child_left).into()]
-        ),
-        Native!(
-            name: "stable_parent_right",
-            vec![tracked!(child_right).into()]
-        ),
-    ])
+    Native(
+        self,
+        name = "container",
+        on_click = || set_cond.set(false),
+        vec![
+            tracked!(changing_parent),
+            Native(
+                self,
+                name = "stable_parent_left",
+                vec![tracked!(child_left).into()],
+            ),
+            Native(
+                self,
+                name = "stable_parent_right",
+                vec![tracked!(child_right).into()],
+            ),
+        ],
+    )
 }
 
 #[test]

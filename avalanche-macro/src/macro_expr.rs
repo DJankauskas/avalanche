@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use syn::parse::{discouraged::Speculative, Parse, ParseStream};
+use syn::parse::{Parse, ParseStream};
 use syn::{punctuated::Punctuated};
 use syn::{Expr, Ident, Result, Token};
 
@@ -180,78 +180,6 @@ impl ToTokens for Try {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         self.expr.to_tokens(tokens);
         self.trailing_comma_token.to_tokens(tokens);
-    }
-}
-
-pub(crate) struct ComponentFieldValue {
-    pub name: Ident,
-    pub colon_token: Token![:],
-    pub value: Expr,
-}
-
-impl Parse for ComponentFieldValue {
-    fn parse(input: ParseStream) -> Result<Self> {
-        Ok(ComponentFieldValue {
-            name: input.parse()?,
-            colon_token: input.parse()?,
-            value: input.parse()?,
-        })
-    }
-}
-
-impl ToTokens for ComponentFieldValue {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        self.name.to_tokens(tokens);
-        self.colon_token.to_tokens(tokens);
-        self.value.to_tokens(tokens);
-    }
-}
-
-pub(crate) struct ComponentBuilder {
-    pub named_init: Punctuated<ComponentFieldValue, Token![,]>,
-    pub trailing_init: Option<Expr>,
-    _trailing_comma_token: Option<Token![,]>,
-}
-
-impl Parse for ComponentBuilder {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let mut named_init = Punctuated::new();
-        while !input.is_empty() {
-            let fork = input.fork();
-            let value = fork.parse::<ComponentFieldValue>();
-            if let Ok(value) = value {
-                input.advance_to(&fork);
-                named_init.push(value);
-                match input.parse() {
-                    Ok(comma_token) => named_init.push_punct(comma_token),
-                    Err(_) => {
-                        if input.is_empty() {
-                            return Ok(ComponentBuilder {
-                                named_init,
-                                trailing_init: None,
-                                _trailing_comma_token: None,
-                            });
-                        } else {
-                            return Err(input.error("expected , or )"));
-                        }
-                    }
-                }
-            } else {
-                break;
-            }
-        }
-        let trailing_init = input.parse().ok();
-        let trailing_comma_token = input.parse().ok();
-
-        if !input.is_empty() {
-            return Err(input.error("expected end of input"));
-        }
-
-        Ok(ComponentBuilder {
-            named_init,
-            trailing_init,
-            _trailing_comma_token: trailing_comma_token,
-        })
     }
 }
 

@@ -16,17 +16,18 @@ use avalanche_web::components::{Div, H2, Button, Text};
 
 #[component]
 fn Counter() -> View {
-    Div!([
-        H2!([
-            Text!("Counter!")
+    Div(self, [
+        H2(self, [
+            Text(self, "Counter!")
         ]),
-        Button!(
-            on_click: |_| todo!(),
+        Button(
+            self,
+            on_click = |_| todo!(),
             [
-                Text!("+")
+                Text(self, "+")
             ]
         ),
-        Text!(0.to_string())
+        Text(self, 0.to_string())
     ])
 }
 ```
@@ -48,17 +49,18 @@ use avalanche_web::components::{Div, H2, Button, Text};
 fn Counter() -> View {
     let (count, set_count) = state::<u64>(self, || 0);
 
-    Div!([
-        H2!([
-            Text!("Counter!")
+    Div(self, [
+        H2(self, [
+            Text(self, "Counter!")
         ]),
-        Button!(
-            on_click: move |_| set_count.update(|count| *count += 1),
+        Button(
+            self,
+            on_click = move |_| set_count.update(|count| *count += 1),
             [
-                Text!("+")
+                Text(self, "+")
             ]
         ),
-        Text!(tracked!(count).to_string())
+        Text(self, tracked!(count).to_string())
     ])
 }
 ```
@@ -73,7 +75,7 @@ current state (which we name `count`) and a setter, which we name `set_count`. T
 
 Note that the reference returned is _tracked_, so here we get `Tracked<&u64>` instead of `&u64`. This is where the tracked system becomes useful.
 Constant values, when passed into components, are never considered updated. But if we called `set_count.updated` since the last time we called `state`,
-on the next call of `state`, `count` will be marked as updated. That lets `avalanche` know we should update the text of `Text!(tracked!(count))` in the UI.
+on the next call of `state`, `count` will be marked as updated. That lets `avalanche` know we should update the text of `Text(self, tracked!(count).to_string())` in the UI.
 
 The state returned by each call site of `state` is unique. If we call `state` in two different places, their values aren't linked.
 
@@ -101,7 +103,7 @@ Want to render something only if a condition is true? Use an `if` statement:
 #[component]
 fn Conditional(cond: bool) -> View {
     if tracked!(cond) {
-        Text!("True!")
+        Text(self, "True!")
     } else {
         ().into()
     }
@@ -120,9 +122,11 @@ There is also a shorthand for this some component-or-nothing case:
 #
 #[component]
 fn Conditional(cond: bool) -> View {
-    tracked!(cond).then(|| Text!("True!")).into()
+    tracked!(cond).then(|| Text(self, "True!")).into()
 }
 ```
 
 That's equivalent to the above example. This uses [`bool`'s then method](https://doc.rust-lang.org/std/primitive.bool.html#method.then).
- `Option<View>` is also a special component, rendering the `View` in its `Some` case and rendering nothing in its `None` case. Of course, if you want more complex conditionals, you can use other control flow like `else if` and `match`.
+ `Option<View>` is also a special component, rendering the `View` in its `Some` case and rendering nothing in its 
+ `None` case. Of course, if you want more complex conditionals, you can use other control flow like `else if` and 
+ `match`.

@@ -31,7 +31,7 @@ pub use tracked::Tracked;
 /// # Basic usage
 /// The macro must be applied to a function that returns a [View](View).
 /// It generates a `struct` implementing [Component](Component) with the name of the input function, and a builder struct.
-/// The function's name should start with a capital ASCII character.
+/// The function's name must start with a capital ASCII character.
 ///
 /// The function can optionally take parameters. Parameter types must implement `Clone`.
 /// Parameters must have concrete types: they cannot use the `impl Trait`
@@ -47,11 +47,12 @@ pub use tracked::Tracked;
 /// const class: &str = "hello-world";
 ///
 /// #[component]
-/// pub fn HelloWorld(name: String) -> View {
-///     H1!(
-///         id: class,
-///         class: class,
-///         child: Text!(format!("Hi there, {}!", tracked!(name)))
+/// pub fn HelloWorld(name: &str) -> View {
+///     H1(
+///         self,
+///         id = class,
+///         class = class,
+///         child = Text(self, format!("Hi there, {}!", tracked!(name)))
 ///     )
 /// }
 /// ```

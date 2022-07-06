@@ -2,7 +2,7 @@ use proc_macro2::{Span, TokenStream};
 use std::{collections::HashSet, hash::Hash, ops::Deref, ops::DerefMut};
 use syn::{
     parse2, parse_quote, spanned::Spanned, token::Semi, Block, Expr, ExprPath, Ident, Lit, Pat,
-    PatType, Stmt,
+    PatType, Path, Stmt,
 };
 
 // Span line and column information with proc macros is not available on stable
@@ -14,15 +14,12 @@ use rand::random;
 
 use crate::{
     avalanche_path::get_avalanche_path,
-    macro_expr::{
-        ComponentBuilder, ComponentFieldValue, EncloseBody, ExprList, MatchesBody, Tracked, Try,
-        VecBody,
-    },
+    macro_expr::{EncloseBody, ExprList, MatchesBody, Tracked, Try, VecBody},
 };
 
 const EXPR_CONVERSION_ERROR: &str = "internal error: unable to process Expr within tracked";
 
-#[derive(Clone, Default, Debug, Eq, PartialEq)]
+#[derive(Clone, Default, Debug)]
 pub(crate) struct Dependencies(HashSet<Ident>);
 
 impl Dependencies {
@@ -48,6 +45,14 @@ impl DerefMut for Dependencies {
         &mut self.0
     }
 }
+
+impl PartialEq for Dependencies {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl Eq for Dependencies {}
 
 impl Hash for Dependencies {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -509,71 +514,8 @@ impl Function {
                 }
             }
             _ => {
-                if name.chars().next().unwrap().is_ascii_uppercase() {
-                    match mac.parse_body::<ComponentBuilder>() {
-                        Ok(mut init) => {
-                            if let Some(trailing_init) = init.trailing_init {
-                                init.named_init.push(ComponentFieldValue {
-                                    name: Ident::new("__last", trailing_init.span()),
-                                    colon_token: Default::default(),
-                                    value: trailing_init,
-                                })
-                            }
-                            let mut macro_dependencies = UnitDeps::new();
-                            let mut prop_construct_expr = Vec::with_capacity(init.named_init.len());
-
-                            for field in init.named_init.iter_mut() {
-                                let dependencies = self.expr(&mut field.value, nested_tracked);
-                                let field_ident = &field.name;
-                                let init_expr = &field.value;
-                                let field_span = field.span();
-                                let construct_expr = if dependencies.has_tracked {
-                                    quote_spanned! { field_span=>
-                                        #field_ident({
-                                            __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
-                                            #init_expr
-                                        },
-                                        {
-                                            *__avalanche_internal_outer_gen = ::std::cmp::max(*__avalanche_internal_outer_gen, __avalanche_internal_gen);
-                                            __avalanche_internal_gen
-
-                                        })
-                                    }
-                                } else {
-                                    quote_spanned! { field_span=>
-                                        #field_ident(#init_expr, #avalanche_path::tracked::Gen::escape_hatch_new(false))
-                                    }
-                                };
-                                prop_construct_expr.push(construct_expr);
-                                macro_dependencies.extend(dependencies.clone());
-                            }
-                            let type_path = &mac.path;
-                            // emulating Span information on stable
-                            // TODO: utilize actual Span info on nightly
-                            let line: u32 = random();
-                            let column: u32 = random();
-
-                            let transformed = parse_quote! {
-                                #avalanche_path::__internal_identity! {{
-                                    let __avalanche_internal_built = <<#type_path as #avalanche_path::Component>::Builder>::new();
-                                    let __avalanche_internal_outer_gen = &mut __avalanche_internal_gen;
-                                    let mut __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
-                                    #avalanche_path::vdom::render_child(
-                                        __avalanche_internal_built
-                                        #(.#prop_construct_expr)*
-                                        .build((#line, #column)),
-                                        &mut __avalanche_render_context
-                                    )
-                                }}
-                            };
-
-                            return (macro_dependencies, Some(transformed));
-                        }
-                        Err(err) => {
-                            abort!(mac, err.to_string());
-                        }
-                    };
-                };
+                // TODO: warn about use of unknown macros? They work poorly with tracked macro calls
+                // as inputs.
             }
         };
         (UnitDeps::new(), None)
@@ -619,6 +561,67 @@ impl Function {
         self.scopes.pop();
 
         (deps, output)
+    }
+
+    fn component(
+        &mut self,
+        call: syn::ExprCall,
+        path: &Path,
+        nested_tracked: bool,
+    ) -> (UnitDeps, Expr) {
+        let mut props = parse_component_call(call);
+
+        let mut component_dependencies = UnitDeps::new();
+        let mut prop_construct_expr = Vec::with_capacity(props.len());
+        let avalanche_path = get_avalanche_path();
+
+        // first prop must be the context `self`, which we skip
+        for prop in props.iter_mut() {
+            let dependencies = self.expr(&mut prop.value, nested_tracked);
+            let field_ident = &prop.name;
+            let init_expr = &prop.value;
+            let field_span = prop.value.span();
+
+            let construct_expr = if dependencies.has_tracked {
+                quote_spanned! { field_span=>
+                    #field_ident({
+                        __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
+                        #init_expr
+                    },
+                    {
+                        *__avalanche_internal_outer_gen = ::std::cmp::max(*__avalanche_internal_outer_gen, __avalanche_internal_gen);
+                        __avalanche_internal_gen
+
+                    })
+                }
+            } else {
+                quote_spanned! { field_span=>
+                    #field_ident(#init_expr, #avalanche_path::tracked::Gen::escape_hatch_new(false))
+                }
+            };
+            prop_construct_expr.push(construct_expr);
+            component_dependencies.extend(dependencies.clone());
+        }
+        // emulating Span information on stable
+        // TODO: utilize actual Span info on nightly
+        let line: u32 = random();
+        let column: u32 = random();
+
+        let transformed = parse_quote! {
+            {
+                let __avalanche_internal_built = <<#path as #avalanche_path::Component>::Builder>::new();
+                let __avalanche_internal_outer_gen = &mut __avalanche_internal_gen;
+                let mut __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
+                #avalanche_path::vdom::render_child(
+                    __avalanche_internal_built
+                    #(.#prop_construct_expr)*
+                    .build((#line, #column)),
+                    &mut __avalanche_render_context
+                )
+            }
+        };
+
+        (component_dependencies, transformed)
     }
 
     fn expr(&mut self, expr: &mut Expr, nested_tracked: bool) -> UnitDeps {
@@ -695,11 +698,22 @@ impl Function {
                 None => {}
             },
             Expr::Call(call) => {
-                let mut deps = self.expr(&mut call.func, nested_tracked);
-                for arg in call.args.iter_mut() {
-                    let arg_dep = self.expr(arg, nested_tracked);
-                    deps.extend(arg_dep);
-                }
+                let deps = match &*call.func {
+                    Expr::Path(path) if is_component(call, &path.path) => {
+                        let (deps, transformed) =
+                            self.component(call.clone(), &path.path, nested_tracked);
+                        *expr = transformed;
+                        deps
+                    }
+                    _ => {
+                        let mut deps = self.expr(&mut call.func, nested_tracked);
+                        for arg in call.args.iter_mut() {
+                            let arg_dep = self.expr(arg, nested_tracked);
+                            deps.extend(arg_dep);
+                        }
+                        deps
+                    }
+                };
 
                 dependencies = Some(deps);
             }
@@ -1168,4 +1182,60 @@ fn from_expr_numbered(lhs: &[&Expr], rhs: UnitDeps) -> Vec<Var> {
         vars.extend(from_expr(expr, rhs.clone()));
     }
     vars
+}
+
+/// Whether the given path and first parameter indicate a function call is a component call.
+/// True if the (qualified) identifier is not raw and begins with a capital ASCII character,
+fn is_component(call: &syn::ExprCall, path: &Path) -> bool {
+    let valid_name = path
+        .segments
+        .last()
+        .and_then(|last| last.ident.to_string().chars().next())
+        .map(|first_char| first_char.is_ascii_uppercase())
+        .unwrap_or(false);
+    let valid_self = call.args.first().map_or(false, |param| match param {
+        Expr::Path(path) => path.path.get_ident().map_or(false, |ident| ident == "self"),
+        _ => false,
+    });
+    valid_name && valid_self
+}
+struct ComponentProp {
+    name: Ident,
+    value: Expr,
+}
+
+fn parse_component_call(call: syn::ExprCall) -> Vec<ComponentProp> {
+    let mut props = Vec::with_capacity(call.args.len());
+    let args_len = call.args.len();
+    // Skip first parameter which is just context `self`
+    for (i, arg) in call.args.into_iter().enumerate().skip(1) {
+        match arg {
+            Expr::Assign(assign) => match *assign.left {
+                Expr::Path(path) => match path.path.get_ident() {
+                    Some(ident) => props.push(ComponentProp {
+                        name: ident.clone(),
+                        value: *assign.right,
+                    }),
+                    None => abort!(
+                        path,
+                        "expected an identifer referring to a component property"
+                    ),
+                },
+                left => abort!(
+                    left,
+                    "expected an identifer referring to a component property"
+                ),
+            },
+            trailing_prop if i + 1 == args_len => props.push(ComponentProp {
+                name: Ident::new("__last", trailing_prop.span()),
+                value: trailing_prop,
+            }),
+            illegal_prop => abort!(
+                illegal_prop,
+                "expected a component property in the form of `prop_name=value_expr`";
+                note = "an unnamed component property is only allowed as the last argument of a component call"
+            ),
+        }
+    }
+    props
 }

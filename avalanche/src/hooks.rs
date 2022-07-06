@@ -87,15 +87,16 @@ fn internal_state<'a, T: 'static, S: 'static>(
 /// #[component]
 /// fn Counter() -> View {
 ///     let (count, set_count) = state(self, || 0);
-///     Div!([
-///         H2!([
-///             Text!("Counter!"),
+///     Div(self, [
+///         H2(self, [
+///             Text(self, "Counter!"),
 ///         ]),
-///         Button!(
-///             on_click: move |_| set_count.update(|count| *count += 1),
-///             child: Text!("+")
+///         Button(
+///             self,
+///             on_click = move |_| set_count.update(|count| *count += 1),
+///             child = Text(self, "+")
 ///         ),
-///         Text!(tracked!(count).to_string())
+///         Text(self, tracked!(count).to_string())
 ///     ])
 /// }
 /// ```
@@ -176,7 +177,10 @@ impl<T: 'static, S: 'static> InternalStateSetter<T, S> {
                             return;
                         }
                     };
-                    let shared_box = vnode.state.get_mut(&location_copy).expect("state at hook location");
+                    let shared_box = vnode
+                        .state
+                        .get_mut(&location_copy)
+                        .expect("state at hook location");
                     let any_mut = shared_box.get_mut();
                     let state = any_mut
                         .downcast_mut::<InternalState<T, S>>()
@@ -243,14 +247,20 @@ impl<T> StateSetter<T> {
 ///     let children = tracked!(data)
 ///         .iter()
 ///         .enumerate()
-///         .map(|(n, text)| Text!(key: n.to_string(), tracked!(text))).collect::<Vec<_>>();
+///         .map(|(n, text)| Text(
+///                             self,
+///                             key = n.to_string(),
+///                             tracked!(text)
+///                         )
+///         ).collect::<Vec<_>>();
 ///
-///     Div!([
-///         Button!(
-///             on_click: move |_| update_data.update(|data, gen| data.push(Tracked::new("another child", gen))),
-///             child: Text!("+")
+///     Div(self, [
+///         Button(
+///             self,
+///             on_click = move |_| update_data.update(|data, gen| data.push(Tracked::new("another child", gen))),
+///             child = Text(self, "+")
 ///         ),
-///         Div!(tracked!(children))
+///         Div(self, tracked!(children))
 ///     ])
 /// }
 /// ```

@@ -4,7 +4,9 @@ use avalanche::renderer::{
 };
 use avalanche::tracked::Gen;
 use avalanche::vdom::Root;
-use avalanche::{component, enclose, tracked, tracked_keyed, updated, updated_keyed, Component, Tracked, View};
+use avalanche::{
+    component, enclose, tracked, tracked_keyed, updated, updated_keyed, Component, Tracked, View,
+};
 
 /// A renderer that does nothing, to test render functions only
 struct TestRenderer;
@@ -163,35 +165,38 @@ fn Test() -> View {
     let b = Tracked::new(0u8, gen_not_updated);
     let c = Tracked::new(0u8, gen_updated);
 
-    TestChildren!(vec![
-        Bare!(),
-        Identity!(a: tracked!(a)),
-        Local!(a: tracked!(a), b: tracked!(b)),
-        ArrayIndex!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
-        Binary!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
-        Block!(a: tracked!(a), b: tracked!(b)),
-        FnCall!(a: tracked!(a)),
-        Cast!(a: tracked!(a)),
-        Closure!(a: tracked!(a), b: tracked!(b)),
-        Field!(a: (tracked!(a), tracked!(a)), b: tracked!(b)),
-        If!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
-        Loop!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
-        Match!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
-        Unary!(a: tracked!(a)),
-        Tuple!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
-        Macros!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
-        NestedBlocks!(a: tracked!(a)),
-        NestedTracked!(a: tracked!(a), b: tracked!(b)),
-        Updated!(a: tracked!(a), b: tracked!(b), c: tracked!(c)),
-        BasicRef!(a: &tracked!(a)),
-        ComplexRef!(a: &tracked!(a), bc: &[&tracked!(b), &tracked!(c)]),
-        ComplexTrait!(b: &tracked!(&b)),
-        ParameterizedRef!(a: vec![&tracked!(a)]),
-        ExplicitLifetime!(b: &tracked!(b)),
-        MixedLifetimes!(a: &tracked!(a), c: &tracked!(c)),
-        UnusedLifetime!(a: tracked!(a)),
-        PubCrate!(a: tracked!(a), tracked!(b))
-    ])
+    TestChildren(
+        self,
+        vec![
+            Bare(self),
+            Identity(self, a = tracked!(a)),
+            Local(self, a = tracked!(a), b = tracked!(b)),
+            ArrayIndex(self, a = tracked!(a), b = tracked!(b), c = tracked!(c)),
+            Binary(self, a = tracked!(a), b = tracked!(b), c = tracked!(c)),
+            Block(self, a = tracked!(a), b = tracked!(b)),
+            FnCall(self, a = tracked!(a)),
+            Cast(self, a = tracked!(a)),
+            Closure(self, a = tracked!(a), b = tracked!(b)),
+            Field(self, a = (tracked!(a), tracked!(a)), b = tracked!(b)),
+            If(self, a = tracked!(a), b = tracked!(b), c = tracked!(c)),
+            Loop(self, a = tracked!(a), b = tracked!(b), c = tracked!(c)),
+            Match(self, a = tracked!(a), b = tracked!(b), c = tracked!(c)),
+            Unary(self, a = tracked!(a)),
+            Tuple(self, a = tracked!(a), b = tracked!(b), c = tracked!(c)),
+            Macros(self, a = tracked!(a), b = tracked!(b), c = tracked!(c)),
+            NestedBlocks(self, a = tracked!(a)),
+            NestedTracked(self, a = tracked!(a), b = tracked!(b)),
+            Updated(self, a = tracked!(a), b = tracked!(b), c = tracked!(c)),
+            BasicRef(self, a = &tracked!(a)),
+            ComplexRef(self, a = &tracked!(a), bc = &[&tracked!(b), &tracked!(c)]),
+            ComplexTrait(self, b = &tracked!(&b)),
+            ParameterizedRef(self, a = vec![&tracked!(a)]),
+            ExplicitLifetime(self, b = &tracked!(b)),
+            MixedLifetimes(self, a = &tracked!(a), c = &tracked!(c)),
+            UnusedLifetime(self, a = tracked!(a)),
+            PubCrate(self, a = tracked!(a), tracked!(b)),
+        ],
+    )
 }
 
 #[derive(Default)]
@@ -221,7 +226,7 @@ fn Local(a: u8, b: u8) -> View {
 
     let (a, c) = (tracked!(a), tracked!(b));
     assert!(updated!(a) && updated!(c));
-    
+
     let (a, c): (Tracked<u8>, Tracked<u8>) = (tracked!(a), tracked!(b));
     assert!(updated!(a) && updated!(c));
 
@@ -318,7 +323,7 @@ fn Closure(a: u8, b: u8) -> View {
             updated!(a);
         }
     };
-    assert!(updated!(a));
+    assert!(updated!(closure3));
 
     let closure4 = || {
         if true {

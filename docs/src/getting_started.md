@@ -24,8 +24,8 @@ use avalanche_web::components::{H1, Text};
 
 #[component]
 fn HelloWorld() -> View {
-    H1!([
-        Text!("Hello world!")
+    H1(self, [
+        Text(self, "Hello world!")
     ])
 }
 ```
@@ -37,24 +37,25 @@ Finally, add this call in `main_js`:
 # 
 # #[component]
 # fn HelloWorld() -> View {
-#     H1!([
-#         Text!("Hello world!")
+#     H1(self, [
+#         Text(self, "Hello world!")
 #     ])
 # }
-# fn dont_run() {
+# fn main_js() {
 avalanche_web::mount_to_body::<HelloWorld>();
 # }
 ```
 
-Now, to see your app, run `npm start` within the `my_app_name` directory. If you haven't gotten any compiler errors,
-you should see your first `avalanche` and `avalanche_web` web!
+Now, to see your app, run `npm start` within the `my-app-name` directory. If you haven't gotten any compiler errors,
+you should see your first `avalanche` and `avalanche_web` web app!
 
 ## Explaining hello world
 
 So what exactly is going on in the code above? Well, the most important aspect here is the `#[component]` attribute macro. 
 `#[component]` accepts a function returning a `View`, which is a wrapper around an instance of a component. 
-Within a function marked with `#[component]`, macros whose names begin with a capital ASCII character are interpreted as 
-special component calls. `Text` is a component with a single parameter, so by specifying that we get an instance 
+Within a function marked with `#[component]`, functions whose names begin with a capital ASCII character
+and accept the component context `self` are interpreted as special component calls. 
+`Text` is a component with a single parameter, so by specifying that we get an instance 
 of `View` with that text component. `H1` can take an array of children, so this component here is equivalent to writing
 this raw HTML:
 ```html
