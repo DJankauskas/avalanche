@@ -203,37 +203,34 @@ use avalanche_web::components::{H1, Text};
 
 #[component]
 fn HelloWorld() -&gt; View {
-    H1!([
-        Text!(&quot;Hello world!&quot;)
+    H1(self, [
+        Text(self, &quot;Hello world!&quot;)
     ])
 }
 <span class="boring">}
 </span></code></pre></pre>
 <p>Finally, add this call in <code>main_js</code>:</p>
-<pre><pre class="playground"><code class="language-rust">
-<span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span><span class="boring">use avalanche::{component, View};
+<pre><pre class="playground"><code class="language-rust"><span class="boring">use avalanche::{component, View};
 </span><span class="boring">use avalanche_web::components::{H1, Text};
 </span><span class="boring">
 </span><span class="boring">#[component]
 </span><span class="boring">fn HelloWorld() -&gt; View {
-</span><span class="boring">    H1!([
-</span><span class="boring">        Text!(&quot;Hello world!&quot;)
+</span><span class="boring">    H1(self, [
+</span><span class="boring">        Text(self, &quot;Hello world!&quot;)
 </span><span class="boring">    ])
 </span><span class="boring">}
-</span><span class="boring">fn dont_run() {
+</span><span class="boring">fn main_js() {
 </span>avalanche_web::mount_to_body::&lt;HelloWorld&gt;();
 <span class="boring">}
-</span><span class="boring">}
 </span></code></pre></pre>
-<p>Now, to see your app, run <code>npm start</code> within the <code>my_app_name</code> directory. If you haven't gotten any compiler errors,
-you should see your first <code>avalanche</code> and <code>avalanche_web</code> web!</p>
+<p>Now, to see your app, run <code>npm start</code> within the <code>my-app-name</code> directory. If you haven't gotten any compiler errors,
+you should see your first <code>avalanche</code> and <code>avalanche_web</code> web app!</p>
 <h2><a class="header" href="#explaining-hello-world" id="explaining-hello-world">Explaining hello world</a></h2>
 <p>So what exactly is going on in the code above? Well, the most important aspect here is the <code>#[component]</code> attribute macro. 
 <code>#[component]</code> accepts a function returning a <code>View</code>, which is a wrapper around an instance of a component. 
-Within a function marked with <code>#[component]</code>, macros whose names begin with a capital ASCII character are interpreted as 
-special component calls. <code>Text</code> is a component with a single parameter, so by specifying that we get an instance 
+Within a function marked with <code>#[component]</code>, functions whose names begin with a capital ASCII character
+and accept the component context <code>self</code> are interpreted as special component calls. 
+<code>Text</code> is a component with a single parameter, so by specifying that we get an instance 
 of <code>View</code> with that text component. <code>H1</code> can take an array of children, so this component here is equivalent to writing
 this raw HTML:</p>
 <pre><code class="language-html">&lt;h1&gt;
@@ -246,15 +243,18 @@ renders our <code>HelloWorld</code> component within the <code>&lt;body&gt;&lt;/
 <p>Components are the building blocks of <code>avalanche</code> apps.
 They're represented as functions since they're fundamentally meant to be pure:
 they take in inputs and describe a UI as their output. They're so fundamental that
-this tutorial is mostly a component tutorial. </p>
+this book is largely a component tutorial. </p>
 <h2><a class="header" href="#creating-components" id="creating-components">Creating components</a></h2>
 <p>Though components are written as functions, <code>avalanche</code> implements some quality-of-life and performance features
-not possible with functions. If we call a component that takes no parameters called <code>Comp</code>, for example, we'll call
-it with <code>Comp!()</code>. These macro calls only work inside other components, and they return the <code>View</code> type.</p>
+not possible with functions. This requires the use of specialized syntax.
+If we call a component that takes no parameters called <code>Comp</code>, for example, we'll call
+it with <code>Comp(self)</code>. These component calls only work within the bodies of other components, and they return the 
+<code>View</code> type.</p>
 <h2><a class="header" href="#passing-parameters-to-components" id="passing-parameters-to-components">Passing parameters to components</a></h2>
 <p>Most components have parameters, and they're named. For example, in the components below, we pass <code>href</code> by name. However, the last 
 parameter in a function definition can be supplied without a name as the last parameter in a call. 
-For <code>Text</code>, that's the <code>text</code> parameter, which takes a value that implements <code>ToString</code>. 
+For <code>Text</code>, that's the <code>text</code> parameter, which takes something convertible to a <code>Cow&lt;'_, str&gt;</code>, 
+meaning you can pass it either a <code>String</code> or a <code>&amp;str</code>. 
 For every other <code>avalanche_web</code> component, the unnamed last parameter is <code>children</code>, which takes an <code>Into&lt;Vec&lt;View&gt;&gt;</code>.
 Below are two versions of a link component. One passes <code>text</code> and <code>children</code> explicitly, while the other does it implicitly, as is idiomatic. </p>
 <pre><pre class="playground"><code class="language-rust">
@@ -267,20 +267,22 @@ const FIRST_SITE: &amp;str = &quot;http://info.cern.ch/hypertext/WWW/TheProject.
 
 #[component]
 fn LinkExplicit() -&gt; View {
-    A!(
-        href: FIRST_SITE,
-        children: [
-            Text!(text: &quot;The first website&quot;)
+    A(
+        self,
+        href = FIRST_SITE,
+        children = [
+            Text(self, text = &quot;The first website&quot;)
         ]
     )
 }
 
 #[component]
 fn LinkImplicit() -&gt; View {
-    A!(
-        href: FIRST_SITE,
+    A(
+        self,
+        href = FIRST_SITE,
         [
-            Text!(&quot;The first website&quot;)
+            Text(self, &quot;The first website&quot;)
         ]
     )
 }
@@ -301,10 +303,11 @@ use avalanche_web::components::{A, Text};
 
 #[component]
 fn Link(to: &amp;str, text: &amp;str) -&gt; View {
-    A!(
-        href: tracked!(to),
+    A(
+        self,
+        href = tracked!(to),
         [
-            Text!(tracked!(text))
+            Text(self, tracked!(text))
         ]
     )
 }
@@ -325,22 +328,24 @@ use avalanche_web::components::{Text, Div};
 </span><span class="boring">
 </span><span class="boring">#[component]
 </span><span class="boring">fn Link(to: &amp;str, text: &amp;str) -&gt; View {
-</span><span class="boring">    A!(
-</span><span class="boring">        href: tracked!(to),
+</span><span class="boring">    A(
+</span><span class="boring">        self,
+</span><span class="boring">        href = tracked!(to),
 </span><span class="boring">        [
-</span><span class="boring">            Text!(tracked!(text))
+</span><span class="boring">            Text(self, tracked!(text))
 </span><span class="boring">        ]
 </span><span class="boring">    )
 </span><span class="boring">}
 </span>
 #[component]
 fn Example() -&gt; View {
-    Div!([
-        Link!(
-            to: &quot;https://example.com&quot;,
-            text: &quot;example.com&quot;
+    Div(self, [
+        Link(
+            self,
+            to = &quot;https://example.com&quot;,
+            text = &quot;example.com&quot;
         ),
-        Text!(&quot; is a domain reserved for use in demos.&quot;)
+        Text(self, &quot; is a domain reserved for use in demos.&quot;)
     ])
 }
 <span class="boring">}
@@ -353,14 +358,17 @@ fn Example() -&gt; View {
     &amp;nbsp;is a domain reserved for use in demos.
 &lt;/div&gt;
 </code></pre>
-<p>Within component calls, parameter order does not matter, so we could've also called <code>Link!</code> with <code>to</code> and <code>text</code> swapped:</p>
-<pre><code class="language-rust ignore">Link!(
-    text: &quot;example.com&quot;.into(),
-    to: &quot;https://example.com&quot;.into()
+<p>Within component calls, parameter order does not matter (except for what the implict last parameter is), 
+so we could've also called <code>Link</code> with <code>to</code> and <code>text</code> swapped:</p>
+<pre><code class="language-rust ignore">Link(
+    self,
+    text = &quot;example.com&quot;.into(),
+    to = &quot;https://example.com&quot;.into()
 )
 </code></pre>
 <h2><a class="header" href="#parameter-type-restrictions" id="parameter-type-restrictions">Parameter type restrictions</a></h2>
-<p>All parameters must implement <code>Clone</code>. Note that all non-<code>mut</code> references implement <code>Clone</code>.</p>
+<p>All parameters must implement <code>Clone</code>. Note that all non-<code>mut</code> references implement <code>Clone</code>, making this restriction
+generally easy to deal with in practice.</p>
 <h1><a class="header" href="#hooks-state-and-control-flow" id="hooks-state-and-control-flow">Hooks, State, and Control Flow</a></h1>
 <p>Earlier, we described components as pure functions. Hooks allow us 
 to introduce external data, state, and other impure data into our components.</p>
@@ -376,17 +384,18 @@ use avalanche_web::components::{Div, H2, Button, Text};
 
 #[component]
 fn Counter() -&gt; View {
-    Div!([
-        H2!([
-            Text!(&quot;Counter!&quot;)
+    Div(self, [
+        H2(self, [
+            Text(self, &quot;Counter!&quot;)
         ]),
-        Button!(
-            on_click: |_| todo!(),
+        Button(
+            self,
+            on_click = |_| todo!(),
             [
-                Text!(&quot;+&quot;)
+                Text(self, &quot;+&quot;)
             ]
         ),
-        Text!(0.to_string())
+        Text(self, 0.to_string())
     ])
 }
 <span class="boring">}
@@ -407,17 +416,18 @@ use avalanche_web::components::{Div, H2, Button, Text};
 fn Counter() -&gt; View {
     let (count, set_count) = state::&lt;u64&gt;(self, || 0);
 
-    Div!([
-        H2!([
-            Text!(&quot;Counter!&quot;)
+    Div(self, [
+        H2(self, [
+            Text(self, &quot;Counter!&quot;)
         ]),
-        Button!(
-            on_click: move |_| set_count.update(|count| *count += 1),
+        Button(
+            self,
+            on_click = move |_| set_count.update(|count| *count += 1),
             [
-                Text!(&quot;+&quot;)
+                Text(self, &quot;+&quot;)
             ]
         ),
-        Text!(tracked!(count).to_string())
+        Text(self, tracked!(count).to_string())
     ])
 }
 <span class="boring">}
@@ -430,7 +440,7 @@ current state (which we name <code>count</code>) and a setter, which we name <co
 <code>*count += 1</code>, updating the state and causing the component to be rerendered. </p>
 <p>Note that the reference returned is <em>tracked</em>, so here we get <code>Tracked&lt;&amp;u64&gt;</code> instead of <code>&amp;u64</code>. This is where the tracked system becomes useful.
 Constant values, when passed into components, are never considered updated. But if we called <code>set_count.updated</code> since the last time we called <code>state</code>,
-on the next call of <code>state</code>, <code>count</code> will be marked as updated. That lets <code>avalanche</code> know we should update the text of <code>Text!(tracked!(count))</code> in the UI.</p>
+on the next call of <code>state</code>, <code>count</code> will be marked as updated. That lets <code>avalanche</code> know we should update the text of <code>Text(self, tracked!(count).to_string())</code> in the UI.</p>
 <p>The state returned by each call site of <code>state</code> is unique. If we call <code>state</code> in two different places, their values aren't linked.</p>
 <blockquote>
 <p>If you've used React before, you might be familiar with the rules of hooks. Those don't apply here:
@@ -454,7 +464,7 @@ Rust values to use normal control flow instead.</p>
 </span>#[component]
 fn Conditional(cond: bool) -&gt; View {
     if tracked!(cond) {
-        Text!(&quot;True!&quot;)
+        Text(self, &quot;True!&quot;)
     } else {
         ().into()
     }
@@ -474,12 +484,14 @@ fn Conditional(cond: bool) -&gt; View {
 </span><span class="boring">
 </span>#[component]
 fn Conditional(cond: bool) -&gt; View {
-    tracked!(cond).then(|| Text!(&quot;True!&quot;)).into()
+    tracked!(cond).then(|| Text(self, &quot;True!&quot;)).into()
 }
 <span class="boring">}
 </span></code></pre></pre>
 <p>That's equivalent to the above example. This uses <a href="https://doc.rust-lang.org/std/primitive.bool.html#method.then"><code>bool</code>'s then method</a>.
-<code>Option&lt;View&gt;</code> is also a special component, rendering the <code>View</code> in its <code>Some</code> case and rendering nothing in its <code>None</code> case. Of course, if you want more complex conditionals, you can use other control flow like <code>else if</code> and <code>match</code>.</p>
+<code>Option&lt;View&gt;</code> is also a special component, rendering the <code>View</code> in its <code>Some</code> case and rendering nothing in its 
+<code>None</code> case. Of course, if you want more complex conditionals, you can use other control flow like <code>else if</code> and 
+<code>match</code>.</p>
 <h1><a class="header" href="#tracking" id="tracking">Tracking</a></h1>
 <p>The previous chapter showed how even with state, we can write our UI declaratively. But how, exactly, does this work?
 In theory, <code>avalanche</code> could rerender our entire app on every state change, but in practice, that's often too inefficient.
@@ -488,8 +500,8 @@ Instead, <code>avalanche</code> uses the tracked system. Parameters and many hoo
 had a <code>tracked!()</code> value that was updated.</p>
 <h2><a class="header" href="#handling-impurity" id="handling-impurity">Handling impurity</a></h2>
 <p>The tracked system relies on <em>purity</em>, or the idea that a component's output should only be the result of its input parameters. 
-Not doing that will lead to some issues. Take this first naive, impure attempt at introducing a random number to a component, using 
-the <code>rand</code> crate's <code>random</code> function, which uses thread-local state in its implementation. </p>
+Not doing that will lead to some issues. Take this first naive, impure attempt at introducing a random number to a 
+component, using the <code>rand</code> crate's <code>random</code> function, which uses thread-local state in its implementation. </p>
 <p>Here, we'll try to show a random number, and generate a new one every time we click a button.</p>
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
@@ -502,16 +514,18 @@ the <code>rand</code> crate's <code>random</code> function, which uses thread-lo
 fn Random() -&gt; View {
     let (_, trigger_update) = state(self, || ());
 
-    Div!(
+    Div(
+        self,
         [
-            Button!(
-                on_click: move |_| trigger_update.set(()),
+            Button(
+                self,
+                on_click = move |_| trigger_update.set(()),
                 [
-                    Text!(&quot;Generate new number&quot;)
+                    Text(self, &quot;Generate new number&quot;)
                 ],
             ),
-            Div!([
-                Text!(random::&lt;u16&gt;().to_string())
+            Div(self, [
+                Text(self, random::&lt;u16&gt;().to_string())
             ]) 
         ]
     )
@@ -521,9 +535,9 @@ fn Random() -&gt; View {
 <p>However, if you try out the example for yourself, you'll notice that the number doesn't actually update. A reasonable explanation for this would be
 we're not actually modifying <code>trigger_update</code>'s state, or that its current value is equal to the previous one. However, calling a state setter <em>always</em> 
 triggers a component rerender. Rather, the reason is that <code>random::&lt;u16&gt;()</code> is not <code>Tracked</code>, so it's considered a constant. This leads to an important rule: 
-a component's parameter will only update if it has a <code>tracked!()</code> call with an updated <code>Tracked</code> value. <code>Text!(random::&lt;u16&gt;())</code> doesn't have a <code>tracked!()</code>
+a component's parameter will only update if it has a <code>tracked!()</code> call with an updated <code>Tracked</code> value. <code>Text(self, random::&lt;u16&gt;().to_string())</code> doesn't have a <code>tracked!()</code>
 call, so it will never update.</p>
-<p>The issue here is that <code>random</code> is an impure function, but avalanche doesn't know that. The solution is to use hooks to introduce impurity, like we did with 
+<p>The issue here is that <code>random</code> is an impure function, but avalanche doesn't know that. The solution is to use hooks to contain impurity, like we did with 
 the counter example.</p>
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
@@ -536,16 +550,18 @@ the counter example.</p>
 fn Random() -&gt; View {
     let (value, set_value) = state(self, || random::&lt;u16&gt;());
 
-    Div!(
+    Div(
+        self,
         [
-            Button!(
-                on_click: move |_| set_value.set(random()),
+            Button(
+                self,
+                on_click = move |_| set_value.set(random()),
                 [
-                    Text!(&quot;Generate new number&quot;)
+                    Text(self, &quot;Generate new number&quot;)
                 ]
             ),
-            Div!([
-                Text!(tracked!(value).to_string())
+            Div(self, [
+                Text(self, tracked!(value).to_string())
             ]) 
         ]
     )
@@ -570,7 +586,7 @@ that <code>avalanche</code> is not aware of, leading to stale values displayed o
 if they are updated outside of hook functionality. When using interior mutability, then, make sure to wrap it in <code>state</code>, and perform updates 
 within the <code>set</code> or <code>update</code> methods.</p>
 <h3><a class="header" href="#avoid-third-party-macros" id="avoid-third-party-macros">Avoid third-party macros</a></h3>
-<p>Macros can lead to convenient code; for example, <code>Text!(format!(&quot;Hello, {} {}!&quot;, tracked!(title), tracked!(name)))</code> is a lot clearer than macro-free
+<p>Macros can lead to convenient code; for example, <code>Text(self, format!(&quot;Hello, {} {}!&quot;, tracked!(title), tracked!(name)))</code> is a lot clearer than macro-free
 alternatives. However, when using non-<code>std</code> and <code>avalanche</code> macros, <code>#[component]</code> is unable to track their dependencies correctly, meaning
 parameters based on those macros may not update correctly. In the future, we may instead opt to consider those macros always updated (at the cost of significantly reduced efficiency), or offer some syntax to specify tracked values explicitly for them. Either way, we recommend you avoid those macros for now. </p>
 <h2><a class="header" href="#rendering-dynamic-lists" id="rendering-dynamic-lists">Rendering dynamic lists</a></h2>
@@ -585,17 +601,19 @@ here's a potential first attempt at rendering a list of dynamic children:</p>
 </span>#[component]
 fn List() -&gt; View {
     let (items, update_items) = state(self, || vec![String::from(&quot;a&quot;)]);
-    Ul!(
-        tracked!(items).iter().map(|item| Li!(
-            key: item,
-            [Text!(item)]
+    Ul(
+        self,
+        tracked!(items).iter().map(|item| Li(
+            self,
+            key = item,
+            [Text(self, item)]
         )).collect::&lt;Vec&lt;_&gt;&gt;()
     )
 }
 <span class="boring">}
 </span></code></pre></pre>
 <p>Here, we use the standard iterator methods <code>map</code> and <code>collect</code> to turn a <code>Vec</code> of strings into a <code>Vec</code> of <code>View</code>s.</p>
-<p>However, notice that in the component <code>Text!(item)</code>, the implicit <code>text</code> parameter has no <code>tracked!</code> call, so if we later 
+<p>However, notice that in the component <code>Text(self, item)</code>, the implicit <code>text</code> parameter has no <code>tracked!</code> call, so if we later 
 update the element <code>&quot;a&quot;</code>, for example, that change won't be appropriately rendered. We can change that with the <code>store</code> hook,
 which enables storing state with fine-grained tracking. What that means is we can keep track of when specific elements of the
 state were last updated. This is possible with the <code>Tracked::new</code> method, which allows creating a tracked value with its wrapped
@@ -610,12 +628,14 @@ us to create and modify tracked values.</p>
 
 #[component]
 fn List() -&gt; View {
-    let (items, update_items) = store(self, |gen| vec![Tracked::new((&quot;a&quot;), gen)]);
+    let (items, update_items) = store(self, |gen| vec![Tracked::new(&quot;a&quot;, gen)]);
 
-    Ul!(
-        tracked!(items).iter().map(|item| Li!(
-            key: tracked!(item),
-            [Text!(tracked!(item))]
+    Ul(
+        self,
+        tracked!(items).iter().map(|item| Li(
+            self,
+            key = tracked!(item),
+            [Text(self, tracked!(item))]
         )).collect::&lt;Vec&lt;_&gt;&gt;()
     )
 }
@@ -624,17 +644,19 @@ fn List() -&gt; View {
 <p>Now the <code>iter</code> method on <code>items</code> returns elements of type <code>Tracked&lt;&amp;String&gt;</code> rather than <code>&amp;String</code>.</p>
 <h3><a class="header" href="#keys" id="keys">Keys</a></h3>
 <p>So far, this explanation has only applied previous concepts, but there's the important new concept of keys. Every avalanche component has a special <code>String</code> <code>key</code> parameter. Whenever a particular call site <code>Component!</code> in code may be called more than once, it is required to specify a key to disambiguate the multiple instantiations; this is enforced with a runtime panic if not specified. Note that the key must be added on the topmost level, so in our example above,</p>
-<pre><code class="language-rust ignore">Li!(
-    key: tracked!(item),
+<pre><code class="language-rust ignore">Li(
+    self,
+    key = tracked!(item),
     [
-        Text!(tracked!(item))
+        Text(self, tracked!(item))
     ]
 )
 </code></pre>
 <p>is good but this is not:</p>
-<pre><code class="language-rust ignore">Li!([
-    Text!(
-        key: tracked!(item),
+<pre><code class="language-rust ignore">Li(self, [
+    Text(
+        self,
+        key = tracked!(item),
         tracked!(item)
     )
 ])
@@ -646,8 +668,8 @@ but some have not been implemented yet. If you're missing one, please <a href="h
 <h2><a class="header" href="#events" id="events">Events</a></h2>
 <p><a href="https://developer.mozilla.org/en-US/docs/Web/API/GlobalEventHandlers">Every global event</a> is settable as a parameter
 on every non-<code>Text</code> <code>avalanche_web</code> component. Each event handling parameter takes a function of type <code>impl Fn(TypedEvent&lt;E, C&gt;)</code>
-where <code>E</code> is the <code>web_sys</code> type for the handler's event type and <code>C</code> is <code>web_sys</code>'s native type for the component's native <code>web_sys</code> type.</p>
-<p>Often, we don't need the event, so we omit it, hence closures like <code>on_click: move |_| ...</code>.</p>
+where <code>E</code> is the <code>web_sys</code> type for the handler's event and <code>C</code> is <code>web_sys</code>'s native type for the component's native DOM element.</p>
+<p>Often, we don't need the event, so we omit it, hence closures like <code>on_click = move |_| ...</code>.</p>
 <h2><a class="header" href="#input-elements" id="input-elements">Input elements</a></h2>
 <p>One case where events are useful is with input elements. That's because the <code>TypedEvent</code> type gives access to the <code>current_target()</code> method,
 which provides a reference to the component's associated native reference. We can use this to keep track of an <code>Input</code> element's state:</p>
@@ -661,9 +683,10 @@ which provides a reference to the component's associated native reference. We ca
 fn ControlledInput() -&gt; View {
     let (text, set_text) = state(self, || String::new());
 
-    Input!(
-        value: tracked!(text).clone(),
-        on_input: move |e| set_text.set(e.current_target().unwrap().value())
+    Input(
+        self,
+        value = tracked!(text).clone(),
+        on_input = move |e| set_text.set(e.current_target().unwrap().value())
     )
 }
 <span class="boring">}

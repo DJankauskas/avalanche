@@ -167,15 +167,18 @@
 <p>Components are the building blocks of <code>avalanche</code> apps.
 They're represented as functions since they're fundamentally meant to be pure:
 they take in inputs and describe a UI as their output. They're so fundamental that
-this tutorial is mostly a component tutorial. </p>
+this book is largely a component tutorial. </p>
 <h2><a class="header" href="#creating-components" id="creating-components">Creating components</a></h2>
 <p>Though components are written as functions, <code>avalanche</code> implements some quality-of-life and performance features
-not possible with functions. If we call a component that takes no parameters called <code>Comp</code>, for example, we'll call
-it with <code>Comp!()</code>. These macro calls only work inside other components, and they return the <code>View</code> type.</p>
+not possible with functions. This requires the use of specialized syntax.
+If we call a component that takes no parameters called <code>Comp</code>, for example, we'll call
+it with <code>Comp(self)</code>. These component calls only work within the bodies of other components, and they return the 
+<code>View</code> type.</p>
 <h2><a class="header" href="#passing-parameters-to-components" id="passing-parameters-to-components">Passing parameters to components</a></h2>
 <p>Most components have parameters, and they're named. For example, in the components below, we pass <code>href</code> by name. However, the last 
 parameter in a function definition can be supplied without a name as the last parameter in a call. 
-For <code>Text</code>, that's the <code>text</code> parameter, which takes a value that implements <code>ToString</code>. 
+For <code>Text</code>, that's the <code>text</code> parameter, which takes something convertible to a <code>Cow&lt;'_, str&gt;</code>, 
+meaning you can pass it either a <code>String</code> or a <code>&amp;str</code>. 
 For every other <code>avalanche_web</code> component, the unnamed last parameter is <code>children</code>, which takes an <code>Into&lt;Vec&lt;View&gt;&gt;</code>.
 Below are two versions of a link component. One passes <code>text</code> and <code>children</code> explicitly, while the other does it implicitly, as is idiomatic. </p>
 <pre><pre class="playground"><code class="language-rust">
@@ -188,20 +191,22 @@ const FIRST_SITE: &amp;str = &quot;http://info.cern.ch/hypertext/WWW/TheProject.
 
 #[component]
 fn LinkExplicit() -&gt; View {
-    A!(
-        href: FIRST_SITE,
-        children: [
-            Text!(text: &quot;The first website&quot;)
+    A(
+        self,
+        href = FIRST_SITE,
+        children = [
+            Text(self, text = &quot;The first website&quot;)
         ]
     )
 }
 
 #[component]
 fn LinkImplicit() -&gt; View {
-    A!(
-        href: FIRST_SITE,
+    A(
+        self,
+        href = FIRST_SITE,
         [
-            Text!(&quot;The first website&quot;)
+            Text(self, &quot;The first website&quot;)
         ]
     )
 }
@@ -222,10 +227,11 @@ use avalanche_web::components::{A, Text};
 
 #[component]
 fn Link(to: &amp;str, text: &amp;str) -&gt; View {
-    A!(
-        href: tracked!(to),
+    A(
+        self,
+        href = tracked!(to),
         [
-            Text!(tracked!(text))
+            Text(self, tracked!(text))
         ]
     )
 }
@@ -246,22 +252,24 @@ use avalanche_web::components::{Text, Div};
 </span><span class="boring">
 </span><span class="boring">#[component]
 </span><span class="boring">fn Link(to: &amp;str, text: &amp;str) -&gt; View {
-</span><span class="boring">    A!(
-</span><span class="boring">        href: tracked!(to),
+</span><span class="boring">    A(
+</span><span class="boring">        self,
+</span><span class="boring">        href = tracked!(to),
 </span><span class="boring">        [
-</span><span class="boring">            Text!(tracked!(text))
+</span><span class="boring">            Text(self, tracked!(text))
 </span><span class="boring">        ]
 </span><span class="boring">    )
 </span><span class="boring">}
 </span>
 #[component]
 fn Example() -&gt; View {
-    Div!([
-        Link!(
-            to: &quot;https://example.com&quot;,
-            text: &quot;example.com&quot;
+    Div(self, [
+        Link(
+            self,
+            to = &quot;https://example.com&quot;,
+            text = &quot;example.com&quot;
         ),
-        Text!(&quot; is a domain reserved for use in demos.&quot;)
+        Text(self, &quot; is a domain reserved for use in demos.&quot;)
     ])
 }
 <span class="boring">}
@@ -274,14 +282,17 @@ fn Example() -&gt; View {
     &amp;nbsp;is a domain reserved for use in demos.
 &lt;/div&gt;
 </code></pre>
-<p>Within component calls, parameter order does not matter, so we could've also called <code>Link!</code> with <code>to</code> and <code>text</code> swapped:</p>
-<pre><code class="language-rust ignore">Link!(
-    text: &quot;example.com&quot;.into(),
-    to: &quot;https://example.com&quot;.into()
+<p>Within component calls, parameter order does not matter (except for what the implict last parameter is), 
+so we could've also called <code>Link</code> with <code>to</code> and <code>text</code> swapped:</p>
+<pre><code class="language-rust ignore">Link(
+    self,
+    text = &quot;example.com&quot;.into(),
+    to = &quot;https://example.com&quot;.into()
 )
 </code></pre>
 <h2><a class="header" href="#parameter-type-restrictions" id="parameter-type-restrictions">Parameter type restrictions</a></h2>
-<p>All parameters must implement <code>Clone</code>. Note that all non-<code>mut</code> references implement <code>Clone</code>.</p>
+<p>All parameters must implement <code>Clone</code>. Note that all non-<code>mut</code> references implement <code>Clone</code>, making this restriction
+generally easy to deal with in practice.</p>
 
                     </main>
 

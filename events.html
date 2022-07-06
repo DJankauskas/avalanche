@@ -170,8 +170,8 @@ but some have not been implemented yet. If you're missing one, please <a href="h
 <h2><a class="header" href="#events" id="events">Events</a></h2>
 <p><a href="https://developer.mozilla.org/en-US/docs/Web/API/GlobalEventHandlers">Every global event</a> is settable as a parameter
 on every non-<code>Text</code> <code>avalanche_web</code> component. Each event handling parameter takes a function of type <code>impl Fn(TypedEvent&lt;E, C&gt;)</code>
-where <code>E</code> is the <code>web_sys</code> type for the handler's event type and <code>C</code> is <code>web_sys</code>'s native type for the component's native <code>web_sys</code> type.</p>
-<p>Often, we don't need the event, so we omit it, hence closures like <code>on_click: move |_| ...</code>.</p>
+where <code>E</code> is the <code>web_sys</code> type for the handler's event and <code>C</code> is <code>web_sys</code>'s native type for the component's native DOM element.</p>
+<p>Often, we don't need the event, so we omit it, hence closures like <code>on_click = move |_| ...</code>.</p>
 <h2><a class="header" href="#input-elements" id="input-elements">Input elements</a></h2>
 <p>One case where events are useful is with input elements. That's because the <code>TypedEvent</code> type gives access to the <code>current_target()</code> method,
 which provides a reference to the component's associated native reference. We can use this to keep track of an <code>Input</code> element's state:</p>
@@ -185,9 +185,10 @@ which provides a reference to the component's associated native reference. We ca
 fn ControlledInput() -&gt; View {
     let (text, set_text) = state(self, || String::new());
 
-    Input!(
-        value: tracked!(text).clone(),
-        on_input: move |e| set_text.set(e.current_target().unwrap().value())
+    Input(
+        self,
+        value = tracked!(text).clone(),
+        on_input = move |e| set_text.set(e.current_target().unwrap().value())
     )
 }
 <span class="boring">}

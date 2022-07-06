@@ -182,37 +182,34 @@ use avalanche_web::components::{H1, Text};
 
 #[component]
 fn HelloWorld() -&gt; View {
-    H1!([
-        Text!(&quot;Hello world!&quot;)
+    H1(self, [
+        Text(self, &quot;Hello world!&quot;)
     ])
 }
 <span class="boring">}
 </span></code></pre></pre>
 <p>Finally, add this call in <code>main_js</code>:</p>
-<pre><pre class="playground"><code class="language-rust">
-<span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span><span class="boring">use avalanche::{component, View};
+<pre><pre class="playground"><code class="language-rust"><span class="boring">use avalanche::{component, View};
 </span><span class="boring">use avalanche_web::components::{H1, Text};
 </span><span class="boring">
 </span><span class="boring">#[component]
 </span><span class="boring">fn HelloWorld() -&gt; View {
-</span><span class="boring">    H1!([
-</span><span class="boring">        Text!(&quot;Hello world!&quot;)
+</span><span class="boring">    H1(self, [
+</span><span class="boring">        Text(self, &quot;Hello world!&quot;)
 </span><span class="boring">    ])
 </span><span class="boring">}
-</span><span class="boring">fn dont_run() {
+</span><span class="boring">fn main_js() {
 </span>avalanche_web::mount_to_body::&lt;HelloWorld&gt;();
 <span class="boring">}
-</span><span class="boring">}
 </span></code></pre></pre>
-<p>Now, to see your app, run <code>npm start</code> within the <code>my_app_name</code> directory. If you haven't gotten any compiler errors,
-you should see your first <code>avalanche</code> and <code>avalanche_web</code> web!</p>
+<p>Now, to see your app, run <code>npm start</code> within the <code>my-app-name</code> directory. If you haven't gotten any compiler errors,
+you should see your first <code>avalanche</code> and <code>avalanche_web</code> web app!</p>
 <h2><a class="header" href="#explaining-hello-world" id="explaining-hello-world">Explaining hello world</a></h2>
 <p>So what exactly is going on in the code above? Well, the most important aspect here is the <code>#[component]</code> attribute macro. 
 <code>#[component]</code> accepts a function returning a <code>View</code>, which is a wrapper around an instance of a component. 
-Within a function marked with <code>#[component]</code>, macros whose names begin with a capital ASCII character are interpreted as 
-special component calls. <code>Text</code> is a component with a single parameter, so by specifying that we get an instance 
+Within a function marked with <code>#[component]</code>, functions whose names begin with a capital ASCII character
+and accept the component context <code>self</code> are interpreted as special component calls. 
+<code>Text</code> is a component with a single parameter, so by specifying that we get an instance 
 of <code>View</code> with that text component. <code>H1</code> can take an array of children, so this component here is equivalent to writing
 this raw HTML:</p>
 <pre><code class="language-html">&lt;h1&gt;
