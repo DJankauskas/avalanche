@@ -6,18 +6,6 @@ categories = ["web", "wasm"]
 readme = "README.md"
 edition = "2021"
 
-[lib]
-crate-type = ["cdylib"]
-
-[profile.release]
-# This makes the compiled code faster and smaller, but it makes compiling slower,
-# so it's only enabled in release mode.
-lto = true
-
-[features]
-# If you uncomment this line, it will enable `wee_alloc`:
-#default = ["wee_alloc"]
-
 [dependencies]
 # The `wasm-bindgen` crate provides the bare minimum functionality needed
 # to interact with JavaScript.
@@ -26,16 +14,4 @@ web-sys = "0.3"
 avalanche = {path = "../../../avalanche"}
 avalanche-web = {path = "../../../avalanche-web"}
 
-# `wee_alloc` is a tiny allocator for wasm that is only ~1K in code size
-# compared to the default allocator's ~10K. However, it is slower than the default
-# allocator, so it's not enabled by default.
-wee_alloc = { version = "0.4", optional = true }
-
 console_error_panic_hook = "0.1.6"
-
-# These crates are used for running unit tests.
-[dev-dependencies]
-wasm-bindgen-test = "0.2"
-futures = "0.1"
-js-sys = "0.3"
-wasm-bindgen-futures = "0.3"
