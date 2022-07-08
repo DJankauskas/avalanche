@@ -55,7 +55,7 @@ Finally, add this call in `main`:
 #         Text(self, "Hello world!")
 #     ])
 # }
-# fn main() {
+# fn main_dont_run() {
 avalanche_web::mount_to_body::<HelloWorld>();
 # }
 ```
