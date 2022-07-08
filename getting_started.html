@@ -167,13 +167,25 @@
 <h2><a class="header" href="#prerequisites" id="prerequisites">Prerequisites</a></h2>
 <p>Before you get started, ensure you have <code>cargo</code> and <code>npm</code> installed.</p>
 <h2><a class="header" href="#creating-an-app" id="creating-an-app">Creating an app</a></h2>
-<p>To create an <code>avalanche_web</code> app, first run the command <code>npm init rust-webpack my-app-name</code>, where <code>my-app-name</code> is the name
-of the application you want to create. This will create a directory with name <code>my-app-name</code>. Your Rust code will live within its <code>/src</code> directory.</p>
-<p>Within <code>src/lib.rs</code>, you will see some helpful preloaded setup, including a <code>panic</code> hook for debugging messages, and the <code>main_js</code> function. To get a minimal <code>avalanche_web</code> app off the ground, first we need to add some dependencies. In the <code>Cargo.toml</code> file, add the following dependencies:</p>
+<p>To create an <code>avalanche_web</code> app, first install trunk if you haven't already:
+<code>cargo install trunk</code>.</p>
+<p>Next, create a binary application with <code>cargo new &lt;my-app-name&gt;</code>. Within the root of that 
+directory, create an index.html file with these contents:</p>
+<pre><code class="language-html">&lt;html&gt;
+  &lt;head&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>This serves as a template for <code>trunk</code> to generate an entrypoint <code>index.html</code> file for 
+your application, along with providing us scaffolding to supply app metadata and the like.</p>
+<p>With that basic setup out of the way, it's time to actually integrate <code>avalanche-web</code>.
+In the <code>Cargo.toml</code> file, add the following dependencies:</p>
 <pre><code class="language-toml">avalanche = &quot;^0.1.0&quot;
 avalanche_web = &quot;^0.1.0&quot;
 </code></pre>
-<p>Next, add this code somewhere outside the <code>main_js</code> function:</p>
+<p>Next, add this code somewhere outside the <code>main</code> function:</p>
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
@@ -188,7 +200,7 @@ fn HelloWorld() -&gt; View {
 }
 <span class="boring">}
 </span></code></pre></pre>
-<p>Finally, add this call in <code>main_js</code>:</p>
+<p>Finally, add this call in <code>main</code>:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">use avalanche::{component, View};
 </span><span class="boring">use avalanche_web::components::{H1, Text};
 </span><span class="boring">
@@ -198,18 +210,19 @@ fn HelloWorld() -&gt; View {
 </span><span class="boring">        Text(self, &quot;Hello world!&quot;)
 </span><span class="boring">    ])
 </span><span class="boring">}
-</span><span class="boring">fn main_js() {
+</span><span class="boring">fn main() {
 </span>avalanche_web::mount_to_body::&lt;HelloWorld&gt;();
 <span class="boring">}
 </span></code></pre></pre>
-<p>Now, to see your app, run <code>npm start</code> within the <code>my-app-name</code> directory. If you haven't gotten any compiler errors,
+<p>Now, to see your app running in the browser, execute <code>trunk serve --open</code> within the 
+<code>my-app-name</code> directory. If you haven't gotten any compiler errors,
 you should see your first <code>avalanche</code> and <code>avalanche_web</code> web app!</p>
 <h2><a class="header" href="#explaining-hello-world" id="explaining-hello-world">Explaining hello world</a></h2>
 <p>So what exactly is going on in the code above? Well, the most important aspect here is the <code>#[component]</code> attribute macro. 
-<code>#[component]</code> accepts a function returning a <code>View</code>, which is a wrapper around an instance of a component. 
+<code>#[component]</code> accepts a function returning a <code>View</code>, which is the result of rendering a component. 
 Within a function marked with <code>#[component]</code>, functions whose names begin with a capital ASCII character
 and accept the component context <code>self</code> are interpreted as special component calls. 
-<code>Text</code> is a component with a single parameter, so by specifying that we get an instance 
+<code>Text</code> is a component with a single parameter, so by specifying that, along with the context <code>self</code>, we get an instance 
 of <code>View</code> with that text component. <code>H1</code> can take an array of children, so this component here is equivalent to writing
 this raw HTML:</p>
 <pre><code class="language-html">&lt;h1&gt;
