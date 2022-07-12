@@ -1,6 +1,7 @@
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
+/// A reference-counted, interior-mutable value.
 pub struct Shared<T: ?Sized> {
     rc: Rc<RefCell<T>>,
 }
@@ -25,11 +26,18 @@ impl<T: ?Sized> Shared<T> {
     pub(crate) fn borrowed(&self) -> bool {
         self.rc.try_borrow_mut().is_err()
     }
-    
+
     /// Returns true if the two instances of `Shared` point to the same allocation,
     /// false otherwise.
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.rc, &other.rc)
+    }
+
+    /// Create a weak reference to the underlying shared data.
+    pub(crate) fn downgrade(&self) -> WeakShared<T> {
+        WeakShared {
+            weak: Rc::downgrade(&self.rc),
+        }
     }
 }
 
@@ -96,5 +104,23 @@ impl<T: Default> Default for Shared<T> {
 impl<T> From<T> for Shared<T> {
     fn from(val: T) -> Self {
         Self::new(val)
+    }
+}
+
+/// A weak reference to an interior-mutable value.
+pub(crate) struct WeakShared<T: ?Sized> {
+    weak: Weak<RefCell<T>>,
+}
+
+impl<T: ?Sized> WeakShared<T> {
+    /// Attempts to convert the weak reference to a strong one.
+    pub fn upgrade(&self) -> Option<Shared<T>> {
+        self.weak.upgrade().map(|rc| Shared { rc })
+    }
+}
+
+impl<T: ?Sized> Clone for WeakShared<T> {
+    fn clone(&self) -> Self {
+        Self { weak: self.weak.clone() }
     }
 }

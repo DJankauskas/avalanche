@@ -1,12 +1,18 @@
 use std::{collections::HashMap, rc::Rc};
 
-use crate::{impl_any_ref, renderer::NativeType, shared::Shared, Component, View, tracked::Gen};
+use crate::{
+    impl_any_ref,
+    renderer::NativeType,
+    shared::{Shared, WeakShared},
+    tracked::Gen,
+    Component, View,
+};
 
 use super::native_repr::Repr;
 
 /// Internal node state.
 struct NodeInner {
-    parent: Option<Node>,
+    parent: Option<WeakShared<NodeInner>>,
     children: Vec<Node>,
     name: String,
     value: String,
@@ -77,7 +83,9 @@ impl Node {
     pub fn insert_child(&self, child: Node, pos: usize) {
         let old_len = self.children_len();
         remove_from_parent(child.clone());
-        child.0.exec_mut(|child| child.parent = Some(self.clone()));
+        child
+            .0
+            .exec_mut(|child| child.parent = Some(self.0.downgrade()));
         self.0.exec_mut(|parent| parent.children.insert(pos, child));
         assert_eq!(old_len + 1, self.children_len());
     }
@@ -125,7 +133,7 @@ impl Node {
 fn remove_from_parent(node: Node) {
     node.0.exec_mut(|node_inner| {
         if let Some(parent) = &mut node_inner.parent {
-            parent.0.exec_mut(|parent| {
+            parent.upgrade().unwrap().exec_mut(|parent| {
                 parent.children.retain(|child| !child.0.ptr_eq(&node.0));
             });
             node_inner.parent = None;

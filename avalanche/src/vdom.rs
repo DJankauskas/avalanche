@@ -8,6 +8,7 @@ use crate::{
 use crate::{ChildId, Component, ComponentPos, View};
 
 use crate::shared::Shared;
+use std::mem::ManuallyDrop;
 use std::num::NonZeroU64;
 use std::{any::Any, cell::RefCell, collections::HashMap, hash::Hash, panic::Location, rc::Rc};
 
@@ -270,7 +271,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
                 let native_type = component.native_type();
                 let dispatch_native_event = DispatchNativeEvent {
                     component_id: child_component_id,
-                    vdom: context.component_pos.vdom.clone(),
+                    vdom: context.component_pos.vdom.downgrade(),
                     scheduler: context.scheduler.clone(),
                 };
                 let native_component = native_type.map(|native_type| {
@@ -519,19 +520,28 @@ pub(crate) fn mark_node_dirty(vdom: &mut VDom, mut component_id: ComponentId) {
 /// In order to render an avalanche `View`, a renderer library should accept a `View` from the user, then
 /// use the `new` method to create a `Root` instance.
 pub struct Root {
-    _vdom: Shared<VDom>,
+    vdom: ManuallyDrop<Shared<VDom>>,
+    scheduler: Shared<dyn Scheduler>,
 }
 
 impl Root {
-    /// Creates a new UI tree rooted at `native_parent`, with native handle `native_handle`. That handle will be used
+    /// Creates a new UI tree rooted at `native_handle`. That handle will be used
     /// in order to allow rooting an avalanche tree upon
     /// an existing UI component created externally. Renders `child` as the child of `native_handle`.
+    ///
+    /// Removes all current children of `native_handle`. After calling `new`, only avalanche should
+    /// manipulate or insert descendents of `native_handle` until and if the created instance of `Root`'s
+    /// `unmount` method is called. Modifying those children before `unmount` is called will likely result
+    /// in panics.
     pub fn new<'a, R: Renderer + 'static, S: Scheduler + 'static, C: Component<'a> + Default>(
         native_type: NativeType,
-        native_handle: NativeHandle,
-        renderer: R,
+        mut native_handle: NativeHandle,
+        mut renderer: R,
         scheduler: S,
     ) -> Self {
+        // Remove all the children of `native_handle`.
+        renderer.truncate_children(&native_type, &mut native_handle, 0);
+
         let mut curr_component_id = ComponentId::new();
         let root_component_id = curr_component_id.create_next();
         let mut children = HashMap::with_capacity(16);
@@ -568,7 +578,39 @@ impl Root {
         vdom.exec_mut(|vdom| {
             render_vdom::<C>(vdom, &vdom_clone, &scheduler, None);
         });
-        Root { _vdom: vdom }
+        Root {
+            vdom: ManuallyDrop::new(vdom),
+            scheduler,
+        }
+    }
+
+    /// Unmounts the tree created by `new`, clearing its root native handle of all the
+    /// children created by avalanche. This method also drops all the state of the tree.
+    pub fn unmount(self) {
+        let vdom = ManuallyDrop::into_inner(self.vdom);
+        let is_vdom_borrowed = vdom.borrowed();
+        let exec_unmount = move || {
+            vdom.exec_mut(|vdom| {
+                let root_vnode = vdom.children.get_mut(&ComponentId::new());
+                let native_root = root_vnode
+                    .and_then(|node| node.native_component.as_mut())
+                    .unwrap();
+
+                // Clear children
+                vdom.renderer.truncate_children(
+                    &native_root.native_type,
+                    &mut native_root.native_handle,
+                    0,
+                );
+            });
+        };
+        if is_vdom_borrowed {
+            self.scheduler.exec_mut(|scheduler| {
+                scheduler.schedule_on_ui_thread(Box::new(exec_unmount));
+            })
+        } else {
+            exec_unmount();
+        }
     }
 }
 

@@ -10,7 +10,7 @@ use native_repr::Repr;
 use crate::{
     component,
     renderer::{NativeType, Scheduler},
-    shared::Shared,
+    shared::{Shared, WeakShared},
     state, store, tracked, updated, Component, Tracked, View,
 };
 
@@ -26,13 +26,13 @@ struct TestScheduler {
     /// Remaining clicks in the event loop, to be popped off in descending order.
     click_events: Vec<String>,
     /// The root of the component tree, used to deliver clicks.
-    root: Shared<Root>,
+    root: WeakShared<Root>,
 }
 
 impl TestScheduler {
     /// Creates a scheduler initialized with which clicks will be performed over the lifetime
     /// of the test.
-    fn new(click_events: Vec<&str>, root: Shared<Root>) -> Self {
+    fn new(click_events: Vec<&str>, root: WeakShared<Root>) -> Self {
         let click_events = click_events
             .into_iter()
             .rev()
@@ -52,7 +52,7 @@ impl TestScheduler {
                 continue;
             } else {
                 let name = self.click_events.pop().unwrap();
-                let node = self.root.exec(|root| root.get_node(&name));
+                let node = self.root.upgrade().unwrap().exec(|root| root.get_node(&name));
                 node.click();
             }
         }
@@ -73,9 +73,9 @@ pub fn test<C: Component<'static> + Default>(events: Vec<&str>, expected: Vec<Re
     let root = Shared::new(root);
     let renderer = TestRenderer::new(root.clone());
 
-    let scheduler = TestScheduler::new(events, root.clone());
+    let scheduler = TestScheduler::new(events, root.downgrade());
 
-    let _avalanche_root = crate::vdom::Root::new::<_, _, C>(
+    let avalanche_root = crate::vdom::Root::new::<_, _, C>(
         NativeType {
             handler: "",
             name: "",
@@ -93,8 +93,11 @@ pub fn test<C: Component<'static> + Default>(events: Vec<&str>, expected: Vec<Re
         value: String::new(),
         has_on_click: false,
     };
+
     let actual_repr = root_node.to_repr();
     assert_eq!(expected_repr, actual_repr);
+    
+    avalanche_root.unmount();
 }
 
 #[component]
