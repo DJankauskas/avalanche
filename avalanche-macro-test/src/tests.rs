@@ -144,7 +144,7 @@ fn test() {
         children: Vec::new(),
         location: (0, 0),
     };
-    Root::new::<_, _, Test>(
+    let root = Root::new::<_, _, Test>(
         NativeType {
             handler: "",
             name: "",
@@ -153,6 +153,7 @@ fn test() {
         TestRenderer,
         TestScheduler,
     );
+    root.unmount();
 }
 
 #[component]

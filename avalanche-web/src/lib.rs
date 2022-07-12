@@ -5,6 +5,7 @@ use avalanche::renderer::{
 };
 use avalanche::shared::Shared;
 use avalanche::tracked::Gen;
+use avalanche::vdom::Root;
 
 use std::collections::{HashMap, VecDeque};
 
@@ -19,7 +20,10 @@ pub mod events;
 
 static TIMEOUT_MSG_NAME: &str = "avalanche_web_message_name";
 
-pub fn mount<C: Component<'static> + Default>(element: Element) {
+/// Renders the given component onto the `element` parameter.
+///
+/// To unmount the component, use the returned [Root].
+pub fn mount<C: Component<'static> + Default>(element: Element) -> Root {
     let renderer = WebRenderer::new();
     let scheduler = WebScheduler::new();
     let native_parent_type = NativeType {
@@ -39,19 +43,20 @@ pub fn mount<C: Component<'static> + Default>(element: Element) {
         scheduler,
     );
 
-    // TODO: more elegant solution that leaks less memory?
-    Box::leak(Box::new(root));
+    root
 }
 
-/// Renders the given view in the current document's body.
-pub fn mount_to_body<C: Component<'static> + Default>() {
+/// Renders the given component in the current document's body.
+/// 
+/// To unmount the component, use the returned [Root].
+pub fn mount_to_body<C: Component<'static> + Default>() -> Root {
     let body = web_sys::window()
         .expect("window")
         .document()
         .expect("document")
         .body()
         .expect("body");
-    mount::<C>(body.into());
+    mount::<C>(body.into())
 }
 
 struct WebScheduler {

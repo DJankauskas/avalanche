@@ -2,8 +2,9 @@
 pub use crate::vdom::Root;
 use crate::{
     any_ref::DynRef,
-    shared::Shared,
-    vdom::{mark_node_dirty, ComponentId, VDom}, tracked::Gen,
+    shared::{Shared, WeakShared},
+    tracked::Gen,
+    vdom::{mark_node_dirty, ComponentId, VDom},
 };
 use std::any::Any;
 
@@ -71,7 +72,6 @@ pub trait Renderer {
         b: usize,
     );
 
-
     /// Truncates the number of the children to the length given, removing any children
     /// greater in count than `len`.
     fn truncate_children(
@@ -80,7 +80,7 @@ pub trait Renderer {
         parent_handle: &mut NativeHandle,
         len: usize,
     );
-    
+
     /// Updates the `component`'s corresponding native handle so that the representation
     /// and result match. The method may be provided an event that is dispatched
     /// to the component via a `Root` method.
@@ -127,7 +127,7 @@ pub struct DispatchNativeEvent {
     /// The component to which the native event should be dispatched.
     pub(crate) component_id: ComponentId,
     /// The ui tree to which the event should be dispatched.
-    pub(crate) vdom: Shared<VDom>,
+    pub(crate) vdom: WeakShared<VDom>,
     /// The scheduler needed for hook rerendering.
     pub(crate) scheduler: Shared<dyn Scheduler>,
 }
@@ -137,19 +137,27 @@ impl DispatchNativeEvent {
     /// passing the event to the proper native component.
     pub fn dispatch(&self, native_event: NativeEvent) {
         let self_clone = self.clone();
+        let vdom = match self.vdom.upgrade() {
+            Some(vdom) => vdom,
+            None => {
+                // TODO warn of operation on deleted tree
+                return;
+            }
+        };
+        let vdom_clone = vdom.clone();
         let exec_event = move || {
-            let vdom_clone = self_clone.vdom.clone();
-            self_clone.vdom.exec_mut(move |vdom| {
+            let vdom_clone2 = vdom_clone.clone();
+            vdom_clone.exec_mut(move |vdom| {
                 mark_node_dirty(vdom, self_clone.component_id);
                 (vdom.update_vdom)(
                     vdom,
-                    &vdom_clone,
+                    &vdom_clone2,
                     &self_clone.scheduler,
                     Some((native_event, self_clone.component_id)),
                 );
             })
         };
-        if self.vdom.borrowed() {
+        if vdom.borrowed() {
             self.scheduler
                 .exec_mut(|scheduler| scheduler.schedule_on_ui_thread(Box::new(exec_event)));
         } else {

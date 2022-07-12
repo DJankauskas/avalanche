@@ -2,7 +2,7 @@ use std::{marker::PhantomData, panic::Location};
 
 use crate::{
     renderer::{NativeEvent, Scheduler},
-    shared::Shared,
+    shared::{Shared, WeakShared},
     tracked::{Gen, InternalGen},
     vdom::{
         mark_node_dirty,
@@ -124,7 +124,7 @@ pub fn state<'a, T: 'static>(
 
 /// Internal state setter implementation for different hooks' setters.
 struct InternalStateSetter<T: 'static, S: 'static> {
-    vdom: Shared<VDom>,
+    vdom: WeakShared<VDom>,
     component_id: ComponentId,
     scheduler: Shared<dyn Scheduler>,
     location: Location<'static>,
@@ -150,7 +150,7 @@ impl<T: 'static, S: 'static> InternalStateSetter<T, S> {
         location: Location<'static>,
     ) -> Self {
         Self {
-            vdom: component_pos.vdom.clone(),
+            vdom: component_pos.vdom.downgrade(),
             component_id: component_pos.component_id,
             scheduler,
             location,
@@ -160,7 +160,13 @@ impl<T: 'static, S: 'static> InternalStateSetter<T, S> {
 
     /// Same as `update`, but also provides the `Gen` the root is on before the state update completes
     fn update_with_gen<F: FnOnce(&mut T, Gen) + 'static>(&self, f: F) {
-        let vdom_clone = self.vdom.clone();
+        let vdom_clone = match self.vdom.upgrade() {
+            Some(vdom) => vdom,
+            None => {
+                // TODO: warn for leaking setter on destroyed tree
+                return;
+            },
+        };
         let vdom_clone_2 = vdom_clone.clone();
         let scheduler_clone = self.scheduler.clone();
         let location_copy = self.location;
