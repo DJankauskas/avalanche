@@ -7,4 +7,5 @@ members = [
     "avalanche-web",
     "avalanche-web/examples/counter",
     "avalanche-web/examples/todomvc",
+    "avalanche-web/examples/minesweeper",
 ]

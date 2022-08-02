@@ -554,7 +554,7 @@ fn add_listener(
     callback: impl Fn(Event) + 'static,
     listeners: &mut HashMap<&'static str, EventListener>,
 ) {
-    add_named_listener(element, name, name, true, callback, listeners)
+    add_named_listener(element, name, name, false, callback, listeners)
 }
 
 fn add_named_listener(
