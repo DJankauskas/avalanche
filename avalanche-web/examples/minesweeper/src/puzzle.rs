@@ -7,22 +7,26 @@ use rand::{seq::SliceRandom, thread_rng};
 #[derive(Clone, Copy, Debug)]
 pub struct Tile {
     pub state: TileState,
-    pub variant: Type,
+    pub variant: TileVariant,
 }
 
 impl Default for Tile {
     fn default() -> Self {
         Self {
             state: TileState::Covered,
-            variant: Type::Safe { adjacent_bombs: 0 },
+            variant: TileVariant::Safe { adjacent_mines: 0 },
         }
     }
 }
 
 impl Tile {
-    /// Returns 1 if the tile is a bomb, 0 otherwise
-    fn bomb_count(self) -> usize {
-        matches!(self.variant, Type::Bomb) as usize
+    /// Returns 1 if the tile is a mine, 0 otherwise
+    fn mine_count(self) -> usize {
+        if matches!(self.variant, TileVariant::Mine) {
+            1
+        } else {
+            0
+        }
     }
 }
 
@@ -34,43 +38,61 @@ pub enum TileState {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub enum Type {
-    Bomb,
-    Safe { adjacent_bombs: usize },
+pub enum TileVariant {
+    Mine,
+    Safe { adjacent_mines: usize },
 }
 
 pub struct Puzzle {
     data: Vec<Vec<Tracked<Tile>>>,
-    bomb_count: isize,
+    unflagged_mine_count: isize,
+    total_mine_count: usize,
+    num_unclicked: usize,
+    num_covered: usize,
     been_clicked: bool,
     width: usize,
     height: usize,
 }
 
-pub struct BombDetonated;
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum GameStatus {
+    New,
+    InProgress,
+    Won,
+    Lost,
+}
+
+impl GameStatus {
+    pub fn puzzle_ended(self) -> bool {
+        matches!(self, GameStatus::Won | GameStatus::Lost)
+    }
+}
 
 impl Puzzle {
-    pub fn new(width: usize, height: usize, bomb_count: usize, gen: Gen) -> Self {
+    pub fn new(width: usize, height: usize, mine_count: usize, gen: Gen) -> Self {
         let mut puzzle = Vec::with_capacity(width);
-        for _ in 0..width {
-            puzzle.push(vec![Tracked::new(Tile::default(), gen); height]);
+        for _ in 0..height {
+            puzzle.push(vec![Tracked::new(Tile::default(), gen); width]);
         }
 
         Puzzle {
             data: puzzle,
-            bomb_count: bomb_count as isize,
+            unflagged_mine_count: mine_count as isize,
+            total_mine_count: mine_count,
+            num_unclicked: width * height,
+            num_covered: width * height,
             been_clicked: false,
             width,
             height,
         }
     }
-
+    
     pub fn tiles(&self) -> &[Vec<Tracked<Tile>>] {
         &self.data
     }
 
-    pub fn _bomb_count(&self) -> isize {
-        self.bomb_count
+    pub fn mine_count(&self) -> isize {
+        self.unflagged_mine_count
     }
 
     pub fn width(&self) -> usize {
@@ -81,49 +103,88 @@ impl Puzzle {
         self.height
     }
 
-    /// Returns Some(BombDetonated) if bomb(s) were pressed
-    /// TODO: support clicking on numbers
-    pub fn click(&mut self, x: usize, y: usize, gen: Gen) -> Option<BombDetonated> {
+    /// Returns Some(MineDetonated) if mine(s) were pressed
+    pub fn click(&mut self, x: usize, y: usize, gen: Gen) -> GameStatus {
         if !self.been_clicked {
             populate_puzzle(self, (x, y), gen);
             self.been_clicked = true;
         }
-        let tile = tracked!(self.data[x][y]);
+        let tile = tracked!(self.data[y][x]);
 
         match tile.state {
-            TileState::Covered => match tile.variant {
-                Type::Bomb => return Some(BombDetonated),
-                Type::Safe { .. } => {
-                    // self.data[x][y].mutate(gen).state = TileState::Uncovered;
-                    let mut to_uncover = VecDeque::with_capacity(16);
-                    to_uncover.push_back((x, y));
-                    while let Some((x, y)) = to_uncover.pop_front() {
-                        let tile = tracked!(self.data[x][y]);
-                        if let Type::Safe { adjacent_bombs } = tile.variant {
-                            if matches!(tile.state, TileState::Covered) {
-                                self.data[x][y].mutate(gen).state = TileState::Uncovered;
-                                if adjacent_bombs == 0 {
-                                    to_uncover.extend(self.neighbors(x, y));
+            TileState::Covered => {
+                match tile.variant {
+                    TileVariant::Mine => {
+                        self.num_unclicked -= 1;
+                        self.num_covered -= 1;
+                        self.data[y][x].mutate(gen).state = TileState::Uncovered;
+                        return GameStatus::Lost;
+                    }
+                    TileVariant::Safe { .. } => {
+                        // self.data[x][y].mutate(gen).state = TileState::Uncovered;
+                        let mut to_uncover = VecDeque::with_capacity(16);
+                        to_uncover.push_back((x, y));
+                        while let Some((x, y)) = to_uncover.pop_front() {
+                            let tile = tracked!(self.data[y][x]);
+                            if let TileVariant::Safe { adjacent_mines } = tile.variant {
+                                if matches!(tile.state, TileState::Covered) {
+                                    self.data[y][x].mutate(gen).state = TileState::Uncovered;
+                                    self.num_unclicked -= 1;
+                                    self.num_covered -= 1;
+                                    if adjacent_mines == 0 {
+                                        to_uncover.extend(self.neighbors(x, y));
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            },
+            }
             TileState::Flagged => {}
-            TileState::Uncovered => { /* TODO: handle number clicking */ }
+            TileState::Uncovered => {
+                if let TileVariant::Safe { adjacent_mines } = tile.variant {
+                    if adjacent_mines > 0 {
+                        let neighbors = self.neighbors(x, y);
+                        let mut num_flagged = 0;
+                        for (x, y) in &neighbors {
+                            if let TileState::Flagged = tracked!(self.data[*y][*x]).state {
+                                num_flagged += 1;
+                            }
+                        }
+                        if num_flagged >= adjacent_mines {
+                            let mut game_status = GameStatus::InProgress;
+                            for (x, y) in neighbors {
+                                if let TileState::Covered = tracked!(self.data[y][x]).state {
+                                    game_status = std::cmp::max(game_status, self.click(x, y, gen));
+                                }
+                            }
+                            return game_status;
+                        }
+                    }
+                }
+            }
         }
 
-        None
+        // All the remaining unchecked tiles must be mines, so we flag them and end the game
+        if self.num_covered as isize == self.unflagged_mine_count {
+            for x in 0..self.width {
+                for y in 0..self.height {
+                    if let TileState::Covered = tracked!(self.data[y][x]).state {
+                        self.toggle_flag(x, y, gen);
+                    }
+                }
+            }
+        }
+
+        if self.num_unclicked == self.total_mine_count {
+            GameStatus::Won
+        } else {
+            GameStatus::InProgress
+        }
     }
 
     /// Adds neighbors of the given tile that meet the given condition.
-    fn neighbors(
-        &self,
-        x: usize,
-        y: usize,
-    ) -> impl Iterator<Item = (usize, usize)> + DoubleEndedIterator + ExactSizeIterator + Clone
-    {
+    fn neighbors(&self, x: usize, y: usize) -> Vec<(usize, usize)> {
         let x = x as isize;
         let y = y as isize;
         let potential_positions = [
@@ -145,14 +206,22 @@ impl Puzzle {
             }
         }
 
-        neighbors.into_iter()
+        neighbors
     }
 
     pub fn toggle_flag(&mut self, x: usize, y: usize, gen: Gen) {
-        let state = &mut self.data[x][y].mutate(gen).state;
+        let state = &mut self.data[y][x].mutate(gen).state;
         *state = match state {
-            TileState::Covered => TileState::Flagged,
-            TileState::Flagged => TileState::Covered,
+            TileState::Covered => {
+                self.num_covered -= 1;
+                self.unflagged_mine_count -= 1;
+                TileState::Flagged
+            }
+            TileState::Flagged => {
+                self.num_covered += 1;
+                self.unflagged_mine_count += 1;
+                TileState::Covered
+            }
             TileState::Uncovered => TileState::Uncovered,
         }
     }
@@ -164,8 +233,8 @@ impl Puzzle {
         let x = x as usize;
         let y = y as usize;
         self.data
-            .get(x)
-            .and_then(|row| row.get(y))
+            .get(y)
+            .and_then(|row| row.get(x))
             .map(|tile| tracked!(tile))
     }
 
@@ -189,28 +258,28 @@ fn populate_puzzle(puzzle: &mut Puzzle, (clicked_x, clicked_y): (usize, usize), 
 
     let mut rng = thread_rng();
 
-    for (x, y) in positions.choose_multiple(&mut rng, puzzle.bomb_count as usize) {
-        puzzle.data[*x][*y].mutate(gen).variant = Type::Bomb;
+    for (x, y) in positions.choose_multiple(&mut rng, puzzle.unflagged_mine_count as usize) {
+        puzzle.data[*y][*x].mutate(gen).variant = TileVariant::Mine;
     }
-    // Set adjacent bomb counts.
+    // Set adjacent mine counts.
     for x in 0..puzzle.width {
         for y in 0..puzzle.height {
             let x = x as isize;
             let y = y as isize;
 
             let mut count = 0;
-            count += puzzle.tile_or_default(x - 1, y - 1).bomb_count();
-            count += puzzle.tile_or_default(x - 1, y).bomb_count();
-            count += puzzle.tile_or_default(x - 1, y + 1).bomb_count();
-            count += puzzle.tile_or_default(x, y - 1).bomb_count();
-            count += puzzle.tile_or_default(x, y + 1).bomb_count();
-            count += puzzle.tile_or_default(x + 1, y - 1).bomb_count();
-            count += puzzle.tile_or_default(x + 1, y).bomb_count();
-            count += puzzle.tile_or_default(x + 1, y + 1).bomb_count();
-            if let Type::Safe { adjacent_bombs } =
-                &mut puzzle.data[x as usize][y as usize].mutate(gen).variant
+            count += puzzle.tile_or_default(x - 1, y - 1).mine_count();
+            count += puzzle.tile_or_default(x - 1, y).mine_count();
+            count += puzzle.tile_or_default(x - 1, y + 1).mine_count();
+            count += puzzle.tile_or_default(x, y - 1).mine_count();
+            count += puzzle.tile_or_default(x, y + 1).mine_count();
+            count += puzzle.tile_or_default(x + 1, y - 1).mine_count();
+            count += puzzle.tile_or_default(x + 1, y).mine_count();
+            count += puzzle.tile_or_default(x + 1, y + 1).mine_count();
+            if let TileVariant::Safe { adjacent_mines } =
+                &mut puzzle.data[y as usize][x as usize].mutate(gen).variant
             {
-                *adjacent_bombs = count;
+                *adjacent_mines = count;
             }
         }
     }
