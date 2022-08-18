@@ -235,6 +235,12 @@ impl<T> StateSetter<T> {
     }
 }
 
+impl<T> Clone for StateSetter<T> {
+    fn clone(&self) -> Self {
+        Self { internal_setter: self.internal_setter.clone() }
+    }
+}
+
 /// Like [state], but enables fine-grained reactivity by allowing the storage of
 /// nested [Tracked] values that can be created and updated by the provided [Gen] values.
 ///
@@ -306,5 +312,11 @@ impl<T> StoreSetter<T> {
     #[inline]
     pub fn update<F: FnOnce(&mut T, Gen) + 'static>(&self, f: F) {
         self.setter.update_with_gen(f);
+    }
+}
+
+impl<T> Clone for StoreSetter<T> {
+    fn clone(&self) -> Self {
+        Self { setter: self.setter.clone() }
     }
 }
