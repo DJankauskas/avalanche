@@ -1,4 +1,4 @@
-use avalanche::{component, enclose, state, store, tracked, updated, Tracked, View};
+use avalanche::{component, state, store, tracked, updated, Tracked, View};
 use avalanche_web::components::{
     Button, Div, Footer, Header, Input, Label, Li, Section, Span, Strong, Text, Ul, A, H1,
 };
@@ -45,11 +45,11 @@ fn Todo() -> View {
         .count();
     let num_active = tracked!(items).len() - tracked!(num_completed);
 
-    let clear_completed = enclose!(update_items; move |_| {
+    let clear_completed = move |_| {
         update_items.update(|items, _| {
             items.retain(|item| !tracked!(item).completed);
         })
-    });
+    };
 
     let children = tracked!(items)
         .iter()
@@ -68,20 +68,20 @@ fn Todo() -> View {
                 key = tracked!(id),
                 item = &tracked!(item),
                 is_editing = *tracked!(editing) == Some(tracked!(id)),
-                toggle_completed = &enclose!(update_items; move || {
+                toggle_completed = &move || {
                     updated!(items);
                     update_items.update(move |items, gen| items[i].mutate(gen).completed = !tracked!(&items[i]).completed)
-                }),
+                },
                 set_editing = &move |editing| {
                     set_editing.set(editing.then(|| tracked!(id)));
                 },
-                update_item = &enclose!(update_items; move |item| {
+                update_item = &move |item| {
                     updated!(items);
                     match item {
                         Some(item) => update_items.update(move |items, gen| items[i] = Tracked::new(item, gen)),
                         None => update_items.update(move |items, _| { items.remove(i); }),
                     }
-                })
+                }
             )
         })
         .collect::<Vec<_>>();
@@ -99,7 +99,7 @@ fn Todo() -> View {
                         class = "new-todo",
                         placeholder = "What needs to be done?",
                         auto_focus = true,
-                        on_key_down = enclose!(update_items; move |e| {
+                        on_key_down = move |e| {
                             if e.which() == ENTER_KEY {
                                 let current_target = e.current_target().unwrap();
                                 let value = current_target.value();
@@ -114,7 +114,7 @@ fn Todo() -> View {
                                 update_monotonic_id.update(|id| *id += 1);
                                 current_target.set_value("");
                             }
-                        }),
+                        },
                     ),
                 ],
             ),
@@ -129,14 +129,14 @@ fn Todo() -> View {
                                 id = "toggle-all",
                                 class = "toggle-all",
                                 type_ = "checkbox",
-                                on_change = enclose!(update_items; move |e| {
+                                on_change = move |e| {
                                     let checked = e.current_target().unwrap().checked();
                                     update_items.update(move |items, gen| {
                                         for item in items.iter_mut() {
                                             item.mutate(gen).completed = checked;
                                         }
                                     })
-                                }),
+                                },
                             ),
                             Label(
                                 self,

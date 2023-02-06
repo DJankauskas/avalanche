@@ -10,7 +10,7 @@ fn Counter() -> View {
             H2(self, child = Text(self, "Counter!")),
             Button(
                 self,
-                on_click = move |_| set_count.update(|count| *count += 1),
+                on_click = |_| set_count.update(|count| *count += 1),
                 child = Text(self, "+"),
             ),
             Text(self, tracked!(count).to_string()),
