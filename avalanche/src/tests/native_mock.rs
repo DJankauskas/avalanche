@@ -1,14 +1,13 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    impl_any_ref,
-    renderer::NativeType,
+    renderer::{NativeType, NativeEvent, Renderer},
     shared::{Shared, WeakShared},
     tracked::Gen,
     Component, View,
 };
 
-use super::native_repr::Repr;
+use super::{native_repr::Repr, renderer::TestRenderer};
 
 /// Internal node state.
 struct NodeInner {
@@ -212,8 +211,6 @@ impl<'a> Native<'a> {
     }
 }
 
-impl_any_ref!(Native<'a>);
-
 impl<'a> Component<'a> for Native<'a> {
     type Builder = Self;
 
@@ -229,8 +226,46 @@ impl<'a> Component<'a> for Native<'a> {
         }
         false
     }
+    
+    fn native_create(
+            &self,
+            renderer: &mut dyn Renderer,
+            dispatch_native_event: crate::renderer::DispatchNativeEvent,
+        ) -> crate::renderer::NativeHandle {
+            let renderer = renderer.downcast_ref::<TestRenderer>().unwrap();
+            let node = renderer.root.exec_mut(|root| root.create_node(self.name));
+            node.set_value(self.value.to_string());
+            if self.on_click.is_some() {
+                node.set_on_click(Rc::new(move || {
+                    dispatch_native_event.dispatch(NativeEvent {
+                        event: Box::new(()),
+                        name: "click",
+                    })
+                }));
+            };
+            Box::new(node)
+    }
 
-    fn children(self) -> Vec<View> {
+    fn native_update(
+            self,
+            _renderer: &mut dyn Renderer,
+            _native_type: &NativeType,
+            native_handle: &mut crate::renderer::NativeHandle,
+            curr_gen: Gen,
+            event: Option<crate::renderer::NativeEvent>,
+        ) -> Vec<View> {
+        let handle = native_handle.downcast_ref::<Node>().unwrap();
+        if let (Some(_), Some(on_click)) = (event, &self.on_click) {
+            on_click();
+        }
+        // TODO: uncomment when a create/update model is created where a component will not
+        // immediately be updated after creation
+        // if component.name_updated() {
+        //     panic!("Names must be static but {} was updated", component.name);
+        // }
+        if self.value_updated(curr_gen) {
+            handle.set_value(self.value.to_string());
+        }
         self.children
     }
 

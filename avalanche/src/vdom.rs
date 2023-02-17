@@ -1,6 +1,6 @@
-use crate::any_ref::DynBox;
 use crate::hooks::{HookContext, RenderContext};
 use crate::renderer::{DispatchNativeEvent, NativeEvent};
+use crate::tracked::Gen;
 use crate::{
     renderer::{NativeHandle, NativeType, Renderer, Scheduler},
     tracked::InternalGen,
@@ -169,69 +169,213 @@ pub(crate) struct VNode {
     pub(crate) view: View,
 }
 
-/// A type-erased container for `Component` allowing virtualization
-/// to avoid code bloat.
-struct DynComponent<'a> {
-    updated: bool,
-    native_type: Option<NativeType>,
-    inner: DynBox<'a>,
-    get_children: fn(DynBox<'a>) -> Vec<View>,
-    get_render: fn(DynBox<'a>, RenderContext, HookContext) -> View,
-    get_child_id: fn(&DynBox<'a>) -> ChildId,
-}
+mod dyn_component {
+    use std::{
+        alloc::{dealloc, Layout},
+        marker::PhantomData,
+        mem::forget,
+    };
 
-impl<'a> DynComponent<'a> {
-    fn new<C: Component<'a>>(component: C, gen: InternalGen) -> Self {
-        fn get_children<'a, C: Component<'a>>(c: DynBox<'a>) -> Vec<View> {
-            c.downcast::<C>().unwrap().children()
+    use super::*;
+    type NativeUpdateType = unsafe fn(
+        *mut (),
+        &mut dyn Renderer,
+        &NativeType,
+        &mut NativeHandle,
+        Gen,
+        Option<NativeEvent>,
+    ) -> Vec<View>;
+
+    /// Contains pointers for executing methods on an instance of a
+    /// `Component` behind a `*mut ()`.
+    struct DynComponentVTable {
+        native_create: unsafe fn(*mut (), &mut dyn Renderer, DispatchNativeEvent) -> NativeHandle,
+        native_update: NativeUpdateType,
+        get_render: unsafe fn(*mut (), RenderContext, HookContext) -> View,
+        get_child_id: unsafe fn(*mut ()) -> ChildId,
+        drop: unsafe fn(*mut ()),
+        layout: Layout,
+    }
+
+    /// A type-erased container for `Component` allowing virtualization
+    /// to avoid code bloat.
+    pub(crate) struct DynComponent<'a> {
+        updated: bool,
+        native_type: Option<NativeType>,
+        /// A pointer to a `Box`-allocated instance of a Component<'a>.
+        /// It must never be null and always be valid when dropped.
+        inner: *mut (),
+        vtable: &'static DynComponentVTable,
+        /// Ensures the `DynComponent` cannot outlive lifetime of the data
+        /// held in `inner`.
+        phantom: PhantomData<&'a ()>,
+    }
+
+    trait ComponentVTable {
+        const VTABLE: DynComponentVTable;
+    }
+
+    unsafe fn native_create<'a, C: Component<'a>>(
+        c: *mut (),
+        renderer: &mut dyn Renderer,
+        dispatch_native_event: DispatchNativeEvent,
+    ) -> NativeHandle {
+        // SAFETY: by the conditions of `native_update`.
+        let component_ref = unsafe { &*c.cast::<C>() };
+        component_ref.native_create(renderer, dispatch_native_event)
+    }
+
+    impl<'a, C: Component<'a>> ComponentVTable for C {
+        const VTABLE: DynComponentVTable = DynComponentVTable {
+            native_create: native_create::<C>,
+            native_update: native_update::<C>,
+            get_render: get_render::<C>,
+            get_child_id: get_child_id::<C>,
+            drop: drop::<C>,
+            layout: Layout::new::<C>(),
+        };
+    }
+
+    /// SAFETY: `c` must be a valid pointer to an instance of `C`.
+    /// The value pointed to by `c` must not be used after this
+    /// function is called.
+    unsafe fn native_update<'a, C: Component<'a>>(
+        c: *mut (),
+        renderer: &mut dyn Renderer,
+        native_type: &NativeType,
+        native_handle: &mut NativeHandle,
+        curr_gen: Gen,
+        event: Option<NativeEvent>,
+    ) -> Vec<View> {
+        // SAFETY: by the conditions of `native_update`.
+        let component = unsafe { c.cast::<C>().read() };
+        component.native_update(renderer, native_type, native_handle, curr_gen, event)
+    }
+
+    /// SAFETY: `c` must be a valid pointer to an instance of `C`.
+    /// The value pointed to by `c` must not be used after this
+    /// function is called.
+    unsafe fn get_render<'a, C: Component<'a>>(
+        c: *mut (),
+        render_ctx: RenderContext,
+        hook_ctx: HookContext,
+    ) -> View {
+        // SAFETY: by the conditions of `get_render`.
+        let component = unsafe { c.cast::<C>().read() };
+        component.render(render_ctx, hook_ctx)
+    }
+
+    /// SAFETY: `c` must be a valid pointer to an instance of `C`.
+    unsafe fn get_child_id<'a, C: Component<'a>>(c: *mut ()) -> ChildId {
+        // SAFETY: by the conditions of `get_child_id`.
+        let c_ref = unsafe { &*c.cast::<C>() };
+        ChildId {
+            location: c_ref.location().unwrap_or_default(),
+            key: c_ref.key(),
         }
+    }
 
-        fn get_render<'a, C: Component<'a>>(
-            c: DynBox<'a>,
-            render_ctx: RenderContext,
-            hook_ctx: HookContext,
-        ) -> View {
-            c.downcast::<C>().unwrap().render(render_ctx, hook_ctx)
-        }
+    /// SAFETY: `c` must be a valid pointer to an instance of `C`.
+    /// The value pointed to by `c` must not be used after this
+    /// function is called.
+    unsafe fn drop<'a, C: Component<'a>>(c: *mut ()) {
+        let _ = unsafe { c.cast::<C>().read() };
+    }
 
-        fn get_child_id<'a, C: Component<'a>>(c: &DynBox<'a>) -> ChildId {
-            let c_ref = c.as_ref().downcast_ref::<C>().unwrap();
-            ChildId {
-                location: c_ref.location().unwrap_or_default(),
-                key: c_ref.key(),
+    impl<'a> DynComponent<'a> {
+        pub(super) fn new<C: Component<'a>>(component: C, gen: InternalGen) -> Self {
+            Self {
+                updated: component.updated(gen.into()),
+                native_type: component.native_type(),
+                inner: Box::into_raw(Box::new(component)).cast(),
+                vtable: &C::VTABLE,
+                phantom: PhantomData,
             }
         }
 
-        Self {
-            updated: component.updated(gen.into()),
-            native_type: component.native_type(),
-            inner: DynBox::new(component),
-            get_children: get_children::<C>,
-            get_render: get_render::<C>,
-            get_child_id: get_child_id::<C>,
+        pub(super) fn updated(&self) -> bool {
+            self.updated
+        }
+
+        pub(super) fn native_type(&self) -> Option<NativeType> {
+            self.native_type
+        }
+
+        pub(super) fn native_create(
+            &self,
+            renderer: &mut dyn Renderer,
+            dispatch_native_event: DispatchNativeEvent,
+        ) -> NativeHandle {
+            // SAFETY: self.inner is valid.
+            unsafe { (self.vtable.native_create)(self.inner, renderer, dispatch_native_event) }
+        }
+
+        pub(super) fn native_update(
+            self,
+            renderer: &mut dyn Renderer,
+            native_type: &NativeType,
+            native_handle: &mut NativeHandle,
+            curr_gen: Gen,
+            event: Option<NativeEvent>,
+        ) -> Vec<View> {
+            // SAFETY: self.inner is valid and is not dereferenced after this call.
+            let ret = unsafe {
+                (self.vtable.native_update)(
+                    self.inner,
+                    renderer,
+                    native_type,
+                    native_handle,
+                    curr_gen,
+                    event,
+                )
+            };
+            // SAFETY: inner points to a valid location, and is subsequently
+            // not used.
+            unsafe { self.dealloc_inner() };
+            // Ensure we do not double-drop and double-free inner.
+            forget(self);
+
+            ret
+        }
+
+        pub(super) fn render(self, render_ctx: RenderContext, hook_ctx: HookContext) -> View {
+            // SAFETY: self.inner is valid and is not dereferenced after this call.
+            let ret = unsafe { (self.vtable.get_render)(self.inner, render_ctx, hook_ctx) };
+
+            // SAFETY: inner points to a valid location, and is subsequently
+            // not used.
+            unsafe { self.dealloc_inner() };
+            // Ensure we do not double-drop and double-free inner.
+            forget(self);
+
+            ret
+        }
+
+        pub(super) fn child_id(&self) -> ChildId {
+            // SAFETY: self.inner is valid.
+            unsafe { (self.vtable.get_child_id)(self.inner) }
+        }
+
+        /// SAFETY: `self.inner` must point to a valid allocation created by
+        /// `Box`, and `self.layout` must hold the layout of that allocation.
+        unsafe fn dealloc_inner(&self) {
+            dealloc(self.inner.cast::<u8>(), self.vtable.layout);
         }
     }
 
-    fn updated(&self) -> bool {
-        self.updated
-    }
-
-    fn native_type(&self) -> Option<NativeType> {
-        self.native_type
-    }
-
-    fn children(self) -> Vec<View> {
-        (self.get_children)(self.inner)
-    }
-
-    fn render(self, render_ctx: RenderContext, hook_ctx: HookContext) -> View {
-        (self.get_render)(self.inner, render_ctx, hook_ctx)
-    }
-
-    fn child_id(&self) -> ChildId {
-        (self.get_child_id)(&self.inner)
+    impl<'a> Drop for DynComponent<'a> {
+        fn drop(&mut self) {
+            // SAFETY: inner must always be a valid allocation created by a
+            // Box that holds a valid Component instance.
+            unsafe {
+                (self.vtable.drop)(self.inner);
+                self.dealloc_inner();
+            }
+        }
     }
 }
+
+use dyn_component::DynComponent;
 
 /// Renders a child of a component, given a reference to that component's `VNode` and
 /// the `Component` instance describing the child. Avoids re-rendering if the child was
@@ -275,11 +419,8 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
                     scheduler: context.scheduler.clone(),
                 };
                 let native_component = native_type.map(|native_type| {
-                    let native_handle = context.vdom.renderer.create_component(
-                        &native_type,
-                        component.inner.as_ref(),
-                        dispatch_native_event,
-                    );
+                    let native_handle = component
+                        .native_create(context.vdom.renderer.as_mut(), dispatch_native_event);
                     NativeComponent {
                         native_handle,
                         native_type,
@@ -316,14 +457,13 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
                         }
                         None => None,
                     };
-                    context.vdom.renderer.update_component(
+                    let new_children = component.native_update(
+                        context.vdom.renderer.as_mut(),
                         &native_component.native_type,
                         &mut native_component.native_handle,
-                        component.inner.as_ref(),
                         context.vdom.gen.into(),
                         current_native_event,
                     );
-                    let new_children = component.children();
                     let new_children: Vec<_> =
                         new_children.into_iter().map(|child| child.id).collect();
                     let mut new_native_children: Vec<_> = new_children

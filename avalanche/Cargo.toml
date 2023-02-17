@@ -13,6 +13,7 @@ edition = "2021"
 rust-version = "1.56"
 
 [dependencies]
+downcast-rs = "1.2"
 avalanche-macro = {version = "^0.1.0", path = '../avalanche-macro'}
 
 [dev-dependencies]

@@ -1,4 +1,3 @@
-use avalanche::any_ref::DynRef;
 use avalanche::renderer::{
     DispatchNativeEvent, NativeEvent, NativeHandle, NativeType, Renderer, Scheduler,
 };
@@ -12,15 +11,6 @@ use avalanche::{
 struct TestRenderer;
 
 impl Renderer for TestRenderer {
-    fn create_component(
-        &mut self,
-        _native_type: &NativeType,
-        _component: DynRef,
-        _dispatch_native_event: DispatchNativeEvent,
-    ) -> NativeHandle {
-        Box::new(())
-    }
-
     fn append_child(
         &mut self,
         _parent_type: &NativeType,
@@ -66,16 +56,6 @@ impl Renderer for TestRenderer {
         len: usize,
     ) {
     }
-
-    fn update_component(
-        &mut self,
-        _native_type: &NativeType,
-        _native_handle: &mut NativeHandle,
-        _component: DynRef,
-        _curr_gen: Gen,
-        _native_event: Option<NativeEvent>,
-    ) {
-    }
 }
 
 /// A scheduler that does nothing, used for testing only
@@ -109,16 +89,29 @@ impl TestChildren {
     }
 }
 
-avalanche::impl_any_ref! { TestChildren }
-
 impl<'a> Component<'a> for TestChildren {
     type Builder = Self;
 
     fn render(self, _: avalanche::hooks::RenderContext, _: avalanche::hooks::HookContext) -> View {
         unimplemented!()
     }
+    
+    fn native_create(
+            &self,
+            renderer: &mut dyn Renderer,
+            dispatch_native_event: DispatchNativeEvent,
+        ) -> NativeHandle {
+        Box::new(())
+    }
 
-    fn children(self) -> Vec<View> {
+    fn native_update(
+        self,
+        renderer: &mut dyn Renderer,
+        native_type: &NativeType,
+        native_handle: &mut NativeHandle,
+        curr_gen: Gen,
+        event: Option<NativeEvent>,
+    ) -> Vec<View> {
         self.children
     }
 

@@ -227,8 +227,6 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
 
         #component_default_impl
 
-        #avalanche_path::impl_any_ref!(#name<#component_lifetime>);
-
         impl<#component_lifetime> #avalanche_path::Component<#component_lifetime> for #name<#component_lifetime> {
             type Builder = #builder_name<#component_lifetime>;
 

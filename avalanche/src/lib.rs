@@ -4,24 +4,21 @@ pub mod hooks;
 pub mod renderer;
 /// A reference-counted interior-mutable type designed to reduce runtime borrow rule violations.
 pub mod shared;
+/// Testing avalanche rendering, tracking, and hooks.
+#[cfg(test)]
+mod tests;
 /// Holds types and macros used for propogating and tracking data updates.
 pub mod tracked;
 /// An in-memory representation of the current component tree.
 #[doc(hidden)]
 pub mod vdom;
-/// Facilities for dynamically typed, downcastable, data with lifetimes.
-pub mod any_ref;
-/// Testing avalanche rendering, tracking, and hooks.
-#[cfg(test)]
-mod tests;
 
 use hooks::{HookContext, RenderContext};
 
-use renderer::{NativeType};
+use renderer::{NativeEvent, NativeHandle, NativeType, DispatchNativeEvent, Renderer};
 use shared::Shared;
 use tracked::Gen;
 use vdom::{ComponentId, VDom};
-use any_ref::{AnyRef};
 
 pub use hooks::{state, store};
 pub use tracked::Tracked;
@@ -84,7 +81,7 @@ pub use tracked::Tracked;
 #[doc(inline)]
 pub use avalanche_macro::component;
 
-/// Clones provided identifiers and passes them to the given expression. 
+/// Clones provided identifiers and passes them to the given expression.
 /// The macro evaluates to that expression.
 /// This is useful for passing data to multiple different sources that require `'static` data.
 /// # Example
@@ -150,7 +147,7 @@ impl From<Option<View>> for View {
     fn from(opt: Option<View>) -> Self {
         match opt {
             Some(val) => val,
-            None => ().into()
+            None => ().into(),
         }
     }
 }
@@ -159,19 +156,37 @@ impl From<Option<View>> for View {
 ///
 /// Users should not implement this trait manually but instead use the `component` attribute.
 /// However, native component implementations may need to use manual component implementations.
-pub trait Component<'a>: Sized + AnyRef<'a> {
+pub trait Component<'a>: Sized + 'a {
     type Builder;
 
     fn render(self, render_ctx: RenderContext, hook_ctx: HookContext) -> View;
-
-    fn children(self) -> Vec<View> {
-        panic!("Cannot get children from a non-native component")
-    }
 
     fn updated(&self, gen: Gen) -> bool;
 
     fn native_type(&self) -> Option<NativeType> {
         None
+    }
+    
+    #[allow(unused)]
+    fn native_create(
+        // TODO: should this be `self`?
+        &self,
+        renderer: &mut dyn Renderer,
+        dispatch_native_event: DispatchNativeEvent,
+    ) -> NativeHandle {
+        panic!("Cannot call native_create on a non-native component")
+    }
+
+    #[allow(unused)]
+    fn native_update(
+        self,
+        renderer: &mut dyn Renderer,
+        native_type: &NativeType,
+        native_handle: &mut NativeHandle,
+        curr_gen: Gen,
+        event: Option<NativeEvent>,
+    ) -> Vec<View> {
+        panic!("Cannot call native_update on a non-native component")
     }
 
     fn location(&self) -> Option<(u32, u32)> {

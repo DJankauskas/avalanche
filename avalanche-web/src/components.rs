@@ -6,9 +6,9 @@ use std::cmp::max;
 
 use wasm_bindgen::JsCast;
 
-use crate::{events::*, WebNativeEvent};
+use crate::{events::*, WebNativeEvent, WebNativeHandle, update_generic_prop, WebRenderer, add_named_listener, add_listener, create_handler};
 use avalanche::{Component, View};
-use avalanche::renderer::NativeType;
+use avalanche::renderer::{Renderer, NativeType, NativeHandle, NativeEvent, DispatchNativeEvent};
 use avalanche::tracked::Gen;
 use avalanche::hooks::{HookContext, RenderContext};
 
@@ -68,8 +68,6 @@ impl<'a> TextBuilder<'a> {
     }
 }
 
-avalanche::impl_any_ref!(Text<'a>);
-
 impl<'a> Component<'a> for Text<'a> {
     type Builder = TextBuilder<'a>;
 
@@ -84,8 +82,28 @@ impl<'a> Component<'a> for Text<'a> {
 
         Some(action)
     }
+    
+    fn native_create(&self, renderer: &mut dyn Renderer, _dispatch_native_event: DispatchNativeEvent) -> NativeHandle {
+        let renderer = renderer.downcast_ref::<WebRenderer>().unwrap();
+        let text_node = renderer.document.create_text_node(&self.text);
+        Box::new(WebNativeHandle {
+            node: web_sys::Node::from(text_node),
+            _listeners: HashMap::new(),
+            children_offset: 0,
+        })
+    }
 
-    fn children(self) -> Vec<View> {
+    fn native_update(
+        self,
+        _renderer: &mut dyn Renderer,
+        _native_type: &NativeType,
+        native_handle: &mut NativeHandle,
+        _curr_gen: Gen,
+        _event: Option<NativeEvent>,
+    ) -> Vec<View> {
+        let web_handle = native_handle.downcast_mut::<WebNativeHandle>().unwrap();
+        // TODO: compare with old text?
+        web_handle.node.set_text_content(Some(self.text.as_ref()));
         Vec::new()
     }
 
@@ -190,16 +208,223 @@ impl<'a> RawElement<'a> {
     }
 }
 
-avalanche::impl_any_ref!(RawElement<'a>);
-
 impl<'a> Component<'a> for RawElement<'a> {
     type Builder = ();
 
     fn render(self, _: RenderContext, _: HookContext) -> View {
         unimplemented!()
     }
+    
+    fn native_create(&self, renderer: &mut dyn Renderer, dispatch_native_event: DispatchNativeEvent) -> NativeHandle {
+        let renderer = renderer.downcast_ref::<WebRenderer>().unwrap();
+        let element = renderer
+            .document
+            .create_element(self.tag)
+            .expect("WebRenderer: element creation failed from syntax error.");
 
-    fn children(self) -> Vec<View> {
+        let mut listeners = HashMap::new();
+
+        if self.value_controlled {
+            add_named_listener(
+                &element,
+                "input",
+                "#v",
+                false,
+                |e| e.prevent_default(),
+                &mut listeners,
+            );
+        }
+        if self.checked_controlled {
+            add_named_listener(
+                &element,
+                "change",
+                "#c",
+                false,
+                |e| e.prevent_default(),
+                &mut listeners,
+            );
+        }
+
+        match self.tag {
+            "input" => {
+                let input_element = element
+                    .clone()
+                    .dyn_into::<web_sys::HtmlInputElement>()
+                    .expect("HTMLInputElement");
+
+                for (name, (attr, _)) in self.attrs.iter() {
+                    match attr {
+                        Attr::Prop(prop) => {
+                            if let Some(prop) = prop {
+                                match *name {
+                                    "value" => {
+                                        input_element.set_value(prop);
+                                    }
+                                    "checked" => {
+                                        input_element.set_checked(!prop.is_empty());
+                                    }
+                                    _ => {
+                                        input_element.set_attribute(name, prop).unwrap();
+                                    }
+                                }
+                            }
+                        }
+                        Attr::Handler(_) => {
+                            let dispatcher = dispatch_native_event.clone();
+                            add_listener(
+                                &element,
+                                name,
+                                create_handler(name, dispatcher),
+                                &mut listeners,
+                            )
+                        }
+                    }
+                }
+            }
+            "textarea" => {
+                let text_area_element = element
+                    .clone()
+                    .dyn_into::<web_sys::HtmlTextAreaElement>()
+                    .expect("HTMLTextAreaElement");
+
+                for (name, (attr, _)) in self.attrs.iter() {
+                    match attr {
+                        Attr::Prop(prop) => {
+                            if let Some(prop) = prop {
+                                match *name {
+                                    "value" => text_area_element.set_value(prop),
+                                    _ => {
+                                        text_area_element.set_attribute(name, prop).unwrap()
+                                    }
+                                }
+                            }
+                        }
+                        Attr::Handler(_) => {
+                            let dispatcher = dispatch_native_event.clone();
+                            add_listener(
+                                &element,
+                                name,
+                                create_handler(name, dispatcher),
+                                &mut listeners,
+                            )
+                        }
+                    }
+                }
+            }
+            _ => {
+                for (name, (attr, _)) in self.attrs.iter() {
+                    match attr {
+                        Attr::Prop(prop) => {
+                            if let Some(prop) = prop {
+                                element.set_attribute(name, prop).unwrap();
+                            }
+                        }
+                        Attr::Handler(_) => {
+                            let dispatcher = dispatch_native_event.clone();
+                            add_listener(
+                                &element,
+                                name,
+                                create_handler(name, dispatcher),
+                                &mut listeners,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Box::new(WebNativeHandle {
+            node: web_sys::Node::from(element),
+            _listeners: listeners,
+            children_offset: 0,
+        })
+    }
+
+    fn native_update(
+        self,
+        _renderer: &mut dyn Renderer,
+        _native_type: &NativeType,
+        native_handle: &mut NativeHandle,
+        curr_gen: Gen,
+        event: Option<NativeEvent>,
+    ) -> Vec<View> {
+        let web_handle = native_handle.downcast_mut::<WebNativeHandle>().unwrap();
+        let node = web_handle.node.clone();
+        let element = node.dyn_into::<web_sys::Element>().unwrap();
+
+        if let Some(native_event) = event {
+            match &self.attrs[&native_event.name].0 {
+                Attr::Handler(handler) => {
+                    handler(
+                        *native_event
+                            .event
+                            .downcast::<WebNativeEvent>()
+                            .expect("web_sys::Event for native event"),
+                    );
+                }
+                Attr::Prop(_) => {
+                    // TODO: panic due to missing prop?
+                }
+            }
+        }
+
+        if self.max_gen >= curr_gen {
+            match self.tag {
+                "input" => {
+                    let input_element = element
+                        .clone()
+                        .dyn_into::<web_sys::HtmlInputElement>()
+                        .expect("HTMLInputElement");
+                    for (name, (attr, gen)) in self.attrs.iter() {
+                        if *gen >= curr_gen {
+                            if let Attr::Prop(prop) = attr {
+                                match *name {
+                                    "value" => {
+                                        if let Some(prop) = prop {
+                                            input_element.set_value(prop);
+                                        }
+                                    }
+                                    "checked" => {
+                                        input_element.set_checked(prop.is_some());
+                                    }
+                                    _ => {
+                                        update_generic_prop(&element, name, prop.as_deref())
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                "textarea" => {
+                    let text_area_element = element
+                        .clone()
+                        .dyn_into::<web_sys::HtmlTextAreaElement>()
+                        .expect("HTMLTextAreaElement");
+                    for (name, (attr, gen)) in self.attrs.iter() {
+                        if *gen >= curr_gen {
+                            if let Attr::Prop(prop) = attr {
+                                if *name == "value" {
+                                    if let Some(prop) = prop {
+                                        text_area_element.set_value(prop);
+                                    }
+                                } else {
+                                    update_generic_prop(&element, name, prop.as_deref())
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    for (name, (attr, gen)) in self.attrs.iter() {
+                        if *gen >= curr_gen {
+                            if let Attr::Prop(prop) = attr {
+                                update_generic_prop(&element, name, prop.as_deref())
+                            }
+                        }
+                    }
+                }
+            }
+        }
         self.children
     }
 
@@ -296,8 +521,6 @@ macro_rules! def_component {
         $tag_builder:ident;
     ) => {
         pub struct $tag<'a>(PhantomData<&'a ()>);
-
-        ::avalanche::impl_any_ref!($tag<'a>);
 
         // Dummy implenentation of Component for $tag
         // Used only for Builder; all tags create RawElements
