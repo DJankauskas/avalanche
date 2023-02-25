@@ -5,7 +5,7 @@ mod transform;
 use avalanche_path::get_avalanche_path;
 use proc_macro::TokenStream;
 
-use proc_macro2::Span;
+use proc_macro2::{Ident, Span};
 use proc_macro_error::{abort, emit_error, proc_macro_error};
 use quote::{format_ident, quote};
 use syn::{
@@ -133,8 +133,8 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     // dependencies unneeded: we only want to process the block
     let _ = function.block(&mut item_fn.block);
 
-    let name = &item_fn.sig.ident;
-    let builder_name = format_ident!("{}Builder", name);
+    let builder_name = Ident::new(&item_fn.sig.ident.to_string(), item_fn.sig.ident.span());
+    let name = format_ident!("{}Impl", builder_name, span = Span::call_site());
 
     let render_body = &item_fn.block;
     let render_body_attributes = &item_fn.attrs;
@@ -145,9 +145,11 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
 
     let component_default_impl = if inputs_len == 0 {
         Some(quote! {
-            impl<#component_lifetime> ::std::default::Default for #name<#component_lifetime> {
-                fn default() -> Self {
-                    Self {
+            impl<#component_lifetime> #avalanche_path::DefaultComponent<#component_lifetime> for #builder_name<#component_lifetime> {
+                type Impl = #name<#component_lifetime>;
+
+                fn new() -> Self::Impl {
+                    Self::Impl {
                         __internal_gens: [],
                         __key: None,
                         __location: (0, 0),
@@ -167,19 +169,13 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
             #(#param_ident: ::std::option::Option<#param_type>),*
         }
 
-        impl<#component_lifetime> ::std::default::Default for #builder_name<#component_lifetime> {
-            fn default() -> Self {
+        impl<#component_lifetime> #builder_name<#component_lifetime> where #( #param_type: ::std::clone::Clone ),* {
+            pub fn new() -> Self {
                 Self {
                     __internal_gens: [#avalanche_path::tracked::Gen::escape_hatch_new(false); #inputs_len],
                     __key: ::std::option::Option::None,
                     #(#param_ident: ::std::option::Option::None),*
                 }
-            }
-        }
-
-        impl<#component_lifetime> #builder_name<#component_lifetime> where #( #param_type: ::std::clone::Clone ),* {
-            pub fn new() -> Self {
-                ::std::default::Default::default()
             }
 
             pub fn build(self, location: (::std::primitive::u32, ::std::primitive::u32)) -> #name<#component_lifetime> {
@@ -228,8 +224,6 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
         #component_default_impl
 
         impl<#component_lifetime> #avalanche_path::Component<#component_lifetime> for #name<#component_lifetime> {
-            type Builder = #builder_name<#component_lifetime>;
-
             #( #render_body_attributes )*
             #[allow(clippy::eval_order_dependence, clippy::unit_arg)]
             fn render(self, mut __avalanche_render_context: #avalanche_path::hooks::RenderContext, __avalanche_hook_context: #avalanche_path::hooks::HookContext) -> #return_type {
@@ -252,7 +246,6 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
             fn key(&self) -> ::std::option::Option<String> {
                 std::clone::Clone::clone(&self.__key)
             }
-
         }
     };
 

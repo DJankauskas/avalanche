@@ -1,9 +1,9 @@
-use avalanche::Component;
 use avalanche::renderer::{
     DispatchNativeEvent, NativeEvent, NativeHandle, NativeType, Renderer, Scheduler,
 };
 use avalanche::shared::Shared;
 use avalanche::vdom::Root;
+use avalanche::DefaultComponent;
 
 use std::collections::{HashMap, VecDeque};
 
@@ -20,7 +20,7 @@ static TIMEOUT_MSG_NAME: &str = "avalanche_web_message_name";
 /// Renders the given component onto the `element` parameter.
 ///
 /// To unmount the component, use the returned [Root].
-pub fn mount<C: Component<'static> + Default>(element: Element) -> Root {
+pub fn mount<C: DefaultComponent<'static>>(element: Element) -> Root {
     let renderer = WebRenderer::new();
     let scheduler = WebScheduler::new();
     let native_parent_type = NativeType {
@@ -44,9 +44,9 @@ pub fn mount<C: Component<'static> + Default>(element: Element) -> Root {
 }
 
 /// Renders the given component in the current document's body.
-/// 
+///
 /// To unmount the component, use the returned [Root].
-pub fn mount_to_body<C: Component<'static> + Default>() -> Root {
+pub fn mount_to_body<C: DefaultComponent<'static>>() -> Root {
     let body = web_sys::window()
         .expect("window")
         .document()
@@ -251,13 +251,17 @@ impl Renderer for WebRenderer {
         Self::assert_handler_avalanche_web(parent_type);
         let parent_handle = Self::handle_cast(parent_handle);
         let parent_element = Self::node_to_element(parent_handle.node.clone());
-        
+
         // TODO: more efficient implementation
-        while let Some(node) = Self::try_get_child(&parent_element, len, parent_handle.children_offset) {
-            parent_element.remove_child(&node).expect("successful remove");
+        while let Some(node) =
+            Self::try_get_child(&parent_element, len, parent_handle.children_offset)
+        {
+            parent_element
+                .remove_child(&node)
+                .expect("successful remove");
         }
     }
-    
+
     // fn remove_child(
     //     &mut self,
     //     parent_type: &NativeType,

@@ -5,7 +5,7 @@ use crate::{
     renderer::{NativeHandle, NativeType, Renderer, Scheduler},
     tracked::InternalGen,
 };
-use crate::{ChildId, Component, ComponentPos, View};
+use crate::{ChildId, Component, ComponentPos, View, DefaultComponent};
 
 use crate::shared::Shared;
 use std::mem::ManuallyDrop;
@@ -673,7 +673,7 @@ impl Root {
     /// manipulate or insert descendents of `native_handle` until and if the created instance of `Root`'s
     /// `unmount` method is called. Modifying those children before `unmount` is called will likely result
     /// in panics.
-    pub fn new<'a, R: Renderer + 'static, S: Scheduler + 'static, C: Component<'a> + Default>(
+    pub fn new<'a, R: Renderer + 'static, S: Scheduler + 'static, C: DefaultComponent<'a>>(
         native_type: NativeType,
         mut native_handle: NativeHandle,
         mut renderer: R,
@@ -754,7 +754,7 @@ impl Root {
     }
 }
 
-fn render_vdom<'a, C: Component<'a> + Default>(
+fn render_vdom<'a, C: DefaultComponent<'a>>(
     vdom: &mut VDom,
     shared_vdom: &Shared<VDom>,
     scheduler: &Shared<dyn Scheduler>,
@@ -763,7 +763,7 @@ fn render_vdom<'a, C: Component<'a> + Default>(
     let mut parent_vnode = vdom.children.remove(&ComponentId::new()).unwrap();
     let mut components_to_remove = Vec::new();
     render_child(
-        C::default(),
+        C::new(),
         &mut RenderContext {
             vdom,
             vnode: &mut &mut parent_vnode,

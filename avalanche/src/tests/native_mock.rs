@@ -212,8 +212,6 @@ impl<'a> Native<'a> {
 }
 
 impl<'a> Component<'a> for Native<'a> {
-    type Builder = Self;
-
     fn render(self, _: crate::RenderContext, _: crate::HookContext) -> View {
         unimplemented!()
     }

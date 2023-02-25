@@ -90,17 +90,15 @@ impl TestChildren {
 }
 
 impl<'a> Component<'a> for TestChildren {
-    type Builder = Self;
-
     fn render(self, _: avalanche::hooks::RenderContext, _: avalanche::hooks::HookContext) -> View {
         unimplemented!()
     }
-    
+
     fn native_create(
-            &self,
-            renderer: &mut dyn Renderer,
-            dispatch_native_event: DispatchNativeEvent,
-        ) -> NativeHandle {
+        &self,
+        renderer: &mut dyn Renderer,
+        dispatch_native_event: DispatchNativeEvent,
+    ) -> NativeHandle {
         Box::new(())
     }
 

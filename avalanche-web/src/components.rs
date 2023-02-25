@@ -14,19 +14,19 @@ use avalanche::hooks::{HookContext, RenderContext};
 
 /// Represents a text node.
 #[derive(Clone, PartialEq)]
-pub struct Text<'a> {
+pub struct TextImpl<'a> {
     pub(crate) text: Cow<'a, str>,
     gen: Gen<'a>,
     location: (u32, u32),
     key: Option<String>,
 }
-pub struct TextBuilder<'a> {
+pub struct Text<'a> {
     text: Option<Cow<'a, str>>,
     gen: Gen<'a>,
     key: Option<String>,
 }
 
-impl<'a> Default for TextBuilder<'a> {
+impl<'a> Default for Text<'a> {
     fn default() -> Self {
         Self {
             text: None,
@@ -36,7 +36,7 @@ impl<'a> Default for TextBuilder<'a> {
     }
 }
 
-impl<'a> TextBuilder<'a> {
+impl<'a> Text<'a> {
     pub fn new() -> Self {
         Default::default()
     }
@@ -58,8 +58,8 @@ impl<'a> TextBuilder<'a> {
         self
     }
 
-    pub fn build(self, location: (u32, u32)) -> Text<'a> {
-        Text {
+    pub fn build(self, location: (u32, u32)) -> TextImpl<'a> {
+        TextImpl {
             text: self.text.unwrap(),
             gen: self.gen,
             key: self.key,
@@ -68,9 +68,7 @@ impl<'a> TextBuilder<'a> {
     }
 }
 
-impl<'a> Component<'a> for Text<'a> {
-    type Builder = TextBuilder<'a>;
-
+impl<'a> Component<'a> for TextImpl<'a> {
     fn render(self, _: RenderContext, _: HookContext) -> View {
         unimplemented!()
     }
@@ -209,8 +207,6 @@ impl<'a> RawElement<'a> {
 }
 
 impl<'a> Component<'a> for RawElement<'a> {
-    type Builder = ();
-
     fn render(self, _: RenderContext, _: HookContext) -> View {
         unimplemented!()
     }
@@ -518,15 +514,13 @@ macro_rules! def_component {
         $native_tag:expr;
         $native_element:path;
         $tag:ident;
-        $tag_builder:ident;
+        $tag_impl:ident;
     ) => {
-        pub struct $tag<'a>(PhantomData<&'a ()>);
+        pub struct $tag_impl<'a>(PhantomData<&'a ()>);
 
         // Dummy implenentation of Component for $tag
-        // Used only for Builder; all tags create RawElements
+        // Used only for Impl; all tags create RawElements
         impl<'a> ::avalanche::Component<'a> for $tag<'a> {
-            type Builder = $tag_builder<'a>;
-
             fn render(self, _: RenderContext, _: HookContext) -> View {
                 unreachable!()
             }
@@ -536,11 +530,11 @@ macro_rules! def_component {
             }
         }
 
-        pub struct $tag_builder<'a> {
+        pub struct $tag<'a> {
             raw: RawElement<'a>,
         }
 
-        impl<'a> $tag_builder<'a> {
+        impl<'a> $tag<'a> {
             pub fn new() -> Self {
                 Default::default()
             }
@@ -572,7 +566,7 @@ macro_rules! def_component {
             }
         }
 
-        impl<'a> Default for $tag_builder<'a> {
+        impl<'a> Default for $tag<'a> {
             fn default() -> Self {
                 Self {
                     raw: std::default::Default::default(),
@@ -580,11 +574,11 @@ macro_rules! def_component {
             }
         }
 
-        impl<'a> AssociatedNativeElement for $tag_builder<'a> {
+        impl<'a> AssociatedNativeElement for $tag<'a> {
             type NativeElement = $native_element;
         }
 
-        add_global_attrs! {$tag_builder}
+        add_global_attrs! {$tag}
     };
 }
 
@@ -597,8 +591,8 @@ macro_rules! def_component_attrs {
         $(listeners: $($listennative:expr => $listenident:ident : $listentype:ty),*;)?
     ) => {
         macro_rules! $mac {
-            ($builder:ident) => {
-                impl<$l> $builder<$l> {
+            ($tag:ident) => {
+                impl<$l> $tag<$l> {
                     $(
                         pub fn $propident<T>(mut self, val: T, gen: Gen<'a>) -> Self where T : Into<$proptype> {
                             self.raw.set_attr(
@@ -625,11 +619,11 @@ macro_rules! def_component_attrs {
 
                     $(
                         $(
-                            pub fn $listenident(mut self, f: impl Fn(TypedEvent::<$listentype, <$builder as AssociatedNativeElement>::NativeElement>) + 'a, gen: Gen<'a>) -> Self {
+                            pub fn $listenident(mut self, f: impl Fn(TypedEvent::<$listentype, <$tag as AssociatedNativeElement>::NativeElement>) + 'a, gen: Gen<'a>) -> Self {
                                 self.raw.set_attr(
                                     $listennative,
                                     Attr::Handler(Box::new(move |e: WebNativeEvent| f(
-                                        TypedEvent::<$listentype, <$builder as AssociatedNativeElement>::NativeElement>::new(e.event.dyn_into::<$listentype>().unwrap(), e.current_target)
+                                        TypedEvent::<$listentype, <$tag as AssociatedNativeElement>::NativeElement>::new(e.event.dyn_into::<$listentype>().unwrap(), e.current_target)
                                     ))),
                                     gen
                                 );
@@ -815,49 +809,49 @@ def_component! {
     "div";
     web_sys::HtmlDivElement;
     Div;
-    DivBuilder;
+    DivImpl;
 }
 
 def_component! {
     "h1";
     web_sys::HtmlHeadingElement;
     H1;
-    H1Builder;
+    H1Impl;
 }
 
 def_component! {
     "h2";
     web_sys::HtmlHeadingElement;
     H2;
-    H2Builder;
+    H2Impl;
 }
 
 def_component! {
     "h3";
     web_sys::HtmlHeadingElement;
     H3;
-    H3Builder;
+    H3Impl;
 }
 
 def_component! {
     "h4";
     web_sys::HtmlHeadingElement;
     H4;
-    H4Builder;
+    H4Impl;
 }
 
 def_component! {
     "h5";
     web_sys::HtmlHeadingElement;
     H5;
-    H5Builder;
+    H5Impl;
 }
 
 def_component! {
     "h6";
     web_sys::HtmlHeadingElement;
     H6;
-    H6Builder;
+    H6Impl;
 }
 
 // TODO: should meta-type tags be implemented?
@@ -866,128 +860,128 @@ def_component! {
     "body";
     web_sys::HtmlBodyElement;
     Body;
-    BodyBuilder;
+    BodyImpl;
 }
 
 def_component! {
     "address";
     web_sys::HtmlSpanElement;
     Address;
-    AddressBuilder;
+    AddressImpl;
 }
 
 def_component! {
     "article";
     web_sys::HtmlElement;
     Article;
-    ArticleBuilder;
+    ArticleImpl;
 }
 
 def_component! {
     "aside";
     web_sys::HtmlElement;
     Aside;
-    AsideBuilder;
+    AsideImpl;
 }
 
 def_component! {
     "footer";
     web_sys::HtmlElement;
     Footer;
-    FooterBuilder;
+    FooterImpl;
 }
 
 def_component! {
     "header";
     web_sys::HtmlElement;
     Header;
-    HeaderBuilder;
+    HeaderImpl;
 }
 
 def_component! {
     "hgroup";
     web_sys::HtmlElement;
     HGroup;
-    HGroupBuilder;
+    HGroupImpl;
 }
 
 def_component! {
     "main";
     web_sys::HtmlElement;
     Main;
-    MainBuilder;
+    MainImpl;
 }
 
 def_component! {
     "nav";
     web_sys::HtmlElement;
     Nav;
-    NavBuilder;
+    NavImpl;
 }
 
 def_component! {
     "section";
     web_sys::HtmlElement;
     Section;
-    SectionBuilder;
+    SectionImpl;
 }
 
 def_component! {
     "blockquote";
     web_sys::HtmlQuoteElement;
     BlockQuote;
-    BlockQuoteBuilder;
+    BlockQuoteImpl;
 }
 
-add_cite_attr! {BlockQuoteBuilder}
+add_cite_attr! {BlockQuote}
 
 def_component! {
     "dd";
     web_sys::HtmlElement;
     Dd;
-    DdBuilder;
+    DdImpl;
 }
 
 def_component! {
     "dl";
     web_sys::HtmlElement;
     Dl;
-    DlBuilder;
+    DlImpl;
 }
 
 def_component! {
     "dt";
     web_sys::HtmlElement;
     Dt;
-    DtBuilder;
+    DtImpl;
 }
 
 def_component! {
     "figcaption";
     web_sys::HtmlElement;
     FigCaption;
-    FigCaptionBuilder;
+    FigCaptionImpl;
 }
 
 def_component! {
     "figure";
     web_sys::HtmlElement;
     Figure;
-    FigureBuilder;
+    FigureImpl;
 }
 
 def_component! {
     "hr";
     web_sys::HtmlHrElement;
     Hr;
-    HrBuilder;
+    HrImpl;
 }
 
 def_component! {
     "li";
     web_sys::HtmlLiElement;
     Li;
-    LiBuilder;
+    LiImpl;
 }
 
 def_component_attrs! {
@@ -996,13 +990,13 @@ def_component_attrs! {
     props:
         "value" => value: u32;
 }
-add_li_attrs! {LiBuilder}
+add_li_attrs! {Li}
 
 def_component! {
     "ol";
     web_sys::HtmlOListElement;
     Ol;
-    OlBuilder;
+    OlImpl;
 }
 
 def_component_attrs! {
@@ -1014,34 +1008,34 @@ def_component_attrs! {
     bool_props:
         "reversed" => reversed;
 }
-add_ol_attrs! {OlBuilder}
+add_ol_attrs! {Ol}
 
 def_component! {
     "p";
     web_sys::HtmlParagraphElement;
     P;
-    PBuilder;
+    PImpl;
 }
 
 def_component! {
     "pre";
     web_sys::HtmlPreElement;
     Pre;
-    PreBuilder;
+    PreImpl;
 }
 
 def_component! {
     "ul";
     web_sys::HtmlUListElement;
     Ul;
-    UlBuilder;
+    UlImpl;
 }
 
 def_component! {
     "a";
     web_sys::HtmlAnchorElement;
     A;
-    ABuilder;
+    AImpl;
 }
 
 def_component_attrs! {
@@ -1057,222 +1051,222 @@ def_component_attrs! {
         "target" => target: Cow<'a, str>,
         "type" => type_: Cow<'a, str>;
 }
-add_a_attrs! {ABuilder}
+add_a_attrs! {A}
 
 def_component! {
     "abbr";
     web_sys::HtmlElement;
     Abbr;
-    AbbrBuilder;
+    AbbrImpl;
 }
 
 def_component! {
     "b";
     web_sys::HtmlElement;
     B;
-    BBuilder;
+    BImpl;
 }
 
 def_component! {
     "bdi";
     web_sys::HtmlElement;
     Bdi;
-    BdiBuilder;
+    BdiImpl;
 }
 
 def_component! {
     "bdo";
     web_sys::HtmlElement;
     Bdo;
-    BdoBuilder;
+    BdoImpl;
 }
 
 def_component! {
     "br";
     web_sys::HtmlBrElement;
     Br;
-    BrBuilder;
+    BrImpl;
 }
 
 def_component! {
     "cite";
     web_sys::HtmlSpanElement;
     Cite;
-    CiteBuilder;
+    CiteImpl;
 }
 
 def_component! {
     "code";
     web_sys::HtmlSpanElement;
     Code;
-    CodeBuilder;
+    CodeImpl;
 }
 
 def_component! {
     "data";
     web_sys::HtmlDataElement;
     Data;
-    DataBuilder;
+    DataImpl;
 }
-add_string_value_attr! {DataBuilder}
+add_string_value_attr! {Data}
 
 def_component! {
     "dfn";
     web_sys::HtmlElement;
     Dfn;
-    DfnBuilder;
+    DfnImpl;
 }
 
 def_component! {
     "em";
     web_sys::HtmlSpanElement;
     Em;
-    EmBuilder;
+    EmImpl;
 }
 
 def_component! {
     "i";
     web_sys::HtmlElement;
     I;
-    IBuilder;
+    IImpl;
 }
 
 def_component! {
     "kbd";
     web_sys::HtmlElement;
     Kbd;
-    KbdBuilder;
+    KbdImpl;
 }
 
 def_component! {
     "mark";
     web_sys::HtmlElement;
     Mark;
-    MarkBuilder;
+    MarkImpl;
 }
 
 def_component! {
     "q";
     web_sys::HtmlQuoteElement;
     Q;
-    QBuilder;
+    QImpl;
 }
-add_cite_attr! {QBuilder}
+add_cite_attr! {Q}
 
 def_component! {
     "rp";
     web_sys::HtmlElement;
     Rp;
-    RpBuilder;
+    RpImpl;
 }
 
 def_component! {
     "rt";
     web_sys::HtmlElement;
     Rt;
-    RtBuilder;
+    RtImpl;
 }
 
 def_component! {
     "rtc";
     web_sys::HtmlElement;
     Rtc;
-    RtcBuilder;
+    RtcImpl;
 }
 
 def_component! {
     "ruby";
     web_sys::HtmlElement;
     Ruby;
-    RubyBuilder;
+    RubyImpl;
 }
 
 def_component! {
     "s";
     web_sys::HtmlElement;
     S;
-    SBuilder;
+    SImpl;
 }
 
 def_component! {
     "samp";
     web_sys::HtmlElement;
     Samp;
-    SampBuilder;
+    SampImpl;
 }
 
 def_component! {
     "small";
     web_sys::HtmlElement;
     Small;
-    SmallBuilder;
+    SmallImpl;
 }
 
 def_component! {
     "span";
     web_sys::HtmlSpanElement;
     Span;
-    SpanBuilder;
+    SpanImpl;
 }
 
 def_component! {
     "strong";
     web_sys::HtmlElement;
     Strong;
-    StrongBuilder;
+    StrongImpl;
 }
 
 def_component! {
     "sub";
     web_sys::HtmlElement;
     Sub;
-    SubBuilder;
+    SubImpl;
 }
 
 def_component! {
     "sup";
     web_sys::HtmlElement;
     Sup;
-    SupBuilder;
+    SupImpl;
 }
 
 def_component! {
     "time";
     web_sys::HtmlTimeElement;
     Time;
-    TimeBuilder;
+    TimeImpl;
 }
 
-add_datetime_attr! {TimeBuilder}
+add_datetime_attr! {Time}
 
 def_component! {
     "u";
     web_sys::HtmlElement;
     U;
-    UBuilder;
+    UImpl;
 }
 
 def_component! {
     "var";
     web_sys::HtmlElement;
     Var;
-    VarBuilder;
+    VarImpl;
 }
 
 def_component! {
     "wbr";
     web_sys::HtmlElement;
     Wbr;
-    WbrBuilder;
+    WbrImpl;
 }
 
 def_component! {
     "area";
     web_sys::HtmlAreaElement;
     Area;
-    AreaBuilder;
+    AreaImpl;
 }
-add_a_attrs! {AreaBuilder}
+add_a_attrs! {Area}
 
 def_component_attrs! {
     add_area_attrs;
@@ -1281,7 +1275,7 @@ def_component_attrs! {
         "coords" => coords: Cow<'a, str>,
         "shape" => shape: Cow<'a, str>;
 }
-add_area_attrs! {AreaBuilder}
+add_area_attrs! {Area}
 
 #[derive(Copy, Clone, Debug)]
 pub enum CrossOrigin {
@@ -1358,9 +1352,9 @@ def_component! {
     "audio";
     web_sys::HtmlAudioElement;
     Audio;
-    AudioBuilder;
+    AudioImpl;
 }
-add_media_attrs! {AudioBuilder}
+add_media_attrs! {Audio}
 
 def_component_attrs! {
     add_width_height_attrs;
@@ -1374,10 +1368,10 @@ def_component! {
     "video";
     web_sys::HtmlVideoElement;
     Video;
-    VideoBuilder;
+    VideoImpl;
 }
-add_media_attrs! {VideoBuilder}
-add_width_height_attrs! {VideoBuilder}
+add_media_attrs! {Video}
+add_width_height_attrs! {Video}
 
 def_component_attrs! {
     add_video_attrs;
@@ -1389,15 +1383,15 @@ def_component_attrs! {
         "disablePictureInPicture" => disable_picture_in_picture,
         "playsinline" => plays_inline;
 }
-add_video_attrs! {VideoBuilder}
+add_video_attrs! {Video}
 
 def_component! {
     "img";
     web_sys::HtmlImageElement;
     Img;
-    ImgBuilder;
+    ImgImpl;
 }
-add_width_height_attrs! {ImgBuilder}
+add_width_height_attrs! {Img}
 
 #[derive(Copy, Clone, Debug)]
 pub enum Decoding {
@@ -1471,21 +1465,21 @@ def_component_attrs! {
     bool_props:
         "ismap" => is_map;
 }
-add_img_attrs! {ImgBuilder}
+add_img_attrs! {Img}
 
 def_component! {
     "map";
     web_sys::HtmlMapElement;
     Map;
-    MapBuilder;
+    MapImpl;
 }
-add_name_attr! {MapBuilder}
+add_name_attr! {Map}
 
 def_component! {
     "track";
     web_sys::HtmlTrackElement;
     Track;
-    TrackBuilder;
+    TrackImpl;
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -1532,7 +1526,7 @@ def_component_attrs! {
     bool_props:
         "default" => default;
 }
-add_track_attrs! {TrackBuilder}
+add_track_attrs! {Track}
 
 def_component_attrs! {
     add_base_img_attrs;
@@ -1548,9 +1542,9 @@ def_component! {
     "embed";
     web_sys::HtmlEmbedElement;
     Embed;
-    EmbedBuilder;
+    EmbedImpl;
 }
-add_width_height_attrs! {EmbedBuilder}
+add_width_height_attrs! {Embed}
 
 def_component_attrs! {
     add_embed_attrs;
@@ -1559,15 +1553,15 @@ def_component_attrs! {
         "src" => src: Cow<'a, str>,
         "type" => type_: Cow<'a, str>;
 }
-add_embed_attrs! {EmbedBuilder}
+add_embed_attrs! {Embed}
 
 def_component! {
     "iframe";
     web_sys::HtmlIFrameElement;
     IFrame;
-    IFrameBuilder;
+    IFrameImpl;
 }
-add_width_height_attrs! {IFrameBuilder}
+add_width_height_attrs! {IFrame}
 
 def_component_attrs! {
     add_iframe_attrs;
@@ -1585,16 +1579,16 @@ def_component_attrs! {
         "allowfullscreen" => allow_full_screen,
         "allowpaymentrequest" => allow_payment_request;
 }
-add_iframe_attrs! {IFrameBuilder}
+add_iframe_attrs! {IFrame}
 
 def_component! {
     "object";
     web_sys::HtmlObjectElement;
     Object;
-    ObjectBuilder;
+    ObjectImpl;
 }
-add_width_height_attrs! {ObjectBuilder}
-add_name_attr! {ObjectBuilder}
+add_width_height_attrs! {Object}
+add_name_attr! {Object}
 
 def_component_attrs! {
     add_object_attrs;
@@ -1607,54 +1601,54 @@ def_component_attrs! {
     bool_props:
         "typemustmatch" => type_must_match;
 }
-add_object_attrs! {ObjectBuilder}
+add_object_attrs! {Object}
 
 def_component! {
     "param";
     web_sys::HtmlParamElement;
     Param;
-    ParamBuilder;
+    ParamImpl;
 }
-add_string_value_attr! {ParamBuilder}
-add_name_attr! {ParamBuilder}
+add_string_value_attr! {Param}
+add_name_attr! {Param}
 
 def_component! {
     "picture";
     web_sys::HtmlPictureElement;
     Picture;
-    PictureBuilder;
+    PictureImpl;
 }
 
 def_component! {
     "ins";
     web_sys::HtmlModElement;
     Ins;
-    InsBuilder;
+    InsImpl;
 }
-add_cite_attr! {InsBuilder}
-add_datetime_attr! {InsBuilder}
+add_cite_attr! {Ins}
+add_datetime_attr! {Ins}
 
 def_component! {
     "del";
     web_sys::HtmlModElement;
     Del;
-    DelBuilder;
+    DelImpl;
 }
-add_cite_attr! {DelBuilder}
-add_datetime_attr! {DelBuilder}
+add_cite_attr! {Del}
+add_datetime_attr! {Del}
 
 def_component! {
    "caption";
    web_sys::HtmlTableCaptionElement;
    Caption;
-   CaptionBuilder;
+   CaptionImpl;
 }
 
 def_component! {
     "col";
     web_sys::HtmlTableColElement;
     Col;
-    ColBuilder;
+    ColImpl;
 }
 
 def_component_attrs! {
@@ -1663,35 +1657,35 @@ def_component_attrs! {
     props:
         "span" => span: u32;
 }
-add_col_attrs! {ColBuilder}
+add_col_attrs! {Col}
 
 // same as above
 def_component! {
     "colgroup";
     web_sys::HtmlTableColElement;
     ColGroup;
-    ColGroupBuilder;
+    ColGroupImpl;
 }
 
 def_component! {
     "table";
     web_sys::HtmlTableElement;
     Table;
-    TableBuilder;
+    TableImpl;
 }
 
 def_component! {
     "tbody";
     web_sys::HtmlTableSectionElement;
     TBody;
-    TBodyBuilder;
+    TBodyImpl;
 }
 
 def_component! {
     "td";
     web_sys::HtmlTableCellElement;
     Td;
-    TdBuilder;
+    TdImpl;
 }
 
 def_component_attrs! {
@@ -1702,13 +1696,13 @@ def_component_attrs! {
         "rowspan" => row_span: u32,
         "headers" => headers: Cow<'a, str>;
 }
-add_td_th_attrs! {TdBuilder}
+add_td_th_attrs! {Td}
 
 def_component! {
     "tfoot";
     web_sys::HtmlTableSectionElement;
     TFoot;
-    TFootBuilder;
+    TFootImpl;
 }
 
 // TODO: attrs
@@ -1716,9 +1710,9 @@ def_component! {
     "th";
     web_sys::HtmlTableCellElement;
     Th;
-    ThBuilder;
+    ThImpl;
 }
-add_td_th_attrs! {ThBuilder}
+add_td_th_attrs! {Th}
 
 #[derive(Copy, Clone, Debug)]
 pub enum Scope {
@@ -1760,20 +1754,20 @@ def_component_attrs! {
         "abbr" => abbr: Cow<'a, str>,
         "scope" => scope: Scope;
 }
-add_th_attrs! {ThBuilder}
+add_th_attrs! {Th}
 
 def_component! {
     "thead";
     web_sys::HtmlTableSectionElement;
     THead;
-    THeadBuilder;
+    THeadImpl;
 }
 
 def_component! {
     "tr";
     web_sys::HtmlTableRowElement;
     Tr;
-    TrBuilder;
+    TrImpl;
 }
 
 def_component_attrs! {
@@ -1810,25 +1804,25 @@ def_component! {
     "button";
     web_sys::HtmlButtonElement;
     Button;
-    ButtonBuilder;
+    ButtonImpl;
 }
-add_type_attr! {ButtonBuilder}
-add_form_field_attrs! {ButtonBuilder}
-add_form_submit_attrs! {ButtonBuilder}
-add_string_value_attr! {ButtonBuilder}
+add_type_attr! {Button}
+add_form_field_attrs! {Button}
+add_form_submit_attrs! {Button}
+add_string_value_attr! {Button}
 
 def_component! {
     "datalist";
     web_sys::HtmlDataListElement;
     DataList;
-    DataListBuilder;
+    DataListImpl;
 }
 
 def_component! {
     "fieldset";
     web_sys::HtmlFieldSetElement;
     FieldSet;
-    FieldSetBuilder;
+    FieldSetImpl;
 }
 
 def_component_attrs! {
@@ -1839,16 +1833,16 @@ def_component_attrs! {
     bool_props:
         "disabled" => disabled;
 }
-add_field_set_attrs! {FieldSetBuilder}
-add_name_attr! {FieldSetBuilder}
+add_field_set_attrs! {FieldSet}
+add_name_attr! {FieldSet}
 
 def_component! {
     "form";
     web_sys::HtmlFormElement;
     Form;
-    FormBuilder;
+    FormImpl;
 }
-add_name_attr! {FormBuilder}
+add_name_attr! {Form}
 
 def_component_attrs! {
     add_form_attrs;
@@ -1864,7 +1858,7 @@ def_component_attrs! {
     bool_props:
         "novalidate" => no_validate;
 }
-add_form_attrs! {FormBuilder}
+add_form_attrs! {Form}
 
 def_component_attrs! {
     add_textinput_attrs;
@@ -1882,13 +1876,13 @@ def_component! {
     "input";
     web_sys::HtmlInputElement;
     Input;
-    InputBuilder;
+    InputImpl;
 }
-add_form_field_attrs! {InputBuilder}
-add_textinput_attrs! {InputBuilder}
-add_form_submit_attrs! {InputBuilder}
-add_base_img_attrs! {InputBuilder}
-add_type_attr! {InputBuilder}
+add_form_field_attrs! {Input}
+add_textinput_attrs! {Input}
+add_form_submit_attrs! {Input}
+add_base_img_attrs! {Input}
+add_type_attr! {Input}
 
 def_component_attrs! {
     add_input_attrs;
@@ -1903,9 +1897,9 @@ def_component_attrs! {
     bool_props:
         "multiple" => multiple;
 }
-add_input_attrs! {InputBuilder}
+add_input_attrs! {Input}
 
-impl<'a> InputBuilder<'a> {
+impl<'a> Input<'a> {
     pub fn value<S: Into<Cow<'a, str>>>(mut self, val: S, gen: Gen<'a>) -> Self {
         self.raw.value_controlled = true;
         self.raw
@@ -1928,12 +1922,12 @@ def_component! {
     "textarea";
     web_sys::HtmlTextAreaElement;
     TextArea;
-    TextAreaBuilder;
+    TextAreaImpl;
 }
-add_form_field_attrs! {TextAreaBuilder}
-add_textinput_attrs! {TextAreaBuilder}
+add_form_field_attrs! {TextArea}
+add_textinput_attrs! {TextArea}
 
-impl<'a> TextAreaBuilder<'a> {
+impl<'a> TextArea<'a> {
     pub fn value<S: Into<Cow<'a, str>>>(mut self, val: S, gen: Gen<'a>) -> Self {
         self.raw.value_controlled = true;
         self.raw
@@ -1979,7 +1973,7 @@ def_component_attrs! {
         "rows" => rows: u32,
         "wrap" => wrap: Wrap;
 }
-add_textarea_attrs! {TextAreaBuilder}
+add_textarea_attrs! {TextArea}
 
 def_component_attrs! {
     add_label_attrs;
@@ -1992,15 +1986,15 @@ def_component! {
     "label";
     web_sys::HtmlLabelElement;
     Label;
-    LabelBuilder;
+    LabelImpl;
 }
-add_label_attrs! {LabelBuilder}
+add_label_attrs! {Label}
 
 def_component! {
     "legend";
     web_sys::HtmlLegendElement;
     Legend;
-    LegendBuilder;
+    LegendImpl;
 }
 
 def_component_attrs! {
@@ -2020,15 +2014,15 @@ def_component! {
     "meter";
     web_sys::HtmlMeterElement;
     Meter;
-    MeterBuilder;
+    MeterImpl;
 }
-add_meter_attrs! {MeterBuilder}
+add_meter_attrs! {Meter}
 
 def_component! {
     "optgroup";
     web_sys::HtmlOptGroupElement;
     OptGroup;
-    OptGroupBuilder;
+    OptGroupImpl;
 }
 
 def_component_attrs! {
@@ -2038,16 +2032,16 @@ def_component_attrs! {
         "value" => value: Cow<'a, str>,
         "label" => label: Cow<'a, str>;
 }
-add_label_value_attrs! {OptGroupBuilder}
+add_label_value_attrs! {OptGroup}
 
 // TODO: doc alias for Option
 def_component! {
     "option";
     web_sys::HtmlOptionElement;
     Opt;
-    OptBuilder;
+    OptImpl;
 }
-add_label_value_attrs! {OptBuilder}
+add_label_value_attrs! {Opt}
 
 def_component_attrs! {
     add_opt_attrs;
@@ -2058,13 +2052,13 @@ def_component_attrs! {
         "disabled" => disabled,
         "selected" => selected;
 }
-add_opt_attrs! {OptBuilder}
+add_opt_attrs! {Opt}
 
 def_component! {
     "output";
     web_sys::HtmlOutputElement;
     Output;
-    OutputBuilder;
+    OutputImpl;
 }
 
 def_component_attrs! {
@@ -2075,13 +2069,13 @@ def_component_attrs! {
         "form" => form: Cow<'a, str>,
         "name" => name: Cow<'a, str>;
 }
-add_output_attrs! {OutputBuilder}
+add_output_attrs! {Output}
 
 def_component! {
     "progress";
     web_sys::HtmlProgressElement;
     Progress;
-    ProgressBuilder;
+    ProgressImpl;
 }
 
 def_component_attrs! {
@@ -2092,17 +2086,17 @@ def_component_attrs! {
         "value" => value: f64;
 }
 
-add_progress_attrs! {ProgressBuilder}
+add_progress_attrs! {Progress}
 
 // TODO: add controlled functionality
 def_component! {
     "select";
     web_sys::HtmlSelectElement;
     Select;
-    SelectBuilder;
+    SelectImpl;
 }
 
-add_form_field_attrs! {SelectBuilder}
+add_form_field_attrs! {Select}
 
 def_component_attrs! {
     add_select_attrs;
@@ -2114,7 +2108,7 @@ def_component_attrs! {
         "multiple" => multiple,
         "required" => required;
 }
-add_select_attrs! {SelectBuilder}
+add_select_attrs! {Select}
 
 def_component_attrs! {
     add_open_attr;
@@ -2129,21 +2123,21 @@ def_component! {
     "details";
     web_sys::HtmlDetailsElement;
     Details;
-    DetailsBuilder;
+    DetailsImpl;
 }
-add_open_attr! {DetailsBuilder}
+add_open_attr! {Details}
 
 def_component! {
     "dialog";
     web_sys::HtmlDialogElement;
     Dialog;
-    DialogBuilder;
+    DialogImpl;
 }
-add_open_attr! {DialogBuilder}
+add_open_attr! {Dialog}
 
 def_component! {
     "summary";
     web_sys::HtmlElement;
     Summary;
-    SummaryBuilder;
+    SummaryImpl;
 }
