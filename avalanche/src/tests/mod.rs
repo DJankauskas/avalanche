@@ -11,7 +11,7 @@ use crate::{
     component,
     renderer::{NativeType, Scheduler},
     shared::{Shared, WeakShared},
-    state, store, tracked, updated, Component, Tracked, View,
+    state, store, tracked, updated, Tracked, View, DefaultComponent,
 };
 
 use self::{native_mock::Native, renderer::TestRenderer};
@@ -67,7 +67,7 @@ impl Scheduler for TestScheduler {
 
 /// Render the given component, apply click events to the components with the given names,
 /// then check if the final component tree is equivalent to the expected one.
-pub fn test<C: Component<'static> + Default>(events: Vec<&str>, expected: Vec<Repr>) {
+pub fn test<C: DefaultComponent<'static>>(events: Vec<&str>, expected: Vec<Repr>) {
     let mut root = Root::new();
     let root_node = root.create_node("root");
     let root = Shared::new(root);

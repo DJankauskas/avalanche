@@ -1,28 +1,18 @@
 #[doc(inline)]
 pub use crate::vdom::Root;
 use crate::{
-    any_ref::DynRef,
     shared::{Shared, WeakShared},
-    tracked::Gen,
     vdom::{mark_node_dirty, ComponentId, VDom},
 };
 use std::any::Any;
+use downcast_rs::{Downcast, impl_downcast};
 
 /// An opaque handle whose underlying type is determined by the current `Renderer`.
 pub type NativeHandle = Box<dyn Any>;
 
 /// The interface through which `avalanche` updates the native UI as described by changes to components.
 /// This allows `avalanche` to be platform-agnostic.
-pub trait Renderer {
-    /// Given a component and its native type, generate its native representation and return
-    /// an opaque `NativeHandle` to it.
-    fn create_component(
-        &mut self,
-        native_type: &NativeType,
-        component: DynRef,
-        dispatch_native_event: DispatchNativeEvent,
-    ) -> NativeHandle;
-
+pub trait Renderer: Downcast {
     /// Appends the component with handle `child_handle` into the component with
     /// handle `parent_handle`'s children.
     fn append_child(
@@ -81,23 +71,13 @@ pub trait Renderer {
         len: usize,
     );
 
-    /// Updates the `component`'s corresponding native handle so that the representation
-    /// and result match. The method may be provided an event that is dispatched
-    /// to the component via a `Root` method.
-    fn update_component(
-        &mut self,
-        native_type: &NativeType,
-        native_handle: &mut NativeHandle,
-        component: DynRef,
-        curr_gen: Gen,
-        event: Option<NativeEvent>,
-    );
-
     /// Logs the given string to a platform-appropriate destination.
     /// This method is a placeholder, and may either be elaborated or replaced with
     /// the `log` crate
     fn log(&self, _string: &str) {}
 }
+
+impl_downcast!(Renderer);
 
 /// An interface to schedule a function on a platform's ui thread.
 pub trait Scheduler {

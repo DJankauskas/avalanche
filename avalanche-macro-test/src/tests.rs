@@ -1,4 +1,5 @@
-use avalanche::any_ref::DynRef;
+use std::fmt::Display;
+
 use avalanche::renderer::{
     DispatchNativeEvent, NativeEvent, NativeHandle, NativeType, Renderer, Scheduler,
 };
@@ -12,15 +13,6 @@ use avalanche::{
 struct TestRenderer;
 
 impl Renderer for TestRenderer {
-    fn create_component(
-        &mut self,
-        _native_type: &NativeType,
-        _component: DynRef,
-        _dispatch_native_event: DispatchNativeEvent,
-    ) -> NativeHandle {
-        Box::new(())
-    }
-
     fn append_child(
         &mut self,
         _parent_type: &NativeType,
@@ -66,16 +58,6 @@ impl Renderer for TestRenderer {
         len: usize,
     ) {
     }
-
-    fn update_component(
-        &mut self,
-        _native_type: &NativeType,
-        _native_handle: &mut NativeHandle,
-        _component: DynRef,
-        _curr_gen: Gen,
-        _native_event: Option<NativeEvent>,
-    ) {
-    }
 }
 
 /// A scheduler that does nothing, used for testing only
@@ -109,16 +91,27 @@ impl TestChildren {
     }
 }
 
-avalanche::impl_any_ref! { TestChildren }
-
 impl<'a> Component<'a> for TestChildren {
-    type Builder = Self;
-
     fn render(self, _: avalanche::hooks::RenderContext, _: avalanche::hooks::HookContext) -> View {
         unimplemented!()
     }
 
-    fn children(self) -> Vec<View> {
+    fn native_create(
+        &self,
+        renderer: &mut dyn Renderer,
+        dispatch_native_event: DispatchNativeEvent,
+    ) -> NativeHandle {
+        Box::new(())
+    }
+
+    fn native_update(
+        self,
+        renderer: &mut dyn Renderer,
+        native_type: &NativeType,
+        native_handle: &mut NativeHandle,
+        curr_gen: Gen,
+        event: Option<NativeEvent>,
+    ) -> Vec<View> {
         self.children
     }
 
@@ -196,6 +189,11 @@ fn Test() -> View {
             MixedLifetimes(self, a = &tracked!(a), c = &tracked!(c)),
             UnusedLifetime(self, a = tracked!(a)),
             PubCrate(self, a = tracked!(a), tracked!(b)),
+            SimpleGeneric(self, a = tracked!(a)),
+            SimpleGeneric::<u8>(self, a = tracked!(a)),
+            ConstGeneric::<0>(self, a = tracked!(a)),
+            WhereGeneric(self, a = tracked!(a)),
+            ComplexGenerics::<0, u8, _>(self, a = tracked!(a), b = tracked!(b)),
         ],
     )
 }
@@ -617,4 +615,36 @@ mod visibility_test {
 
         ().into()
     }
+}
+
+#[component]
+fn SimpleGeneric<T: Display>(a: T) -> View {
+    assert!(updated!(a));
+
+    ().into()
+} 
+
+#[component]
+fn ConstGeneric<const NUM: u8>(a: u8) -> View {
+    assert!(tracked!(a) == NUM);
+
+    ().into()
+}
+
+#[component]
+fn WhereGeneric<T>(a: T)  -> View where T: Display {
+    assert!(&*tracked!(a).to_string() == "0");
+
+    ().into()
+}
+
+#[component]
+fn ComplexGenerics<const NUM: u8, S: Display, T: Copy + Clone>(a: S, b: T) -> View where S: Copy, T: Display {
+    assert!(updated!(a));
+    assert!(!updated!(b));
+
+    assert!(&*tracked!(a).to_string() == "0");
+    assert!(&*tracked!(b).to_string() == "0");
+
+    ().into()
 }

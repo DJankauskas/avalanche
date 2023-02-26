@@ -1,15 +1,10 @@
-use std::rc::Rc;
+use crate::{renderer::Renderer, shared::Shared};
 
-use crate::{
-    renderer::{NativeEvent, Renderer},
-    shared::Shared, tracked::Gen,
-};
-
-use super::native_mock::{Native, Node, Root};
+use super::native_mock::{Node, Root};
 
 /// Enables avalanche to manipulate `Node`s.
 pub(super) struct TestRenderer {
-    root: Shared<Root>,
+    pub root: Shared<Root>,
 }
 
 impl TestRenderer {
@@ -19,26 +14,6 @@ impl TestRenderer {
 }
 
 impl Renderer for TestRenderer {
-    fn create_component(
-        &mut self,
-        _native_type: &crate::renderer::NativeType,
-        component: crate::any_ref::DynRef,
-        dispatch_native_event: crate::renderer::DispatchNativeEvent,
-    ) -> crate::renderer::NativeHandle {
-        let component = component.downcast_ref::<Native>().unwrap();
-        let node = self.root.exec_mut(|root| root.create_node(component.name));
-        node.set_value(component.value.to_string());
-        if component.on_click.is_some() {
-            node.set_on_click(Rc::new(move || {
-                dispatch_native_event.dispatch(NativeEvent {
-                    event: Box::new(()),
-                    name: "click",
-                })
-            }));
-        };
-        Box::new(node)
-    }
-
     fn append_child(
         &mut self,
         _parent_type: &crate::renderer::NativeType,
@@ -96,29 +71,6 @@ impl Renderer for TestRenderer {
         let parent_handle = parent_handle.downcast_ref::<Node>().unwrap();
         while parent_handle.children_len() > len {
             parent_handle.remove_child(len);
-        }
-    }
-
-    fn update_component(
-        &mut self,
-        _native_type: &crate::renderer::NativeType,
-        native_handle: &mut crate::renderer::NativeHandle,
-        component: crate::any_ref::DynRef,
-        curr_gen: Gen,
-        event: Option<crate::renderer::NativeEvent>,
-    ) {
-        let handle = native_handle.downcast_ref::<Node>().unwrap();
-        let component = component.downcast_ref::<Native>().unwrap();
-        if let (Some(_), Some(on_click)) = (event, &component.on_click) {
-            on_click();
-        }
-        // TODO: uncomment when a create/update model is created where a component will not
-        // immediately be updated after creation
-        // if component.name_updated() {
-        //     panic!("Names must be static but {} was updated", component.name);
-        // }
-        if component.value_updated(curr_gen) {
-            handle.set_value(component.value.to_string());
         }
     }
 }

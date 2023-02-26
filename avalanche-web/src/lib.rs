@@ -1,15 +1,12 @@
-use avalanche::Component;
-use avalanche::any_ref::DynRef;
 use avalanche::renderer::{
     DispatchNativeEvent, NativeEvent, NativeHandle, NativeType, Renderer, Scheduler,
 };
 use avalanche::shared::Shared;
-use avalanche::tracked::Gen;
 use avalanche::vdom::Root;
+use avalanche::DefaultComponent;
 
 use std::collections::{HashMap, VecDeque};
 
-use crate::components::{Attr, RawElement, Text};
 use crate::events::Event;
 use gloo_events::{EventListener, EventListenerOptions};
 use wasm_bindgen::JsCast;
@@ -23,7 +20,7 @@ static TIMEOUT_MSG_NAME: &str = "avalanche_web_message_name";
 /// Renders the given component onto the `element` parameter.
 ///
 /// To unmount the component, use the returned [Root].
-pub fn mount<C: Component<'static> + Default>(element: Element) -> Root {
+pub fn mount<C: DefaultComponent<'static>>(element: Element) -> Root {
     let renderer = WebRenderer::new();
     let scheduler = WebScheduler::new();
     let native_parent_type = NativeType {
@@ -47,9 +44,9 @@ pub fn mount<C: Component<'static> + Default>(element: Element) -> Root {
 }
 
 /// Renders the given component in the current document's body.
-/// 
+///
 /// To unmount the component, use the returned [Root].
-pub fn mount_to_body<C: Component<'static> + Default>() -> Root {
+pub fn mount_to_body<C: DefaultComponent<'static>>() -> Root {
     let body = web_sys::window()
         .expect("window")
         .document()
@@ -160,261 +157,6 @@ impl WebRenderer {
 }
 
 impl Renderer for WebRenderer {
-    fn create_component(
-        &mut self,
-        native_type: &NativeType,
-        component: DynRef,
-        dispatch_native_event: DispatchNativeEvent,
-    ) -> NativeHandle {
-        let elem = match native_type.handler {
-            "avalanche_web_text" => {
-                let text_node = match component.downcast_ref::<Text>() {
-                    Some(text) => self.document.create_text_node(&text.text),
-                    None => panic!("WebRenderer: expected Text component for avalanche_web_text."),
-                };
-                WebNativeHandle {
-                    node: web_sys::Node::from(text_node),
-                    _listeners: HashMap::new(),
-                    children_offset: 0,
-                }
-            }
-            "avalanche_web" => {
-                assert_ne!(
-                    native_type.name, "",
-                    "WebRenderer: expected tag name to not be empty."
-                );
-                let raw_element = component
-                    .downcast_ref::<RawElement>()
-                    .expect("component of type RawElement");
-
-                let element = self
-                    .document
-                    .create_element(native_type.name)
-                    .expect("WebRenderer: element creation failed from syntax error.");
-
-                let mut listeners = HashMap::new();
-
-                if raw_element.value_controlled {
-                    add_named_listener(
-                        &element,
-                        "input",
-                        "#v",
-                        false,
-                        |e| e.prevent_default(),
-                        &mut listeners,
-                    );
-                }
-                if raw_element.checked_controlled {
-                    add_named_listener(
-                        &element,
-                        "change",
-                        "#c",
-                        false,
-                        |e| e.prevent_default(),
-                        &mut listeners,
-                    );
-                }
-
-                match raw_element.tag {
-                    "input" => {
-                        let input_element = element
-                            .clone()
-                            .dyn_into::<web_sys::HtmlInputElement>()
-                            .expect("HTMLInputElement");
-
-                        for (name, (attr, _)) in raw_element.attrs.iter() {
-                            match attr {
-                                Attr::Prop(prop) => {
-                                    if let Some(prop) = prop {
-                                        match *name {
-                                            "value" => {
-                                                input_element.set_value(prop);
-                                            }
-                                            "checked" => {
-                                                input_element.set_checked(!prop.is_empty());
-                                            }
-                                            _ => {
-                                                input_element.set_attribute(name, prop).unwrap();
-                                            }
-                                        }
-                                    }
-                                }
-                                Attr::Handler(_) => {
-                                    let dispatcher = dispatch_native_event.clone();
-                                    add_listener(
-                                        &element,
-                                        name,
-                                        create_handler(name, dispatcher),
-                                        &mut listeners,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    "textarea" => {
-                        let text_area_element = element
-                            .clone()
-                            .dyn_into::<web_sys::HtmlTextAreaElement>()
-                            .expect("HTMLTextAreaElement");
-
-                        for (name, (attr, _)) in raw_element.attrs.iter() {
-                            match attr {
-                                Attr::Prop(prop) => {
-                                    if let Some(prop) = prop {
-                                        match *name {
-                                            "value" => text_area_element.set_value(prop),
-                                            _ => {
-                                                text_area_element.set_attribute(name, prop).unwrap()
-                                            }
-                                        }
-                                    }
-                                }
-                                Attr::Handler(_) => {
-                                    let dispatcher = dispatch_native_event.clone();
-                                    add_listener(
-                                        &element,
-                                        name,
-                                        create_handler(name, dispatcher),
-                                        &mut listeners,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    _ => {
-                        for (name, (attr, _)) in raw_element.attrs.iter() {
-                            match attr {
-                                Attr::Prop(prop) => {
-                                    if let Some(prop) = prop {
-                                        element.set_attribute(name, prop).unwrap();
-                                    }
-                                }
-                                Attr::Handler(_) => {
-                                    let dispatcher = dispatch_native_event.clone();
-                                    add_listener(
-                                        &element,
-                                        name,
-                                        create_handler(name, dispatcher),
-                                        &mut listeners,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                WebNativeHandle {
-                    node: web_sys::Node::from(element),
-                    _listeners: listeners,
-                    children_offset: 0,
-                }
-            }
-            _ => panic!("Custom handlers not implemented yet."),
-        };
-
-        Box::new(elem)
-    }
-
-    fn update_component(
-        &mut self,
-        native_type: &NativeType,
-        native_handle: &mut NativeHandle,
-        component: DynRef,
-        curr_gen: Gen,
-        native_event: Option<NativeEvent>,
-    ) {
-        let web_handle = native_handle.downcast_mut::<WebNativeHandle>().unwrap();
-        match native_type.handler {
-            "avalanche_web" => {
-                let node = web_handle.node.clone();
-                let element = node.dyn_into::<web_sys::Element>().unwrap();
-                let raw_element = component
-                    .downcast_ref::<RawElement>()
-                    .expect("component of type RawElement");
-
-                if let Some(native_event) = native_event {
-                    match &raw_element.attrs[&native_event.name].0 {
-                        Attr::Handler(handler) => {
-                            handler(
-                                *native_event
-                                    .event
-                                    .downcast::<WebNativeEvent>()
-                                    .expect("web_sys::Event for native event"),
-                            );
-                        }
-                        Attr::Prop(_) => {
-                            // TODO: panic due to missing prop?
-                        }
-                    }
-                }
-
-                if raw_element.max_gen >= curr_gen {
-                    match raw_element.tag {
-                        "input" => {
-                            let input_element = element
-                                .clone()
-                                .dyn_into::<web_sys::HtmlInputElement>()
-                                .expect("HTMLInputElement");
-                            for (name, (attr, gen)) in raw_element.attrs.iter() {
-                                if *gen >= curr_gen {
-                                    if let Attr::Prop(prop) = attr {
-                                        match *name {
-                                            "value" => {
-                                                if let Some(prop) = prop {
-                                                    input_element.set_value(prop);
-                                                }
-                                            }
-                                            "checked" => {
-                                                input_element.set_checked(prop.is_some());
-                                            }
-                                            _ => {
-                                                update_generic_prop(&element, name, prop.as_deref())
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        "textarea" => {
-                            let text_area_element = element
-                                .clone()
-                                .dyn_into::<web_sys::HtmlTextAreaElement>()
-                                .expect("HTMLTextAreaElement");
-                            for (name, (attr, gen)) in raw_element.attrs.iter() {
-                                if *gen >= curr_gen {
-                                    if let Attr::Prop(prop) = attr {
-                                        if *name == "value" {
-                                            if let Some(prop) = prop {
-                                                text_area_element.set_value(prop);
-                                            }
-                                        } else {
-                                            update_generic_prop(&element, name, prop.as_deref())
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        _ => {
-                            for (name, (attr, gen)) in raw_element.attrs.iter() {
-                                if *gen >= curr_gen {
-                                    if let Attr::Prop(prop) = attr {
-                                        update_generic_prop(&element, name, prop.as_deref())
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            "avalanche_web_text" => {
-                let new_text = component.downcast_ref::<Text>().expect("Text component");
-                // TODO: compare with old text?
-                web_handle.node.set_text_content(Some(&new_text.text));
-            }
-            _ => panic!("Custom handlers not implemented yet."),
-        };
-    }
-
     fn append_child(
         &mut self,
         parent_type: &NativeType,
@@ -509,13 +251,17 @@ impl Renderer for WebRenderer {
         Self::assert_handler_avalanche_web(parent_type);
         let parent_handle = Self::handle_cast(parent_handle);
         let parent_element = Self::node_to_element(parent_handle.node.clone());
-        
+
         // TODO: more efficient implementation
-        while let Some(node) = Self::try_get_child(&parent_element, len, parent_handle.children_offset) {
-            parent_element.remove_child(&node).expect("successful remove");
+        while let Some(node) =
+            Self::try_get_child(&parent_element, len, parent_handle.children_offset)
+        {
+            parent_element
+                .remove_child(&node)
+                .expect("successful remove");
         }
     }
-    
+
     // fn remove_child(
     //     &mut self,
     //     parent_type: &NativeType,

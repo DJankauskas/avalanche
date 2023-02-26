@@ -609,7 +609,7 @@ impl Function {
 
         let transformed = parse_quote! {
             {
-                let __avalanche_internal_built = <<#path as #avalanche_path::Component>::Builder>::new();
+                let __avalanche_internal_built = #path::new();
                 let __avalanche_internal_outer_gen = &mut __avalanche_internal_gen;
                 let mut __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);
                 #avalanche_path::vdom::render_child(
