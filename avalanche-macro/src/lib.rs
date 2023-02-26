@@ -6,11 +6,11 @@ use avalanche_path::get_avalanche_path;
 use proc_macro::TokenStream;
 
 use proc_macro2::{Ident, Span};
-use proc_macro_error::{abort, emit_error, proc_macro_error};
+use proc_macro_error::{abort, proc_macro_error};
 use quote::{format_ident, quote};
 use syn::{
-    parse_macro_input, GenericParam, Item, Lifetime, Pat, Path, PathArguments, ReturnType, Type,
-    TypeParamBound,
+    parse_macro_input, punctuated::Punctuated, GenericParam, Item, Lifetime, Pat, Path,
+    PathArguments, ReturnType, Token, Type, TypeParamBound,
 };
 
 use transform::{Dependencies, Function, Scope, Var};
@@ -29,13 +29,6 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
 
     let mut function = Function::new();
     let mut param_scope = Scope::new();
-
-    if item_fn.sig.inputs.len() > 64 {
-        emit_error!(
-            item_fn.sig.inputs,
-            "more than 64 properties are unsupported"
-        );
-    }
 
     let return_type = match &item_fn.sig.output {
         ReturnType::Type(_, ty) => ty,
@@ -63,26 +56,64 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
         abort!(token, "variadic components unsupported");
     };
 
-    let mut lifetime = None;
-
-    for param in item_fn.sig.generics.params.iter() {
-        if let GenericParam::Lifetime(lifetime_def) = param {
-            if lifetime.is_none() {
-                lifetime = Some(&lifetime_def.lifetime);
-            } else {
-                abort!(
-                    lifetime_def,
-                    "only one lifetime parameter allowed in a component signature"
-                );
-            };
-        } else {
-            abort!(
-                param,
-                "only single lifetime parameter allowed";
-                note = "currently generic components are unsupported"
-            );
+    for arg in &item_fn.sig.inputs {
+        if let syn::FnArg::Typed(pat_ty) = arg {
+            match &*pat_ty.ty {
+                Type::ImplTrait(impl_trait) => {
+                    abort!(
+                        impl_trait,
+                        "impl trait not supported";
+                        note = "consider using generics instead"
+                    );
+                }
+                Type::Infer(infer) => {
+                    abort!(infer, "explicit types required for component properties");
+                }
+                _ => {}
+            }
         }
     }
+
+    let mut lifetime = None;
+
+    let mut generic_params = Vec::new();
+    let mut generic_idents = Vec::new();
+    let mut generic_types = Vec::new();
+
+    for param in item_fn.sig.generics.params.iter() {
+        match param {
+            GenericParam::Lifetime(lifetime_def) => {
+                if lifetime.is_none() {
+                    lifetime = Some(&lifetime_def.lifetime);
+                } else {
+                    abort!(
+                        lifetime_def,
+                        "only one lifetime parameter allowed in a component signature"
+                    );
+                };
+            }
+            GenericParam::Type(ty) => {
+                generic_params.push(param);
+                generic_idents.push(&ty.ident);
+                generic_types.push(&ty.ident);
+            }
+            GenericParam::Const(c) => {
+                generic_params.push(param);
+                generic_idents.push(&c.ident);
+            }
+        }
+    }
+    let generic_params = Punctuated::<_, Token![,]>::from_iter(generic_params);
+    // Allow multiple interpolations into macro.
+    let generic_params = &generic_params;
+
+    let generic_idents = Punctuated::<_, Token![,]>::from_iter(generic_idents);
+    // Allow multiple interpolations into macro.
+    let generic_idents = &generic_idents;
+
+    let generic_types = Punctuated::<_, Token![,]>::from_iter(generic_types);
+    // Allow multiple interpolations into macro.
+    let generic_types = &generic_types;
 
     let mut lifetime = lifetime.cloned();
 
@@ -139,19 +170,20 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     let render_body = &item_fn.block;
     let render_body_attributes = &item_fn.attrs;
     let visibility = &item_fn.vis;
+    let where_clause = &item_fn.sig.generics.where_clause;
 
     // a lifetime that always exists for the Component<'a> impl
     let component_lifetime = lifetime.unwrap_or_else(|| Lifetime::new("'a", Span::call_site()));
 
     let component_default_impl = if inputs_len == 0 {
         Some(quote! {
-            impl<#component_lifetime> #avalanche_path::DefaultComponent<#component_lifetime> for #builder_name<#component_lifetime> {
-                type Impl = #name<#component_lifetime>;
+            impl<#component_lifetime, #generic_params> #avalanche_path::DefaultComponent<#component_lifetime> for #builder_name<#component_lifetime, #generic_idents> #where_clause {
+                type Impl = #name<#component_lifetime, #generic_idents>;
 
                 fn new() -> Self::Impl {
                     Self::Impl {
                         __internal_gens: [],
-                        __key: None,
+                        __key: ::std::option::Option::None,
                         __location: (0, 0),
                         __phantom: ::std::marker::PhantomData,
                     }
@@ -163,23 +195,29 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let component = quote! {
-        #visibility struct #builder_name<#component_lifetime> {
+        #visibility struct #builder_name<#component_lifetime, #generic_params> #where_clause {
             __internal_gens: [#avalanche_path::tracked::Gen<#component_lifetime>; #inputs_len],
             __key: ::std::option::Option<::std::string::String>,
             #(#param_ident: ::std::option::Option<#param_type>),*
         }
 
-        impl<#component_lifetime> #builder_name<#component_lifetime> where #( #param_type: ::std::clone::Clone ),* {
-            pub fn new() -> Self {
+        impl<#component_lifetime, #generic_params> ::std::default::Default for #builder_name<#component_lifetime, #generic_idents> #where_clause {
+            fn default() -> Self {
                 Self {
                     __internal_gens: [#avalanche_path::tracked::Gen::escape_hatch_new(false); #inputs_len],
                     __key: ::std::option::Option::None,
                     #(#param_ident: ::std::option::Option::None),*
                 }
             }
+        }
 
-            pub fn build(self, location: (::std::primitive::u32, ::std::primitive::u32)) -> #name<#component_lifetime> {
-                #name::<#component_lifetime> {
+        impl<#component_lifetime, #generic_params> #builder_name<#component_lifetime, #generic_idents> #where_clause {
+            pub fn new() -> Self {
+                ::std::default::Default::default()
+            }
+
+            pub fn build(self, location: (::std::primitive::u32, ::std::primitive::u32)) -> #name<#component_lifetime, #generic_idents> {
+                #name {
                     __internal_gens: self.__internal_gens,
                     __key: self.__key,
                     __location: location,
@@ -188,7 +226,7 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }
 
-            pub fn key<T: ::std::string::ToString>(mut self, key: T, _gen: #avalanche_path::tracked::Gen<#component_lifetime>) -> Self {
+            pub fn key<__T: ::std::string::ToString>(mut self, key: __T, _gen: #avalanche_path::tracked::Gen<#component_lifetime>) -> Self {
                 self.__key = ::std::option::Option::Some(::std::string::ToString::to_string(&key));
                 self
             }
@@ -213,17 +251,17 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
         }
 
         #[derive(::std::clone::Clone)]
-        #visibility struct #name<#component_lifetime> {
+        #visibility struct #name<#component_lifetime, #generic_params> #where_clause {
             __internal_gens: [#avalanche_path::tracked::Gen<#component_lifetime>; #inputs_len],
             __key: std::option::Option<::std::string::String>,
             __location: (::std::primitive::u32, ::std::primitive::u32),
-            __phantom: ::std::marker::PhantomData<&#component_lifetime ()>,
+            __phantom: ::std::marker::PhantomData<&#component_lifetime (#generic_types)>,
             #(#param_ident: #param_type),*
         }
 
         #component_default_impl
 
-        impl<#component_lifetime> #avalanche_path::Component<#component_lifetime> for #name<#component_lifetime> {
+        impl<#component_lifetime, #generic_params> #avalanche_path::Component<#component_lifetime> for #name<#component_lifetime, #generic_idents> #where_clause {
             #( #render_body_attributes )*
             #[allow(clippy::eval_order_dependence, clippy::unit_arg)]
             fn render(self, mut __avalanche_render_context: #avalanche_path::hooks::RenderContext, __avalanche_hook_context: #avalanche_path::hooks::HookContext) -> #return_type {
@@ -244,12 +282,14 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             fn key(&self) -> ::std::option::Option<String> {
-                std::clone::Clone::clone(&self.__key)
+                ::std::clone::Clone::clone(&self.__key)
             }
         }
     };
 
-    // eprintln!("{}", component);
+    if name == "Temp" {
+        eprintln!("{}", component);
+    }
 
     component.into()
 }

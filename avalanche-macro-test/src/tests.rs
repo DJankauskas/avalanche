@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use avalanche::renderer::{
     DispatchNativeEvent, NativeEvent, NativeHandle, NativeType, Renderer, Scheduler,
 };
@@ -187,6 +189,11 @@ fn Test() -> View {
             MixedLifetimes(self, a = &tracked!(a), c = &tracked!(c)),
             UnusedLifetime(self, a = tracked!(a)),
             PubCrate(self, a = tracked!(a), tracked!(b)),
+            SimpleGeneric(self, a = tracked!(a)),
+            SimpleGeneric::<u8>(self, a = tracked!(a)),
+            ConstGeneric::<0>(self, a = tracked!(a)),
+            WhereGeneric(self, a = tracked!(a)),
+            ComplexGenerics::<0, u8, _>(self, a = tracked!(a), b = tracked!(b)),
         ],
     )
 }
@@ -608,4 +615,36 @@ mod visibility_test {
 
         ().into()
     }
+}
+
+#[component]
+fn SimpleGeneric<T: Display>(a: T) -> View {
+    assert!(updated!(a));
+
+    ().into()
+} 
+
+#[component]
+fn ConstGeneric<const NUM: u8>(a: u8) -> View {
+    assert!(tracked!(a) == NUM);
+
+    ().into()
+}
+
+#[component]
+fn WhereGeneric<T>(a: T)  -> View where T: Display {
+    assert!(&*tracked!(a).to_string() == "0");
+
+    ().into()
+}
+
+#[component]
+fn ComplexGenerics<const NUM: u8, S: Display, T: Copy + Clone>(a: S, b: T) -> View where S: Copy, T: Display {
+    assert!(updated!(a));
+    assert!(!updated!(b));
+
+    assert!(&*tracked!(a).to_string() == "0");
+    assert!(&*tracked!(b).to_string() == "0");
+
+    ().into()
 }
