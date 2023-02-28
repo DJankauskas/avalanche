@@ -117,6 +117,7 @@ macro_rules! __internal_identity {
 }
 
 /// The return type of a component. Represents the child a component renders and returns.
+#[derive(PartialEq, Eq, Hash)]
 pub struct View {
     /// The id of the component corresponding to the view, or None if it is ()
     id: Option<ComponentId>,
@@ -187,9 +188,7 @@ pub trait Component<'a>: Sized + 'a {
         panic!("Cannot call native_update on a non-native component")
     }
 
-    fn location(&self) -> Option<(u32, u32)> {
-        None
-    }
+    fn location(&self) -> Option<(u32, u32)>;
 
     fn key(&self) -> Option<String> {
         None
@@ -205,6 +204,9 @@ impl<'a> Component<'a> for () {
     }
     fn updated(&self, _: Gen) -> bool {
         false
+    }
+    fn location(&self) -> Option<(u32, u32)> {
+        None
     }
 }
 

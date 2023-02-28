@@ -528,6 +528,10 @@ macro_rules! def_component {
             fn updated(&self, _: Gen) -> bool {
                 unreachable!()
             }
+            
+            fn location(&self) -> Option<(u32, u32)> {
+                unreachable!()
+            }
         }
 
         pub struct $tag<'a> {

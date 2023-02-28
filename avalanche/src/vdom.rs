@@ -173,7 +173,6 @@ mod dyn_component {
     use std::{
         alloc::{dealloc, Layout},
         marker::PhantomData,
-        mem::forget,
     };
 
     use super::*;
@@ -206,6 +205,8 @@ mod dyn_component {
         /// It must never be null and always be valid when dropped.
         inner: *mut (),
         vtable: &'static DynComponentVTable,
+        /// whether the component pointed to by inner 
+        component_dropped: bool,
         /// Ensures the `DynComponent` cannot outlive lifetime of the data
         /// held in `inner`.
         phantom: PhantomData<&'a ()>,
@@ -289,6 +290,7 @@ mod dyn_component {
                 native_type: component.native_type(),
                 inner: Box::into_raw(Box::new(component)).cast(),
                 vtable: &C::VTABLE,
+                component_dropped: false,
                 phantom: PhantomData,
             }
         }
@@ -311,13 +313,14 @@ mod dyn_component {
         }
 
         pub(super) fn native_update(
-            self,
+            mut self,
             renderer: &mut dyn Renderer,
             native_type: &NativeType,
             native_handle: &mut NativeHandle,
             curr_gen: Gen,
             event: Option<NativeEvent>,
         ) -> Vec<View> {
+            self.component_dropped = true;
             // SAFETY: self.inner is valid and is not dereferenced after this call.
             let ret = unsafe {
                 (self.vtable.native_update)(
@@ -329,24 +332,14 @@ mod dyn_component {
                     event,
                 )
             };
-            // SAFETY: inner points to a valid location, and is subsequently
-            // not used.
-            unsafe { self.dealloc_inner() };
-            // Ensure we do not double-drop and double-free inner.
-            forget(self);
 
             ret
         }
 
-        pub(super) fn render(self, render_ctx: RenderContext, hook_ctx: HookContext) -> View {
+        pub(super) fn render(mut self, render_ctx: RenderContext, hook_ctx: HookContext) -> View {
+            self.component_dropped = true;
             // SAFETY: self.inner is valid and is not dereferenced after this call.
             let ret = unsafe { (self.vtable.get_render)(self.inner, render_ctx, hook_ctx) };
-
-            // SAFETY: inner points to a valid location, and is subsequently
-            // not used.
-            unsafe { self.dealloc_inner() };
-            // Ensure we do not double-drop and double-free inner.
-            forget(self);
 
             ret
         }
@@ -355,12 +348,6 @@ mod dyn_component {
             // SAFETY: self.inner is valid.
             unsafe { (self.vtable.get_child_id)(self.inner) }
         }
-
-        /// SAFETY: `self.inner` must point to a valid allocation created by
-        /// `Box`, and `self.layout` must hold the layout of that allocation.
-        unsafe fn dealloc_inner(&self) {
-            dealloc(self.inner.cast::<u8>(), self.vtable.layout);
-        }
     }
 
     impl<'a> Drop for DynComponent<'a> {
@@ -368,8 +355,10 @@ mod dyn_component {
             // SAFETY: inner must always be a valid allocation created by a
             // Box that holds a valid Component instance.
             unsafe {
-                (self.vtable.drop)(self.inner);
-                self.dealloc_inner();
+                if !self.component_dropped {
+                    (self.vtable.drop)(self.inner);
+                }
+                dealloc(self.inner.cast::<u8>(), self.vtable.layout);
             }
         }
     }

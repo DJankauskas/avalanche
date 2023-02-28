@@ -284,6 +284,10 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
             fn key(&self) -> ::std::option::Option<String> {
                 ::std::clone::Clone::clone(&self.__key)
             }
+            
+            fn location(&self) -> ::std::option::Option<(::std::primitive::u32, ::std::primitive::u32)> {
+                ::std::option::Option::Some(self.__location)
+            }
         }
     };
 
