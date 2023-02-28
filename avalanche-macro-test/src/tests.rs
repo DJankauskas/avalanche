@@ -194,6 +194,10 @@ fn Test() -> View {
             ConstGeneric::<0>(self, a = tracked!(a)),
             WhereGeneric(self, a = tracked!(a)),
             ComplexGenerics::<0, u8, _>(self, a = tracked!(a), b = tracked!(b)),
+            DefaultArg(self),
+            DefaultTraitArg(self),
+            OptionalArg(self, b = tracked!(b)),
+            OptionalArg(self, a = tracked!(a), b = tracked!(b)),
         ],
     )
 }
@@ -622,7 +626,7 @@ fn SimpleGeneric<T: Display>(a: T) -> View {
     assert!(updated!(a));
 
     ().into()
-} 
+}
 
 #[component]
 fn ConstGeneric<const NUM: u8>(a: u8) -> View {
@@ -632,19 +636,55 @@ fn ConstGeneric<const NUM: u8>(a: u8) -> View {
 }
 
 #[component]
-fn WhereGeneric<T>(a: T)  -> View where T: Display {
+fn WhereGeneric<T>(a: T) -> View
+where
+    T: Display,
+{
     assert!(&*tracked!(a).to_string() == "0");
 
     ().into()
 }
 
 #[component]
-fn ComplexGenerics<const NUM: u8, S: Display, T: Copy + Clone>(a: S, b: T) -> View where S: Copy, T: Display {
-    assert!(updated!(a));
+fn ComplexGenerics<const NUM: u8, S: Display, T: Copy + Clone>(a: S, b: T) -> View
+where
+    S: Copy,
+    T: Display,
+{
     assert!(!updated!(b));
 
     assert!(&*tracked!(a).to_string() == "0");
     assert!(&*tracked!(b).to_string() == "0");
+
+    ().into()
+}
+
+#[component]
+fn DefaultArg(
+    /// Testing
+    #[default = 5]
+    e: u8,
+) -> View {
+    assert!(tracked!(e) == 5);
+    assert!(!updated!(e));
+
+    ().into()
+}
+
+#[component]
+fn DefaultTraitArg(#[default] e: u8) -> View {
+    assert!(tracked!(e) == 0);
+    assert!(!updated!(e));
+
+    ().into()
+}
+
+#[component]
+fn OptionalArg(#[optional] a: u8, b: u8) -> View {
+    if tracked!(a).is_some() {
+        assert!(updated!(a));
+    }
+    assert!(!updated!(b));
 
     ().into()
 }

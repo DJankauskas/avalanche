@@ -348,4 +348,5 @@ mod book_tests {
     doc_comment!(include_str!("../../docs/src/state.md"));
     doc_comment!(include_str!("../../docs/src/reactivity.md"));
     doc_comment!(include_str!("../../docs/src/events.md"));
+    doc_comment!(include_str!("../../docs/src/props.md"));
 }

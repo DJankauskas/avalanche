@@ -166,7 +166,7 @@ Now the `iter` method on `items` returns elements of type `Tracked<&String>` rat
 
 ### Keys
 
-So far, this explanation has only applied previous concepts, but there's the important new concept of keys. Every avalanche component has a special `String` `key` parameter. Whenever a particular call site `Component!` in code may be called more than once, it is required to specify a key to disambiguate the multiple instantiations; this is enforced with a runtime panic if not specified. Note that the key must be added on the topmost level, so in our example above,
+So far, this explanation has only applied previous concepts, but there's the important new concept of keys. Every avalanche component has a special `String` `key` parameter. Whenever a particular component call location in code may be called more than once, it is required to specify a key to disambiguate the multiple instantiations; this is enforced with a runtime panic if not specified. Note that the key must be added on the topmost level, so in our example above,
 ```rust,ignore
 Li(
     self,
@@ -177,7 +177,7 @@ Li(
 )
 ```
 is good but this is not:
-```rust,ignore
+```rust,should_panic,ignore,
 Li(self, [
     Text(
         self,

@@ -11,3 +11,5 @@
 - [Reactivity](./reactivity.md)
 
 - [Event handling and input elements](./events.md)
+
+- [Advanced component props](./props.md)

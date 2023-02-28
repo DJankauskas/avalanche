@@ -130,7 +130,7 @@ impl Parse for VecBody {
                     exprs.push_punct(comma_token);
                     exprs.extend(Punctuated::parse_terminated(input)?.into_pairs());
                 };
-
+                
                 let vec = VecBody::Literal(exprs);
 
                 return Ok(vec);
@@ -201,5 +201,25 @@ impl Parse for Tracked {
 
         let tracked = Tracked::Unnamed(expr);
         Ok(tracked)
+    }
+}
+
+/// Parses the `= ...` in `#[default = ...]`.
+pub(crate) struct DefaultAttr {
+    #[allow(unused)]
+    pub(crate) eq_token: Token![=],
+    pub(crate) expr: Expr,
+}
+
+impl Parse for DefaultAttr {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let eq_token = input.parse()?;
+        let expr = input.parse()?;
+        let default_attr = DefaultAttr {
+            eq_token,
+            expr,
+        };
+
+        Ok(default_attr)
     }
 }
