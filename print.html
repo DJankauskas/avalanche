@@ -97,7 +97,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="getting_started.html"><strong aria-hidden="true">1.</strong> Getting started</a></li><li class="chapter-item expanded "><a href="basic_components.html"><strong aria-hidden="true">2.</strong> Basic components</a></li><li class="chapter-item expanded "><a href="state.html"><strong aria-hidden="true">3.</strong> Hooks, state, and control flow</a></li><li class="chapter-item expanded "><a href="reactivity.html"><strong aria-hidden="true">4.</strong> Reactivity</a></li><li class="chapter-item expanded "><a href="events.html"><strong aria-hidden="true">5.</strong> Event handling and input elements</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="getting_started.html"><strong aria-hidden="true">1.</strong> Getting started</a></li><li class="chapter-item expanded "><a href="basic_components.html"><strong aria-hidden="true">2.</strong> Basic components</a></li><li class="chapter-item expanded "><a href="state.html"><strong aria-hidden="true">3.</strong> Hooks, state, and control flow</a></li><li class="chapter-item expanded "><a href="reactivity.html"><strong aria-hidden="true">4.</strong> Reactivity</a></li><li class="chapter-item expanded "><a href="events.html"><strong aria-hidden="true">5.</strong> Event handling and input elements</a></li><li class="chapter-item expanded "><a href="props.html"><strong aria-hidden="true">6.</strong> Advanced component props</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -656,7 +656,7 @@ fn List() -&gt; View {
 </span></code></pre></pre>
 <p>Now the <code>iter</code> method on <code>items</code> returns elements of type <code>Tracked&lt;&amp;String&gt;</code> rather than <code>&amp;String</code>.</p>
 <h3><a class="header" href="#keys" id="keys">Keys</a></h3>
-<p>So far, this explanation has only applied previous concepts, but there's the important new concept of keys. Every avalanche component has a special <code>String</code> <code>key</code> parameter. Whenever a particular call site <code>Component!</code> in code may be called more than once, it is required to specify a key to disambiguate the multiple instantiations; this is enforced with a runtime panic if not specified. Note that the key must be added on the topmost level, so in our example above,</p>
+<p>So far, this explanation has only applied previous concepts, but there's the important new concept of keys. Every avalanche component has a special <code>String</code> <code>key</code> parameter. Whenever a particular component call location in code may be called more than once, it is required to specify a key to disambiguate the multiple instantiations; this is enforced with a runtime panic if not specified. Note that the key must be added on the topmost level, so in our example above,</p>
 <pre><code class="language-rust ignore">Li(
     self,
     key = tracked!(item),
@@ -666,7 +666,7 @@ fn List() -&gt; View {
 )
 </code></pre>
 <p>is good but this is not:</p>
-<pre><code class="language-rust ignore">Li(self, [
+<pre><code class="language-rust should_panic ignore ">Li(self, [
     Text(
         self,
         key = tracked!(item),
@@ -710,6 +710,7 @@ fn ControlledInput() -&gt; View {
 use <code>on_input</code> in <code>avalanche_web</code> instead.</p>
 </blockquote>
 <p>For a more complex example of how state and events work in avalanche, check out the todomvc example. </p>
+<h1><a class="header" href="#advanced-component-props" id="advanced-component-props">Advanced component props</a></h1>
 
                     </main>
 
