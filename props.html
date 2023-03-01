@@ -164,6 +164,90 @@
                 <div id="content" class="content">
                     <main>
                         <h1><a class="header" href="#advanced-component-props" id="advanced-component-props">Advanced component props</a></h1>
+<h2><a class="header" href="#documenting-parameters" id="documenting-parameters">Documenting parameters</a></h2>
+<p>Documentation is important to ensure components are easy to use and understand.
+Parameters can be documented with standard Rust documentation comments and 
+attributes:</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span><span class="boring">use avalanche::{component, tracked, View};
+</span><span class="boring">use avalanche_web::components::Text;
+</span>
+/// Repeats a character for the specified number of times.
+#[component]
+fn Repeat(
+    /// The character to repeat.
+    character: char, 
+    #[doc = &quot;How many times the character is repeated.&quot;]
+    n: usize,
+) -&gt; View {
+    Text(self, tracked!(character).to_string().repeat(tracked!(n)))
+}
+<span class="boring">}
+</span></code></pre></pre>
+<h2><a class="header" href="#default-parameters" id="default-parameters">Default parameters</a></h2>
+<p>Imagine that we wanted to hide the <code>Repeat</code> component if the user does not 
+supply a value for <code>n</code>. We can do this by using <code>usize</code>'s default value:</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span><span class="boring">use avalanche::{component, tracked, View};
+</span><span class="boring">use avalanche_web::components::Text;
+</span>
+#[component]
+fn Repeat(
+    character: char, 
+    // How many times the character is repeated.
+    #[default]
+    n: usize
+) -&gt; View {
+    Text(self, tracked!(character).to_string().repeat(tracked!(n)))
+}
+<span class="boring">}
+</span></code></pre></pre>
+<p>Specifying custom default values is also possible. If we want
+to make <code>Repeat</code> excitement-themed, we could choose a default character value <code>'!'</code>:</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span><span class="boring">use avalanche::{component, tracked, View};
+</span><span class="boring">use avalanche_web::components::Text;
+</span>
+#[component]
+fn Repeat(
+    #[default = '!']
+    character: char, 
+    #[default]
+    // How many times the character is repeated.
+    n: usize
+) -&gt; View {
+    Text(self, tracked!(character).to_string().repeat(tracked!(n)))
+}
+<span class="boring">}
+</span></code></pre></pre>
+<p>The component can now be called with <code>Repeat(self)</code>, which would render nothing,
+or <code>Repeat(self, count = 3)</code>, which would render <code>!!!</code>.</p>
+<p>A default value can be any valid Rust expression. The expression will only 
+be evaluated if the caller of the component does not supply their own value.</p>
+<h2><a class="header" href="#generic-components" id="generic-components">Generic components</a></h2>
+<p>Generic components can be written similarly to generic functions:</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span><span class="boring">use avalanche::{component, tracked, View};
+</span><span class="boring">use avalanche_web::components::Text;
+</span>use std::string::ToString;
+
+#[component]
+fn SayHello&lt;S: ToString&gt;(name: S) -&gt; View {
+    Text(self, format!(&quot;Hello, {}!&quot;, tracked!(name).to_string()))
+}
+<span class="boring">}
+</span></code></pre></pre>
+<blockquote>
+<p>Note that <code>impl Trait</code> properties are not supported in components.</p>
+</blockquote>
 
                     </main>
 
