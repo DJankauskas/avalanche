@@ -433,6 +433,9 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
             });
 
         child_vnode.body_parent = Some(context.component_pos.component_id);
+        
+        // If the component's props were updated or it is dirty because it was just
+        // created or its state was updated, re-render the child.
         let view = if child_vnode.dirty || component.updated() {
             let native_component_id = match &mut child_vnode.native_component {
                 Some(native_component) => {

@@ -389,6 +389,19 @@ fn Loop(a: u8, b: u8, c: u8) -> View {
 #[component]
 fn Match(a: u8, b: u8, c: u8) -> View {
     let option = Some(tracked!(a));
+    
+    let v = match 0 {
+        0 => tracked!(a),
+        _ => 5,
+    };
+    assert!(updated!(v));
+
+    let w = match 1 {
+        0 if tracked!(b) == 0 => "zero",
+        _ => "other",
+    };
+    assert!(!updated!(b));
+
     let x = match tracked!(option) {
         Some(var) => var,
         None => tracked!(b),
@@ -408,6 +421,12 @@ fn Match(a: u8, b: u8, c: u8) -> View {
     };
     assert!(updated!(z));
 
+    let zz = match 0 {
+        0 => tracked!(b),
+        _ => tracked!(a),
+    };
+    assert!(!updated!(zz));
+    
     ().into()
 }
 

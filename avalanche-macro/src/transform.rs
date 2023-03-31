@@ -240,12 +240,12 @@ impl Function {
     /// This is useful for closures. Returns a vec of statements that the given statement
     /// has been converted into, along with the statement's dependencies.
     fn stmt(&mut self, mut stmt: Stmt, include_non_value_deps: bool) -> (Vec<Stmt>, UnitDeps) {
-        match stmt {
-            Stmt::Local(ref mut local) => {
+        match &mut stmt {
+            Stmt::Local(local) => {
                 let (stmts, mut init_dependencies, vars) = match &mut local.init {
                     Some((_, expr)) => {
                         let deps = self.expr(expr, false);
-                        let vars = from_pat(&local.pat, deps.clone());
+                        let vars = vars_from_pat(&local.pat, deps.clone());
                         match &mut local.pat {
                             // for a simple let name = expr; statement, create simpler codegen
                             Pat::Ident(_) => {
@@ -297,7 +297,7 @@ impl Function {
 
                 (stmts, init_dependencies)
             }
-            Stmt::Item(ref mut item) => {
+            Stmt::Item(item) => {
                 let deps = match item {
                     syn::Item::Macro(macro_item) => {
                         let (mut deps, transformed) = self.mac(&mut macro_item.mac, false);
@@ -313,11 +313,11 @@ impl Function {
                 };
                 (vec![stmt], deps)
             }
-            Stmt::Expr(ref mut expr) => {
+            Stmt::Expr(expr) => {
                 let deps = self.expr(expr, false);
                 (vec![stmt], deps)
             }
-            Stmt::Semi(ref mut expr, _) => {
+            Stmt::Semi(expr, _) => {
                 let mut escape_expr = self.escape_expr(expr, false);
                 if !escape_expr.escape {
                     enable_expr_tracking(expr, &escape_expr.dependencies);
@@ -528,7 +528,7 @@ impl Function {
         let mut closure_scope = Scope::function();
 
         for input in closure.inputs.iter() {
-            let vars = from_pat(input, args_deps.clone());
+            let vars = vars_from_pat(input, args_deps.clone());
             closure_scope.vars.extend(vars);
         }
 
@@ -738,7 +738,7 @@ impl Function {
 
                 let expr = self.expr(&mut for_expr.expr, nested_tracked);
 
-                let vars = from_pat(&for_expr.pat, expr);
+                let vars = vars_from_pat(&for_expr.pat, expr);
                 scope.vars = vars;
                 self.scopes.push(scope);
 
@@ -767,7 +767,7 @@ impl Function {
 
                 if let Expr::Let(let_expr) = &mut *if_expr.cond {
                     let let_dependencies = self.expr(&mut let_expr.expr, nested_tracked);
-                    if_scope.vars = from_pat(&let_expr.pat, let_dependencies);
+                    if_scope.vars = vars_from_pat(&let_expr.pat, let_dependencies);
                 }
 
                 //allow vars created by let guard to be accessed in block
@@ -934,9 +934,9 @@ struct EscapeExprRet {
     escape: bool,
 }
 
-fn from_pat(lhs: &Pat, rhs: UnitDeps) -> Vec<Var> {
+fn vars_from_pat(lhs: &Pat, rhs: UnitDeps) -> Vec<Var> {
     match lhs {
-        Pat::Box(box_) => return from_pat(&box_.pat, rhs),
+        Pat::Box(box_) => return vars_from_pat(&box_.pat, rhs),
         Pat::Ident(ident) => {
             return vec![Var {
                 name: ident.ident.to_string(),
@@ -949,7 +949,7 @@ fn from_pat(lhs: &Pat, rhs: UnitDeps) -> Vec<Var> {
         Pat::Or(or_pat) => {
             let mut vars = HashSet::new();
             for pat in or_pat.cases.iter() {
-                vars.extend(from_pat(pat, rhs.clone()));
+                vars.extend(vars_from_pat(pat, rhs.clone()));
             }
             return vars.into_iter().collect();
         }
@@ -966,7 +966,7 @@ fn from_pat(lhs: &Pat, rhs: UnitDeps) -> Vec<Var> {
         }
         Pat::Range(_) => {}
         Pat::Reference(reference) => {
-            return from_pat(&reference.pat, rhs);
+            return vars_from_pat(&reference.pat, rhs);
         }
         Pat::Rest(_) => return vec![],
         Pat::Slice(slice) => {
@@ -992,7 +992,7 @@ fn from_pat(lhs: &Pat, rhs: UnitDeps) -> Vec<Var> {
             return from_pat_tuple(&tuple_struct.pat, rhs);
         }
         Pat::Type(type_pat) => {
-            return from_pat(&type_pat.pat, rhs);
+            return vars_from_pat(&type_pat.pat, rhs);
         }
         Pat::Verbatim(_) => {}
         Pat::Wild(_) => {}
@@ -1008,7 +1008,7 @@ fn from_pat_tuple(lhs: &syn::PatTuple, rhs: UnitDeps) -> Vec<Var> {
     let mut vars = Vec::with_capacity(lhs.elems.len());
 
     for elem in lhs.elems.iter() {
-        vars.extend(from_pat(elem, rhs.clone()));
+        vars.extend(vars_from_pat(elem, rhs.clone()));
     }
 
     vars
@@ -1017,7 +1017,7 @@ fn from_pat_tuple(lhs: &syn::PatTuple, rhs: UnitDeps) -> Vec<Var> {
 fn from_pat_numbered(lhs: &[&Pat], rhs: UnitDeps) -> Vec<Var> {
     let mut vars = Vec::new();
     for pat in lhs.iter() {
-        vars.extend(from_pat(pat, rhs.clone()));
+        vars.extend(vars_from_pat(pat, rhs.clone()));
     }
     vars
 }
