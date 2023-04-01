@@ -33,6 +33,7 @@ pub struct RenderContext<'a> {
     pub(crate) current_native_event: &'a mut Option<(NativeEvent, ComponentId)>,
     /// components that need to be removed from the vdom at the end of a UI update iteration
     pub(crate) components_to_remove: &'a mut Vec<ComponentId>,
+    pub(crate) bump: &'a bumpalo::Bump,
 }
 
 /// Stores some state and its setter for `internal_state`.

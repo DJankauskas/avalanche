@@ -16,6 +16,7 @@ rust-version = "1.56"
 downcast-rs = "1.2"
 avalanche-macro = {version = "^0.1.0", path = '../avalanche-macro'}
 rustc-hash = "1.1"
+bumpalo = {version = "3.12", features = ["boxed", "collections"]}
 
 [dev-dependencies]
 avalanche-web = {version = "^0.1.0", path = '../avalanche-web'}

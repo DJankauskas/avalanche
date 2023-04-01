@@ -1,3 +1,12 @@
+use std::mem::{ManuallyDrop, swap};
+use std::num::NonZeroU64;
+use std::{any::Any, cell::RefCell, hash::Hash, panic::Location, rc::Rc};
+
+use rustc_hash::FxHashMap;
+use bumpalo::Bump;
+use bumpalo::boxed::Box as BumpBox;
+use bumpalo::collections::{Vec as BumpVec, CollectIn};
+
 use crate::hooks::{HookContext, RenderContext};
 use crate::renderer::{DispatchNativeEvent, NativeEvent};
 use crate::tracked::Gen;
@@ -8,11 +17,6 @@ use crate::{
 use crate::{ChildId, Component, ComponentPos, DefaultComponent, View};
 
 use crate::shared::Shared;
-use std::mem::ManuallyDrop;
-use std::num::NonZeroU64;
-use std::{any::Any, cell::RefCell, hash::Hash, panic::Location, rc::Rc};
-
-use rustc_hash::FxHashMap;
 
 use self::wrappers::ComponentStateAccess;
 
@@ -34,6 +38,8 @@ pub(crate) struct VDom {
     /// Updates the vdom by rendering the root component and all descendents that are dirty.
     pub(crate) update_vdom:
         fn(&mut VDom, &Shared<VDom>, &Shared<dyn Scheduler>, Option<(NativeEvent, ComponentId)>),
+    /// Allows for efficient render-time allocations.
+    pub(crate) bump: Bump,
 }
 
 // separate wrapper types to keep data structures maintaining safety invariants as isolated as possible
@@ -173,7 +179,6 @@ pub(crate) struct VNode {
 
 mod dyn_component {
     use std::{
-        alloc::{dealloc, Layout},
         marker::PhantomData,
     };
 
@@ -195,12 +200,11 @@ mod dyn_component {
         get_render: unsafe fn(*mut (), RenderContext, HookContext) -> View,
         get_child_id: unsafe fn(*mut ()) -> ChildId,
         drop: unsafe fn(*mut ()),
-        layout: Layout,
     }
 
     /// A type-erased container for `Component` allowing virtualization
     /// to avoid code bloat.
-    pub(crate) struct DynComponent<'a> {
+    pub(crate) struct DynComponent<'a, 'b> {
         updated: bool,
         native_type: Option<NativeType>,
         /// A pointer to a `Box`-allocated instance of a Component<'a>.
@@ -211,7 +215,7 @@ mod dyn_component {
         component_dropped: bool,
         /// Ensures the `DynComponent` cannot outlive lifetime of the data
         /// held in `inner`.
-        phantom: PhantomData<&'a ()>,
+        phantom: PhantomData<(&'a (), &'b ())>,
     }
 
     trait ComponentVTable {
@@ -235,7 +239,6 @@ mod dyn_component {
             get_render: get_render::<C>,
             get_child_id: get_child_id::<C>,
             drop: drop::<C>,
-            layout: Layout::new::<C>(),
         };
     }
 
@@ -285,12 +288,12 @@ mod dyn_component {
         let _ = unsafe { c.cast::<C>().read() };
     }
 
-    impl<'a> DynComponent<'a> {
-        pub(super) fn new<C: Component<'a>>(component: C, gen: InternalGen) -> Self {
+    impl<'a, 'b> DynComponent<'a, 'b> {
+        pub(super) fn new_in<C: Component<'a>>(component: C, gen: InternalGen, bump: &'b Bump) -> Self {
             Self {
                 updated: component.updated(gen.into()),
                 native_type: component.native_type(),
-                inner: Box::into_raw(Box::new(component)).cast(),
+                inner: BumpBox::into_raw(BumpBox::new_in(component, bump)).cast(),
                 vtable: &C::VTABLE,
                 component_dropped: false,
                 phantom: PhantomData,
@@ -352,7 +355,7 @@ mod dyn_component {
         }
     }
 
-    impl<'a> Drop for DynComponent<'a> {
+    impl<'a, 'b> Drop for DynComponent<'a, 'b> {
         fn drop(&mut self) {
             // SAFETY: inner must always be a valid allocation created by a
             // Box that holds a valid Component instance.
@@ -360,7 +363,6 @@ mod dyn_component {
                 if !self.component_dropped {
                     (self.vtable.drop)(self.inner);
                 }
-                dealloc(self.inner.cast::<u8>(), self.vtable.layout);
             }
         }
     }
@@ -458,14 +460,14 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
                         context.vdom.gen.into(),
                         current_native_event,
                     );
-                    let new_children: Vec<_> =
-                        new_children.into_iter().map(|child| child.id).collect();
-                    let mut new_native_children: Vec<_> = new_children
+                    let new_children: BumpVec<_> =
+                        new_children.into_iter().map(|child| child.id).collect_in(context.bump);
+                    let mut new_native_children: BumpVec<_> = new_children
                         .iter()
                         .filter_map(|id| {
                             id.and_then(|id| context.vdom.children[&id].view.native_component_id)
                         })
-                        .collect();
+                        .collect_in(context.bump);
                     update_native_children(
                         child_component_id,
                         &mut native_component.native_children,
@@ -474,8 +476,15 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
                         &mut native_component.native_handle,
                         context.vdom,
                     );
-                    native_component.native_children = new_native_children;
-                    child_vnode.children = new_children;
+                    
+                    // Update children vectors by replacing them with contents of new children
+                    // Note that this approach can reduce allocations by reusing the existing
+                    // vector's allocation
+                    native_component.native_children.clear();
+                    native_component.native_children.extend(new_native_children);
+                    
+                    child_vnode.children.clear();
+                    child_vnode.children.extend(new_children);
 
                     Some(child_component_id)
                 }
@@ -510,6 +519,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
                         scheduler: context.scheduler,
                         current_native_event: context.current_native_event,
                         components_to_remove: context.components_to_remove,
+                        bump: context.bump,
                     };
 
                     let view: View = component.render(child_render_context, child_hook_context);
@@ -546,7 +556,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
     }
 
     // Call the type-erased implementation of the function
-    render_child(DynComponent::new(component, context.vdom.gen), context)
+    render_child(DynComponent::new_in(component, context.vdom.gen, &context.bump), context)
 }
 
 /// Remove a vnode from `vdom`, along with all of its descendents.
@@ -706,6 +716,7 @@ impl Root {
             renderer: Box::new(renderer),
             gen: InternalGen::new(),
             update_vdom: render_vdom::<C>,
+            bump: Bump::new(),
         };
         let vdom = Shared::new(vdom);
         let vdom_clone = vdom.clone();
@@ -757,6 +768,11 @@ fn render_vdom<'a, C: DefaultComponent<'a>>(
 ) {
     let mut parent_vnode = vdom.children.remove(&ComponentId::new()).unwrap();
     let mut components_to_remove = Vec::new();
+    
+    // Extract bump from vdom so it can be borrowed without preventing vdom from being mutably borrowed
+    let mut bump = Bump::new();
+    swap(&mut vdom.bump, &mut bump);
+
     render_child(
         C::new(),
         &mut RenderContext {
@@ -769,6 +785,7 @@ fn render_vdom<'a, C: DefaultComponent<'a>>(
             scheduler,
             current_native_event: &mut current_native_event,
             components_to_remove: &mut components_to_remove,
+            bump: &bump,
         },
     );
     vdom.children.insert(ComponentId::new(), parent_vnode);
@@ -800,4 +817,8 @@ fn render_vdom<'a, C: DefaultComponent<'a>>(
     native_component.native_children = new_native_children;
     vdom.children.insert(ComponentId::new(), vnode);
     vdom.gen.inc();
+    
+    // Reset bump allocations, then restore allocator to vdom
+    bump.reset();
+    swap(&mut vdom.bump, &mut bump);
 }
