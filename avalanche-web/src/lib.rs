@@ -5,7 +5,8 @@ use avalanche::shared::Shared;
 use avalanche::vdom::Root;
 use avalanche::DefaultComponent;
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{VecDeque};
+use rustc_hash::FxHashMap;
 
 use crate::events::Event;
 use gloo_events::{EventListener, EventListenerOptions};
@@ -108,7 +109,7 @@ impl Scheduler for WebScheduler {
 
 struct WebNativeHandle {
     node: web_sys::Node,
-    _listeners: HashMap<&'static str, EventListener>,
+    _listeners: FxHashMap<&'static str, EventListener>,
     /// position at which renderer indexing should begin
     // TODO: more memory-efficient implementation?
     children_offset: u32,
@@ -298,7 +299,7 @@ fn add_listener(
     element: &web_sys::Element,
     name: &'static str,
     callback: impl Fn(Event) + 'static,
-    listeners: &mut HashMap<&'static str, EventListener>,
+    listeners: &mut FxHashMap<&'static str, EventListener>,
 ) {
     add_named_listener(element, name, name, false, callback, listeners)
 }
@@ -309,7 +310,7 @@ fn add_named_listener(
     name: &'static str,
     passive: bool,
     callback: impl Fn(Event) + 'static,
-    listeners: &mut HashMap<&'static str, EventListener>,
+    listeners: &mut FxHashMap<&'static str, EventListener>,
 ) {
     let options = EventListenerOptions {
         passive,

@@ -5,12 +5,14 @@ use crate::{
     renderer::{NativeHandle, NativeType, Renderer, Scheduler},
     tracked::InternalGen,
 };
-use crate::{ChildId, Component, ComponentPos, View, DefaultComponent};
+use crate::{ChildId, Component, ComponentPos, DefaultComponent, View};
 
 use crate::shared::Shared;
 use std::mem::ManuallyDrop;
 use std::num::NonZeroU64;
-use std::{any::Any, cell::RefCell, collections::HashMap, hash::Hash, panic::Location, rc::Rc};
+use std::{any::Any, cell::RefCell, hash::Hash, panic::Location, rc::Rc};
+
+use rustc_hash::FxHashMap;
 
 use self::wrappers::ComponentStateAccess;
 
@@ -20,7 +22,7 @@ const DYNAMIC_CHILDREN_ERR: &str = "Dynamic components must be provided keys.";
 /// for allowing updates and the dataflow tracking system to function.
 pub(crate) struct VDom {
     /// Stores all the nodes in the vdom, addressable by their `ComponentId`.
-    pub(crate) children: HashMap<ComponentId, VNode>,
+    pub(crate) children: FxHashMap<ComponentId, VNode>,
     /// Yields the `ComponentId` for the next created `VNode`, available by calling
     /// the `create_next` method.
     pub(crate) curr_component_id: ComponentId,
@@ -108,7 +110,7 @@ pub(crate) mod wrappers {
     }
 }
 
-pub(crate) type ComponentState = HashMap<Location<'static>, wrappers::SharedBox<dyn Any>>;
+pub(crate) type ComponentState = FxHashMap<Location<'static>, wrappers::SharedBox<dyn Any>>;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 /// Represents a unique instance of a component within the lifetime
@@ -154,7 +156,7 @@ pub(crate) struct VNode {
     /// The component in which the VNode's component was rendered in, if any.
     pub body_parent: Option<ComponentId>,
     /// The components rendered within the render function of the component, if any.
-    body_children: HashMap<ChildId, BodyChild>,
+    body_children: FxHashMap<ChildId, BodyChild>,
     /// The direct children of the component, where `()`-derived ones are represented
     /// by `None`.
     pub children: Vec<Option<ComponentId>>,
@@ -205,7 +207,7 @@ mod dyn_component {
         /// It must never be null and always be valid when dropped.
         inner: *mut (),
         vtable: &'static DynComponentVTable,
-        /// whether the component pointed to by inner 
+        /// whether the component pointed to by inner
         component_dropped: bool,
         /// Ensures the `DynComponent` cannot outlive lifetime of the data
         /// held in `inner`.
@@ -419,10 +421,10 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
                 });
                 VNode {
                     body_parent: Some(context.component_pos.component_id),
-                    body_children: HashMap::new(),
+                    body_children: FxHashMap::default(),
                     children: Vec::new(),
                     native_component,
-                    state: HashMap::new(),
+                    state: FxHashMap::default(),
                     dirty: true,
                     view: View {
                         id: Some(child_component_id),
@@ -433,7 +435,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
             });
 
         child_vnode.body_parent = Some(context.component_pos.component_id);
-        
+
         // If the component's props were updated or it is dirty because it was just
         // created or its state was updated, re-render the child.
         let view = if child_vnode.dirty || component.updated() {
@@ -479,7 +481,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &mut RenderConte
                 }
                 None => {
                     // swap state out of vnode to allow passing a mut VDom reference down the stack
-                    let mut state = ComponentState::new();
+                    let mut state = ComponentState::default();
                     std::mem::swap(&mut state, &mut child_vnode.state);
                     // wrap state to allow joint hook creation and state consumption
                     let shared_state = Shared::new(ComponentStateAccess::new(&mut state));
@@ -579,7 +581,8 @@ pub(crate) fn update_native_children(
             .native_parent
             == Some(parent_id)
     });
-    let mut old_native_children_map = HashMap::with_capacity(std::cmp::max(
+    let mut old_native_children_map = FxHashMap::default();
+    old_native_children_map.reserve(std::cmp::max(
         old_native_children.len(),
         new_native_children.len(),
     ));
@@ -676,10 +679,10 @@ impl Root {
 
         let mut curr_component_id = ComponentId::new();
         let root_component_id = curr_component_id.create_next();
-        let mut children = HashMap::with_capacity(16);
+        let mut children = FxHashMap::with_capacity_and_hasher(16, Default::default());
         let vnode = VNode {
             body_parent: None,
-            body_children: HashMap::with_capacity(1),
+            body_children: FxHashMap::with_capacity_and_hasher(1, Default::default()),
             children: vec![Some(ComponentId {
                 id: NonZeroU64::new(2).unwrap(),
             })],
@@ -689,7 +692,7 @@ impl Root {
                 native_parent: None,
                 native_children: Vec::new(),
             }),
-            state: HashMap::new(),
+            state: FxHashMap::default(),
             dirty: false,
             view: View {
                 id: Some(root_component_id),

@@ -1,8 +1,9 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::fmt::Display;
 use std::marker::PhantomData;
 use std::cmp::max;
+
+use rustc_hash::FxHashMap;
 
 use wasm_bindgen::JsCast;
 
@@ -86,7 +87,7 @@ impl<'a> Component<'a> for TextImpl<'a> {
         let text_node = renderer.document.create_text_node(&self.text);
         Box::new(WebNativeHandle {
             node: web_sys::Node::from(text_node),
-            _listeners: HashMap::new(),
+            _listeners: FxHashMap::default(),
             children_offset: 0,
         })
     }
@@ -167,7 +168,7 @@ impl<'a> IntoCowStr<'a> for Cow<'a, str> {
 #[doc(hidden)]
 pub struct RawElement<'a> {
     /// The `Gen<'a>` represents the generation on which the attr was last updated
-    pub(crate) attrs: HashMap<&'static str, (Attr<'a>, Gen<'a>)>,
+    pub(crate) attrs: FxHashMap<&'static str, (Attr<'a>, Gen<'a>)>,
     pub(crate) max_gen: Gen<'a>, 
     pub(crate) children: Vec<View>,
     pub(crate) children_gen: Gen<'a>,
@@ -218,7 +219,7 @@ impl<'a> Component<'a> for RawElement<'a> {
             .create_element(self.tag)
             .expect("WebRenderer: element creation failed from syntax error.");
 
-        let mut listeners = HashMap::new();
+        let mut listeners = FxHashMap::default();
 
         if self.value_controlled {
             add_named_listener(

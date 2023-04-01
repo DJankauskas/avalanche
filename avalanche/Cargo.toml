@@ -15,6 +15,7 @@ rust-version = "1.56"
 [dependencies]
 downcast-rs = "1.2"
 avalanche-macro = {version = "^0.1.0", path = '../avalanche-macro'}
+rustc-hash = "1.1"
 
 [dev-dependencies]
 avalanche-web = {version = "^0.1.0", path = '../avalanche-web'}
