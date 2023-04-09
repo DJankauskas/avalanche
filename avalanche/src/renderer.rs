@@ -18,7 +18,7 @@ pub trait Renderer: Downcast {
     fn append_child(
         &mut self,
         parent_type: &NativeType,
-        parent_handle: &mut NativeHandle,
+        parent_handle: &NativeHandle,
         child_type: &NativeType,
         child_handle: &NativeHandle,
     );
@@ -31,7 +31,7 @@ pub trait Renderer: Downcast {
     fn insert_child(
         &mut self,
         parent_type: &NativeType,
-        parent_handle: &mut NativeHandle,
+        parent_handle: &NativeHandle,
         index: usize,
         child_type: &NativeType,
         child_handle: &NativeHandle,
@@ -45,7 +45,7 @@ pub trait Renderer: Downcast {
     fn replace_child(
         &mut self,
         parent_type: &NativeType,
-        parent_handle: &mut NativeHandle,
+        parent_handle: &NativeHandle,
         index: usize,
         child_type: &NativeType,
         child_handle: &NativeHandle,
@@ -57,7 +57,7 @@ pub trait Renderer: Downcast {
     fn swap_children(
         &mut self,
         parent_type: &NativeType,
-        parent_handle: &mut NativeHandle,
+        parent_handle: &NativeHandle,
         a: usize,
         b: usize,
     );
@@ -67,7 +67,7 @@ pub trait Renderer: Downcast {
     fn truncate_children(
         &mut self,
         parent_type: &NativeType,
-        parent_handle: &mut NativeHandle,
+        parent_handle: &NativeHandle,
         len: usize,
     );
 

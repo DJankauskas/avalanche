@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, panic::Location};
+use std::{cell::Cell, marker::PhantomData, panic::Location};
 
 use crate::{
     renderer::{NativeEvent, Scheduler},
@@ -7,7 +7,7 @@ use crate::{
     vdom::{
         mark_node_dirty,
         wrappers::{ComponentStateAccess, SharedBox},
-        ComponentId, VDom, VNode,
+        CellBumpVec, ComponentId, VDom,
     },
     ComponentPos, Tracked,
 };
@@ -24,16 +24,17 @@ pub struct HookContext<'a> {
 }
 
 /// Provides a component with component-specific state.
-pub struct RenderContext<'a> {
-    pub(crate) vdom: &'a mut VDom,
+#[derive(Copy, Clone)]
+pub struct RenderContext<'a, 'bump: 'a> {
+    pub(crate) vdom: &'a Shared<&'a mut VDom>,
     /// VNode of parent.
-    pub(crate) vnode: &'a mut VNode,
+    pub(crate) body_parent_id: ComponentId,
     pub(crate) component_pos: ComponentPos<'a>,
     pub(crate) scheduler: &'a Shared<dyn Scheduler>,
-    pub(crate) current_native_event: &'a mut Option<(NativeEvent, ComponentId)>,
+    pub(crate) current_native_event: &'a Cell<Option<(NativeEvent, ComponentId)>>,
     /// components that need to be removed from the vdom at the end of a UI update iteration
-    pub(crate) components_to_remove: &'a mut Vec<ComponentId>,
-    pub(crate) bump: &'a bumpalo::Bump,
+    pub(crate) components_to_remove: &'a CellBumpVec<'bump, ComponentId>,
+    pub(crate) bump: &'bump bumpalo::Bump,
 }
 
 /// Stores some state and its setter for `internal_state`.
@@ -166,7 +167,7 @@ impl<T: 'static, S: 'static> InternalStateSetter<T, S> {
             None => {
                 // TODO: warn for leaking setter on destroyed tree
                 return;
-            },
+            }
         };
         let vdom_clone_2 = vdom_clone.clone();
         let scheduler_clone = self.scheduler.clone();
@@ -238,7 +239,9 @@ impl<T> StateSetter<T> {
 
 impl<T> Clone for StateSetter<T> {
     fn clone(&self) -> Self {
-        Self { internal_setter: self.internal_setter.clone() }
+        Self {
+            internal_setter: self.internal_setter.clone(),
+        }
     }
 }
 
@@ -318,6 +321,8 @@ impl<T> StoreSetter<T> {
 
 impl<T> Clone for StoreSetter<T> {
     fn clone(&self) -> Self {
-        Self { setter: self.setter.clone() }
+        Self {
+            setter: self.setter.clone(),
+        }
     }
 }

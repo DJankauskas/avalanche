@@ -16,7 +16,7 @@ impl Renderer for TestRenderer {
     fn append_child(
         &mut self,
         _parent_type: &NativeType,
-        _parent_handle: &mut NativeHandle,
+        _parent_handle: &NativeHandle,
         _child_type: &NativeType,
         _child_handle: &NativeHandle,
     ) {
@@ -25,7 +25,7 @@ impl Renderer for TestRenderer {
     fn insert_child(
         &mut self,
         _parent_type: &NativeType,
-        _parent_handle: &mut NativeHandle,
+        _parent_handle: &NativeHandle,
         _index: usize,
         _child_type: &NativeType,
         _child_handle: &NativeHandle,
@@ -35,7 +35,7 @@ impl Renderer for TestRenderer {
     fn replace_child(
         &mut self,
         _parent_type: &NativeType,
-        _parent_handle: &mut NativeHandle,
+        _parent_handle: &NativeHandle,
         _index: usize,
         _child_type: &NativeType,
         _child_handle: &NativeHandle,
@@ -45,7 +45,7 @@ impl Renderer for TestRenderer {
     fn swap_children(
         &mut self,
         _parent_type: &NativeType,
-        _parent_handle: &mut NativeHandle,
+        _parent_handle: &NativeHandle,
         _a: usize,
         _b: usize,
     ) {
@@ -54,7 +54,7 @@ impl Renderer for TestRenderer {
     fn truncate_children(
         &mut self,
         parent_type: &NativeType,
-        parent_handle: &mut NativeHandle,
+        parent_handle: &NativeHandle,
         len: usize,
     ) {
     }
@@ -108,7 +108,7 @@ impl<'a> Component<'a> for TestChildren {
         self,
         renderer: &mut dyn Renderer,
         native_type: &NativeType,
-        native_handle: &mut NativeHandle,
+        native_handle: &NativeHandle,
         curr_gen: Gen,
         event: Option<NativeEvent>,
     ) -> Vec<View> {
@@ -198,6 +198,7 @@ fn Test() -> View {
             DefaultTraitArg(self),
             OptionalArg(self, b = tracked!(b)),
             OptionalArg(self, a = tracked!(a), b = tracked!(b)),
+            RenderClosureProp(self, closure = &|| Identity(self, a = tracked!(a))),
         ],
     )
 }
@@ -706,4 +707,9 @@ fn OptionalArg(#[optional] a: u8, b: u8) -> View {
     assert!(!updated!(b));
 
     ().into()
+}
+
+#[component]
+fn RenderClosureProp(closure: &dyn Fn() -> View) -> View {
+    tracked!(closure)()
 }

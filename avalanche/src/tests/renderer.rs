@@ -17,7 +17,7 @@ impl Renderer for TestRenderer {
     fn append_child(
         &mut self,
         _parent_type: &crate::renderer::NativeType,
-        parent_handle: &mut crate::renderer::NativeHandle,
+        parent_handle: &crate::renderer::NativeHandle,
         _child_type: &crate::renderer::NativeType,
         child_handle: &crate::renderer::NativeHandle,
     ) {
@@ -29,7 +29,7 @@ impl Renderer for TestRenderer {
     fn insert_child(
         &mut self,
         _parent_type: &crate::renderer::NativeType,
-        parent_handle: &mut crate::renderer::NativeHandle,
+        parent_handle: &crate::renderer::NativeHandle,
         index: usize,
         _child_type: &crate::renderer::NativeType,
         child_handle: &crate::renderer::NativeHandle,
@@ -42,7 +42,7 @@ impl Renderer for TestRenderer {
     fn replace_child(
         &mut self,
         _parent_type: &crate::renderer::NativeType,
-        _parent_handle: &mut crate::renderer::NativeHandle,
+        _parent_handle: &crate::renderer::NativeHandle,
         _index: usize,
         _child_type: &crate::renderer::NativeType,
         _child_handle: &crate::renderer::NativeHandle,
@@ -54,7 +54,7 @@ impl Renderer for TestRenderer {
     fn swap_children(
         &mut self,
         _parent_type: &crate::renderer::NativeType,
-        parent_handle: &mut crate::renderer::NativeHandle,
+        parent_handle: &crate::renderer::NativeHandle,
         a: usize,
         b: usize,
     ) {
@@ -65,7 +65,7 @@ impl Renderer for TestRenderer {
     fn truncate_children(
         &mut self,
         _parent_type: &crate::renderer::NativeType,
-        parent_handle: &mut crate::renderer::NativeHandle,
+        parent_handle: &crate::renderer::NativeHandle,
         len: usize,
     ) {
         let parent_handle = parent_handle.downcast_ref::<Node>().unwrap();

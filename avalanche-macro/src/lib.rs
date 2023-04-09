@@ -292,7 +292,7 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
         impl<#component_lifetime, #generic_params> #avalanche_path::Component<#component_lifetime> for #name<#component_lifetime, #generic_idents> #where_clause {
             #( #render_body_attributes )*
             #[allow(clippy::eval_order_dependence, clippy::unit_arg)]
-            fn render(self, mut __avalanche_render_context: #avalanche_path::hooks::RenderContext, __avalanche_hook_context: #avalanche_path::hooks::HookContext) -> #return_type {
+            fn render(self, __avalanche_render_context: #avalanche_path::hooks::RenderContext, __avalanche_hook_context: #avalanche_path::hooks::HookContext) -> #return_type {
                 #(let #param_ident = #avalanche_path::tracked::Tracked::new(self.#param_ident, self.__internal_gens[#index]);)*
 
                 let mut __avalanche_internal_gen = #avalanche_path::tracked::Gen::escape_hatch_new(false);

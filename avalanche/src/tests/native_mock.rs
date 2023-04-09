@@ -248,7 +248,7 @@ impl<'a> Component<'a> for Native<'a> {
             self,
             _renderer: &mut dyn Renderer,
             _native_type: &NativeType,
-            native_handle: &mut crate::renderer::NativeHandle,
+            native_handle: &crate::renderer::NativeHandle,
             curr_gen: Gen,
             event: Option<crate::renderer::NativeEvent>,
         ) -> Vec<View> {

@@ -181,7 +181,7 @@ pub trait Component<'a>: Sized + 'a {
         self,
         renderer: &mut dyn Renderer,
         native_type: &NativeType,
-        native_handle: &mut NativeHandle,
+        native_handle: &NativeHandle,
         curr_gen: Gen,
         event: Option<NativeEvent>,
     ) -> Vec<View> {

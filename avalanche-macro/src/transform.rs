@@ -616,7 +616,7 @@ impl Function {
                     __avalanche_internal_built
                     #(.#prop_construct_expr)*
                     .build((#line, #column)),
-                    &mut __avalanche_render_context
+                    &__avalanche_render_context
                 )
             }
         };

@@ -161,7 +161,7 @@ impl Renderer for WebRenderer {
     fn append_child(
         &mut self,
         parent_type: &NativeType,
-        parent_handle: &mut NativeHandle,
+        parent_handle: &NativeHandle,
         _child_type: &NativeType,
         child_handle: &NativeHandle,
     ) {
@@ -177,7 +177,7 @@ impl Renderer for WebRenderer {
     fn insert_child(
         &mut self,
         parent_type: &NativeType,
-        parent_handle: &mut NativeHandle,
+        parent_handle: &NativeHandle,
         index: usize,
         _child_type: &NativeType,
         child_handle: &NativeHandle,
@@ -197,7 +197,7 @@ impl Renderer for WebRenderer {
     fn swap_children(
         &mut self,
         parent_type: &NativeType,
-        parent_handle: &mut NativeHandle,
+        parent_handle: &NativeHandle,
         a: usize,
         b: usize,
     ) {
@@ -225,7 +225,7 @@ impl Renderer for WebRenderer {
     fn replace_child(
         &mut self,
         parent_type: &NativeType,
-        parent_handle: &mut NativeHandle,
+        parent_handle: &NativeHandle,
         index: usize,
         _child_type: &NativeType,
         child_handle: &NativeHandle,
@@ -246,7 +246,7 @@ impl Renderer for WebRenderer {
     fn truncate_children(
         &mut self,
         parent_type: &NativeType,
-        parent_handle: &mut NativeHandle,
+        parent_handle: &NativeHandle,
         len: usize,
     ) {
         Self::assert_handler_avalanche_web(parent_type);

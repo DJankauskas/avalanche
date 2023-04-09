@@ -96,11 +96,11 @@ impl<'a> Component<'a> for TextImpl<'a> {
         self,
         _renderer: &mut dyn Renderer,
         _native_type: &NativeType,
-        native_handle: &mut NativeHandle,
+        native_handle: &NativeHandle,
         _curr_gen: Gen,
         _event: Option<NativeEvent>,
     ) -> Vec<View> {
-        let web_handle = native_handle.downcast_mut::<WebNativeHandle>().unwrap();
+        let web_handle = native_handle.downcast_ref::<WebNativeHandle>().unwrap();
         // TODO: compare with old text?
         web_handle.node.set_text_content(Some(self.text.as_ref()));
         Vec::new()
@@ -341,11 +341,11 @@ impl<'a> Component<'a> for RawElement<'a> {
         self,
         _renderer: &mut dyn Renderer,
         _native_type: &NativeType,
-        native_handle: &mut NativeHandle,
+        native_handle: &NativeHandle,
         curr_gen: Gen,
         event: Option<NativeEvent>,
     ) -> Vec<View> {
-        let web_handle = native_handle.downcast_mut::<WebNativeHandle>().unwrap();
+        let web_handle = native_handle.downcast_ref::<WebNativeHandle>().unwrap();
         let node = web_handle.node.clone();
         let element = node.dyn_into::<web_sys::Element>().unwrap();
 
