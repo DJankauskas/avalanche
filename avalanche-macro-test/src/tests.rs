@@ -5,6 +5,7 @@ use avalanche::renderer::{
 };
 use avalanche::tracked::Gen;
 use avalanche::vdom::Root;
+use avalanche::alloc::{Bump, Vec as BumpVec, CollectIn};
 use avalanche::{
     component, enclose, tracked, tracked_keyed, updated, updated_keyed, Component, Tracked, View,
 };
@@ -67,21 +68,21 @@ impl Scheduler for TestScheduler {
     fn schedule_on_ui_thread(&mut self, _f: Box<dyn FnOnce()>) {}
 }
 
-struct TestChildren {
-    children: Vec<View>,
+struct TestChildren<'a> {
+    children: BumpVec<'a, View>,
     location: (u32, u32),
 }
 
-impl TestChildren {
-    fn new() -> Self {
+impl<'a> TestChildren<'a> {
+    fn new<'bump: 'a>(bump: &'bump Bump) -> Self {
         Self {
-            children: Vec::new(),
+            children: BumpVec::new_in(bump),
             location: (0, 0),
         }
     }
 
-    fn __last(mut self, children: Vec<View>, _gen: Gen<'_>) -> Self {
-        self.children = children;
+    fn __last(mut self, children: impl IntoIterator<Item=View>, _gen: Gen<'_>) -> Self {
+        self.children = children.into_iter().collect_in(self.children.bump());
         self
     }
 
@@ -91,7 +92,7 @@ impl TestChildren {
     }
 }
 
-impl<'a> Component<'a> for TestChildren {
+impl<'a> Component<'a> for TestChildren<'a> {
     fn render(self, _: avalanche::hooks::RenderContext, _: avalanche::hooks::HookContext) -> View {
         unimplemented!()
     }
@@ -111,8 +112,8 @@ impl<'a> Component<'a> for TestChildren {
         native_handle: &NativeHandle,
         curr_gen: Gen,
         event: Option<NativeEvent>,
-    ) -> Vec<View> {
-        self.children
+    ) -> &'a [View] {
+        self.children.into_bump_slice()
     }
 
     fn updated(&self, _curr_gen: Gen) -> bool {
@@ -133,10 +134,6 @@ impl<'a> Component<'a> for TestChildren {
 
 #[test]
 fn test() {
-    let native_parent = TestChildren {
-        children: Vec::new(),
-        location: (0, 0),
-    };
     let root = Root::new::<_, _, Test>(
         NativeType {
             handler: "",
@@ -161,7 +158,7 @@ fn Test() -> View {
 
     TestChildren(
         self,
-        vec![
+        [
             Bare(self),
             Identity(self, a = tracked!(a)),
             Local(self, a = tracked!(a), b = tracked!(b)),

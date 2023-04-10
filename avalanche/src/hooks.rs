@@ -4,6 +4,7 @@ use crate::{
     renderer::{NativeEvent, Scheduler},
     shared::{Shared, WeakShared},
     tracked::{Gen, InternalGen},
+    alloc::Bump,
     vdom::{
         mark_node_dirty,
         wrappers::{ComponentStateAccess, SharedBox},
@@ -34,7 +35,8 @@ pub struct RenderContext<'a, 'bump: 'a> {
     pub(crate) current_native_event: &'a Cell<Option<(NativeEvent, ComponentId)>>,
     /// components that need to be removed from the vdom at the end of a UI update iteration
     pub(crate) components_to_remove: &'a CellBumpVec<'bump, ComponentId>,
-    pub(crate) bump: &'bump bumpalo::Bump,
+    #[doc(hidden)]
+    pub bump: &'bump Bump,
 }
 
 /// Stores some state and its setter for `internal_state`.

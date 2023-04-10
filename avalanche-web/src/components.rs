@@ -12,6 +12,7 @@ use avalanche::{Component, View};
 use avalanche::renderer::{Renderer, NativeType, NativeHandle, NativeEvent, DispatchNativeEvent};
 use avalanche::tracked::Gen;
 use avalanche::hooks::{HookContext, RenderContext};
+use avalanche::alloc::{Bump, Vec as BumpVec, CollectIn};
 
 /// Represents a text node.
 #[derive(Clone, PartialEq)]
@@ -27,19 +28,13 @@ pub struct Text<'a> {
     key: Option<String>,
 }
 
-impl<'a> Default for Text<'a> {
-    fn default() -> Self {
+impl<'a> Text<'a> {
+    pub fn new(_: &Bump) -> Self {
         Self {
             text: None,
             gen: Gen::escape_hatch_new(false),
             key: None,
         }
-    }
-}
-
-impl<'a> Text<'a> {
-    pub fn new() -> Self {
-        Default::default()
     }
 
     pub fn text<T: Into<Cow<'a, str>>>(mut self, text: T, gen: Gen<'a>) -> Self {
@@ -99,11 +94,11 @@ impl<'a> Component<'a> for TextImpl<'a> {
         native_handle: &NativeHandle,
         _curr_gen: Gen,
         _event: Option<NativeEvent>,
-    ) -> Vec<View> {
+    ) -> &'a [View] {
         let web_handle = native_handle.downcast_ref::<WebNativeHandle>().unwrap();
         // TODO: compare with old text?
         web_handle.node.set_text_content(Some(self.text.as_ref()));
-        Vec::new()
+        &[]
     }
 
     fn updated(&self, curr_gen: Gen) -> bool {
@@ -170,7 +165,7 @@ pub struct RawElement<'a> {
     /// The `Gen<'a>` represents the generation on which the attr was last updated
     pub(crate) attrs: FxHashMap<&'static str, (Attr<'a>, Gen<'a>)>,
     pub(crate) max_gen: Gen<'a>, 
-    pub(crate) children: Vec<View>,
+    pub(crate) children: BumpVec<'a, View>,
     pub(crate) children_gen: Gen<'a>,
     pub(crate) value_controlled: bool,
     pub(crate) checked_controlled: bool,
@@ -179,12 +174,12 @@ pub struct RawElement<'a> {
     pub(crate) tag: &'static str,
 }
 
-impl<'a> Default for RawElement<'a> {
-    fn default() -> Self {
+impl<'a> RawElement<'a> {
+    fn new<'bump: 'a>(bump: &'bump Bump) -> Self {
         Self {
             attrs: Default::default(),
             max_gen: Gen::escape_hatch_new(false),
-            children: Default::default(),
+            children: BumpVec::new_in(bump),
             children_gen: Gen::escape_hatch_new(false),
             value_controlled: Default::default(),
             checked_controlled: Default::default(),
@@ -193,15 +188,12 @@ impl<'a> Default for RawElement<'a> {
             tag: Default::default(),
         }
     }
-}
-
-impl<'a> RawElement<'a> {
     fn set_attr(&mut self, name: &'static str, attr: Attr<'a>, gen: Gen<'a>) {
         self.attrs.insert(name, (attr, gen));
         self.max_gen = max(self.max_gen, gen);
     }
 
-    fn set_children(&mut self, children: Vec<View>, gen: Gen<'a>) {
+    fn set_children(&mut self, children: BumpVec<'a, View>, gen: Gen<'a>) {
         self.children = children;
         self.children_gen = gen;
     }
@@ -344,7 +336,7 @@ impl<'a> Component<'a> for RawElement<'a> {
         native_handle: &NativeHandle,
         curr_gen: Gen,
         event: Option<NativeEvent>,
-    ) -> Vec<View> {
+    ) -> &'a [View] {
         let web_handle = native_handle.downcast_ref::<WebNativeHandle>().unwrap();
         let node = web_handle.node.clone();
         let element = node.dyn_into::<web_sys::Element>().unwrap();
@@ -422,7 +414,7 @@ impl<'a> Component<'a> for RawElement<'a> {
                 }
             }
         }
-        self.children
+        self.children.into_bump_slice()
     }
 
     fn updated(&self, curr_gen: Gen) -> bool {
@@ -540,8 +532,10 @@ macro_rules! def_component {
         }
 
         impl<'a> $tag<'a> {
-            pub fn new() -> Self {
-                Default::default()
+            pub fn new<'bump: 'a>(bump: &'bump Bump) -> Self {
+                Self {
+                    raw: RawElement::new(bump),
+                }
             }
 
             pub fn build(mut self, location: (u32, u32)) -> RawElement<'a> {
@@ -556,26 +550,20 @@ macro_rules! def_component {
             }
 
             pub fn child(mut self, child: View, gen: Gen<'a>) -> Self {
-                self.raw.set_children(vec![child], gen);
+                let mut children = BumpVec::with_capacity_in(1, self.raw.children.bump());
+                children.push(child);
+                self.raw.set_children(children, gen);
                 self
             }
 
-            pub fn children<T: Into<Vec<View>>>(mut self, children: T, gen: Gen<'a>) -> Self {
-                self.raw.set_children(children.into(), gen);
+            pub fn children<I: IntoIterator<Item=View>>(mut self, children: I, gen: Gen<'a>) -> Self {
+                let children = children.into_iter().collect_in(self.raw.children.bump());
+                self.raw.set_children(children, gen);
                 self
             }
 
-            pub fn __last<T: Into<Vec<View>>>(mut self, children: T, gen: Gen<'a>) -> Self {
-                self.raw.set_children(children.into(), gen);
-                self
-            }
-        }
-
-        impl<'a> Default for $tag<'a> {
-            fn default() -> Self {
-                Self {
-                    raw: std::default::Default::default(),
-                }
+            pub fn __last<I: IntoIterator<Item=View>>(self, children: I, gen: Gen<'a>) -> Self {
+                self.children(children, gen)
             }
         }
 

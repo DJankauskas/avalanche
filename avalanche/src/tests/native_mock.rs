@@ -4,6 +4,7 @@ use crate::{
     renderer::{NativeType, NativeEvent, Renderer},
     shared::{Shared, WeakShared},
     tracked::Gen,
+    alloc::{Bump, Vec as BumpVec, CollectIn},
     Component, View,
 };
 
@@ -145,19 +146,19 @@ pub(super) struct Native<'a> {
     pub name: &'a str,
     pub value: &'a str,
     pub on_click: Option<Box<dyn Fn() + 'a>>,
-    pub children: Vec<View>,
+    pub children: BumpVec<'a, View>,
     key: Option<String>,
     location: (u32, u32),
     gens: [Gen<'a>; 4],
 }
 
 impl<'a> Native<'a> {
-    pub fn new() -> Self {
+    pub fn new(bump: &'a Bump) -> Self {
         Self {
             name: "",
             value: "",
             on_click: None,
-            children: Vec::new(),
+            children: BumpVec::new_in(bump),
             key: None,
             location: (0, 0),
             gens: [Gen::escape_hatch_new(false); 4],
@@ -182,8 +183,8 @@ impl<'a> Native<'a> {
         self
     }
 
-    pub fn children(mut self, children: Vec<View>, gen: Gen<'a>) -> Self {
-        self.children = children;
+    pub fn children(mut self, children: impl IntoIterator<Item=View>, gen: Gen<'a>) -> Self {
+        self.children = children.into_iter().collect_in(self.children.bump());
         self.gens[3] = gen;
         self
     }
@@ -251,7 +252,7 @@ impl<'a> Component<'a> for Native<'a> {
             native_handle: &crate::renderer::NativeHandle,
             curr_gen: Gen,
             event: Option<crate::renderer::NativeEvent>,
-        ) -> Vec<View> {
+        ) -> &'a [View] {
         let handle = native_handle.downcast_ref::<Node>().unwrap();
         if let (Some(_), Some(on_click)) = (event, &self.on_click) {
             on_click();
@@ -264,7 +265,7 @@ impl<'a> Component<'a> for Native<'a> {
         if self.value_updated(curr_gen) {
             handle.set_value(self.value.to_string());
         }
-        self.children
+        self.children.into_bump_slice()
     }
 
     fn native_type(&self) -> Option<NativeType> {

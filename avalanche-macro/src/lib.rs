@@ -205,10 +205,10 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
 
     let component_default_impl = if inputs_len == 0 {
         Some(quote! {
-            impl<#component_lifetime, #generic_params> #avalanche_path::DefaultComponent<#component_lifetime> for #builder_name<#component_lifetime, #generic_idents> #where_clause {
-                type Impl = #name<#component_lifetime, #generic_idents>;
+            impl<#component_lifetime, #generic_params> #avalanche_path::DefaultComponent for #builder_name<#component_lifetime, #generic_idents> #where_clause {
+                type Impl<'__a> = #name<'__a, #generic_idents>;
 
-                fn new() -> Self::Impl {
+                fn new<'__a, '__bump: '__a>(_: &#avalanche_path::alloc::Bump) -> Self::Impl<'__a> {
                     Self::Impl {
                         __internal_gens: [],
                         __key: ::std::option::Option::None,
@@ -229,19 +229,13 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
             #(#param_ident: ::std::option::Option<#param_type>),*
         }
 
-        impl<#component_lifetime, #generic_params> ::std::default::Default for #builder_name<#component_lifetime, #generic_idents> #where_clause {
-            fn default() -> Self {
+        impl<#component_lifetime, #generic_params> #builder_name<#component_lifetime, #generic_idents> #where_clause {
+            pub fn new<'__bump: #component_lifetime>(_: &'__bump #avalanche_path::alloc::Bump) -> Self {
                 Self {
                     __internal_gens: [#avalanche_path::tracked::Gen::escape_hatch_new(false); #inputs_len],
                     __key: ::std::option::Option::None,
                     #(#param_ident: ::std::option::Option::None),*
                 }
-            }
-        }
-
-        impl<#component_lifetime, #generic_params> #builder_name<#component_lifetime, #generic_idents> #where_clause {
-            pub fn new() -> Self {
-                ::std::default::Default::default()
             }
 
             pub fn build(self, location: (::std::primitive::u32, ::std::primitive::u32)) -> #name<#component_lifetime, #generic_idents> {
@@ -320,7 +314,7 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     };
     
     // eprintln!("{}", component);
-
+    
     component.into()
 }
 

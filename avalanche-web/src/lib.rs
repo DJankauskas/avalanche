@@ -21,7 +21,7 @@ static TIMEOUT_MSG_NAME: &str = "avalanche_web_message_name";
 /// Renders the given component onto the `element` parameter.
 ///
 /// To unmount the component, use the returned [Root].
-pub fn mount<C: DefaultComponent<'static>>(element: Element) -> Root {
+pub fn mount<C: DefaultComponent>(element: Element) -> Root {
     let renderer = WebRenderer::new();
     let scheduler = WebScheduler::new();
     let native_parent_type = NativeType {
@@ -47,7 +47,7 @@ pub fn mount<C: DefaultComponent<'static>>(element: Element) -> Root {
 /// Renders the given component in the current document's body.
 ///
 /// To unmount the component, use the returned [Root].
-pub fn mount_to_body<C: DefaultComponent<'static>>() -> Root {
+pub fn mount_to_body<C: DefaultComponent>() -> Root {
     let body = web_sys::window()
         .expect("window")
         .document()

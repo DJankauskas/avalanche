@@ -83,8 +83,7 @@ fn Todo() -> View {
                     }
                 }
             )
-        })
-        .collect::<Vec<_>>();
+        });
 
     Div(
         self,

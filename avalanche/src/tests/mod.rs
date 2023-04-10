@@ -11,7 +11,7 @@ use crate::{
     component,
     renderer::{NativeType, Scheduler},
     shared::{Shared, WeakShared},
-    state, store, tracked, updated, Tracked, View, DefaultComponent,
+    state, store, tracked, updated, DefaultComponent, Tracked, View,
 };
 
 use self::{native_mock::Native, renderer::TestRenderer};
@@ -52,7 +52,11 @@ impl TestScheduler {
                 continue;
             } else {
                 let name = self.click_events.pop().unwrap();
-                let node = self.root.upgrade().unwrap().exec(|root| root.get_node(&name));
+                let node = self
+                    .root
+                    .upgrade()
+                    .unwrap()
+                    .exec(|root| root.get_node(&name));
                 node.click();
             }
         }
@@ -67,7 +71,7 @@ impl Scheduler for TestScheduler {
 
 /// Render the given component, apply click events to the components with the given names,
 /// then check if the final component tree is equivalent to the expected one.
-pub fn test<C: DefaultComponent<'static>>(events: Vec<&str>, expected: Vec<Repr>) {
+pub fn test<C: DefaultComponent>(events: Vec<&str>, expected: Vec<Repr>) {
     let mut root = Root::new();
     let root_node = root.create_node("root");
     let root = Shared::new(root);
@@ -96,7 +100,7 @@ pub fn test<C: DefaultComponent<'static>>(events: Vec<&str>, expected: Vec<Repr>
 
     let actual_repr = root_node.to_repr();
     assert_eq!(expected_repr, actual_repr);
-    
+
     avalanche_root.unmount();
 }
 

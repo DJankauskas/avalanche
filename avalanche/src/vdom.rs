@@ -3,9 +3,6 @@ use std::mem::{swap, ManuallyDrop};
 use std::num::NonZeroU64;
 use std::{any::Any, cell::RefCell, hash::Hash, panic::Location, rc::Rc};
 
-use bumpalo::boxed::Box as BumpBox;
-use bumpalo::collections::{CollectIn, Vec as BumpVec};
-use bumpalo::Bump;
 use rustc_hash::FxHashMap;
 
 use crate::hooks::{HookContext, RenderContext};
@@ -16,8 +13,8 @@ use crate::{
     tracked::InternalGen,
 };
 use crate::{ChildId, Component, ComponentPos, DefaultComponent, View};
-
 use crate::shared::Shared;
+use crate::alloc::{Bump, Box as BumpBox, Vec as BumpVec, CollectIn};
 
 use self::wrappers::ComponentStateAccess;
 
@@ -182,20 +179,19 @@ mod dyn_component {
     use std::marker::PhantomData;
 
     use super::*;
-    type NativeUpdateType = unsafe fn(
+    type NativeUpdateType<'a> = unsafe fn(
         *mut (),
         &mut dyn Renderer,
         &NativeType,
         &NativeHandle,
         Gen,
         Option<NativeEvent>,
-    ) -> Vec<View>;
+    ) -> &'a [View];
 
     /// Contains pointers for executing methods on an instance of a
     /// `Component` behind a `*mut ()`.
     struct DynComponentVTable {
         native_create: unsafe fn(*mut (), &mut dyn Renderer, DispatchNativeEvent) -> NativeHandle,
-        native_update: NativeUpdateType,
         get_render: unsafe fn(*mut (), RenderContext, HookContext) -> View,
         get_child_id: unsafe fn(*mut ()) -> ChildId,
         drop: unsafe fn(*mut ()),
@@ -210,6 +206,7 @@ mod dyn_component {
         /// It must never be null and always be valid when dropped.
         inner: *mut (),
         vtable: &'static DynComponentVTable,
+        native_update: NativeUpdateType<'a>,
         /// whether the component pointed to by inner
         component_dropped: bool,
         /// Ensures the `DynComponent` cannot outlive lifetime of the data
@@ -234,7 +231,6 @@ mod dyn_component {
     impl<'a, C: Component<'a>> ComponentVTable for C {
         const VTABLE: DynComponentVTable = DynComponentVTable {
             native_create: native_create::<C>,
-            native_update: native_update::<C>,
             get_render: get_render::<C>,
             get_child_id: get_child_id::<C>,
             drop: drop::<C>,
@@ -251,7 +247,7 @@ mod dyn_component {
         native_handle: &NativeHandle,
         curr_gen: Gen,
         event: Option<NativeEvent>,
-    ) -> Vec<View> {
+    ) -> &'a [View] {
         // SAFETY: by the conditions of `native_update`.
         let component = unsafe { c.cast::<C>().read() };
         component.native_update(renderer, native_type, native_handle, curr_gen, event)
@@ -298,6 +294,7 @@ mod dyn_component {
                 native_type: component.native_type(),
                 inner: BumpBox::into_raw(BumpBox::new_in(component, bump)).cast(),
                 vtable: &C::VTABLE,
+                native_update: native_update::<C>,
                 component_dropped: false,
                 phantom: PhantomData,
             }
@@ -327,11 +324,11 @@ mod dyn_component {
             native_handle: &NativeHandle,
             curr_gen: Gen,
             event: Option<NativeEvent>,
-        ) -> Vec<View> {
+        ) -> &'a [View] {
             self.component_dropped = true;
             // SAFETY: self.inner is valid and is not dereferenced after this call.
             let ret = unsafe {
-                (self.vtable.native_update)(
+                (self.native_update)(
                     self.inner,
                     renderer,
                     native_type,
@@ -383,7 +380,7 @@ use dyn_component::DynComponent;
 pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) -> View {
     /// A non-monomorphized implementation of the function to avoid a heavy code size penalty
     /// for every component rendered in an application.
-    fn render_child(component: DynComponent, context: &RenderContext) -> View {
+    fn render_child<'a>(component: DynComponent, context: &RenderContext) -> View {
         let (child_component_id, child_vnode_dirty, native_component_is_some, original_view) =
             context.vdom.exec_mut(|vdom| {
                 let child_id = component.child_id();
@@ -735,7 +732,7 @@ impl Root {
     /// manipulate or insert descendents of `native_handle` until and if the created instance of `Root`'s
     /// `unmount` method is called. Modifying those children before `unmount` is called will likely result
     /// in panics.
-    pub fn new<'a, R: Renderer + 'static, S: Scheduler + 'static, C: DefaultComponent<'a>>(
+    pub fn new<'a, R: Renderer + 'static, S: Scheduler + 'static, C: DefaultComponent>(
         native_type: NativeType,
         mut native_handle: NativeHandle,
         mut renderer: R,
@@ -817,7 +814,7 @@ impl Root {
     }
 }
 
-fn render_vdom<'a, C: DefaultComponent<'a>>(
+fn render_vdom<'a, C: DefaultComponent>(
     vdom: &mut VDom,
     shared_vdom: &Shared<VDom>,
     scheduler: &Shared<dyn Scheduler>,
@@ -830,7 +827,7 @@ fn render_vdom<'a, C: DefaultComponent<'a>>(
     let components_to_remove = CellBumpVec::new_in(&bump);
 
     render_child(
-        C::new(),
+        C::new(&bump),
         &RenderContext {
             vdom: &Shared::new(vdom),
             body_parent_id: ComponentId::new(),
@@ -846,7 +843,6 @@ fn render_vdom<'a, C: DefaultComponent<'a>>(
     );
 
     // TODO: code duplicated from render_child; factor out into function?
-    // furthermore code is not clean: tweak function interfaces to clean up and remove need to remove root vnode
     let new_children: Vec<Option<ComponentId>> =
         vdom.children[&ComponentId::new()].children.clone();
     let new_native_children: BumpVec<_> = new_children
