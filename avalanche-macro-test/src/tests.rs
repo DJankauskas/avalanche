@@ -106,14 +106,17 @@ impl<'a> Component<'a> for TestChildren<'a> {
     }
 
     fn native_update(
-        self,
+        &self,
         renderer: &mut dyn Renderer,
         native_type: &NativeType,
         native_handle: &NativeHandle,
         curr_gen: Gen,
         event: Option<NativeEvent>,
-    ) -> &'a [View] {
+    ) {}
+    
+    fn native_children(self) -> &'a [View] {
         self.children.into_bump_slice()
+        
     }
 
     fn updated(&self, _curr_gen: Gen) -> bool {

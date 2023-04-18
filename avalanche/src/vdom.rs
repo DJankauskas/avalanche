@@ -179,20 +179,21 @@ mod dyn_component {
     use std::marker::PhantomData;
 
     use super::*;
-    type NativeUpdateType<'a> = unsafe fn(
+    type NativeUpdateType = unsafe fn(
         *mut (),
         &mut dyn Renderer,
         &NativeType,
         &NativeHandle,
         Gen,
         Option<NativeEvent>,
-    ) -> &'a [View];
+    );
 
     /// Contains pointers for executing methods on an instance of a
     /// `Component` behind a `*mut ()`.
     struct DynComponentVTable {
         native_create: unsafe fn(*mut (), &mut dyn Renderer, DispatchNativeEvent) -> NativeHandle,
         get_render: unsafe fn(*mut (), RenderContext, HookContext) -> View,
+        native_update: NativeUpdateType,
         get_child_id: unsafe fn(*mut ()) -> ChildId,
         drop: unsafe fn(*mut ()),
     }
@@ -206,7 +207,7 @@ mod dyn_component {
         /// It must never be null and always be valid when dropped.
         inner: *mut (),
         vtable: &'static DynComponentVTable,
-        native_update: NativeUpdateType<'a>,
+        native_children: unsafe fn (*mut ()) -> &'a [View],
         /// whether the component pointed to by inner
         component_dropped: bool,
         /// Ensures the `DynComponent` cannot outlive lifetime of the data
@@ -232,14 +233,13 @@ mod dyn_component {
         const VTABLE: DynComponentVTable = DynComponentVTable {
             native_create: native_create::<C>,
             get_render: get_render::<C>,
+            native_update: native_update::<C>,
             get_child_id: get_child_id::<C>,
             drop: drop::<C>,
         };
     }
 
     /// SAFETY: `c` must be a valid pointer to an instance of `C`.
-    /// The value pointed to by `c` must not be used after this
-    /// function is called.
     unsafe fn native_update<'a, C: Component<'a>>(
         c: *mut (),
         renderer: &mut dyn Renderer,
@@ -247,11 +247,22 @@ mod dyn_component {
         native_handle: &NativeHandle,
         curr_gen: Gen,
         event: Option<NativeEvent>,
-    ) -> &'a [View] {
+    ) {
         // SAFETY: by the conditions of `native_update`.
-        let component = unsafe { c.cast::<C>().read() };
-        component.native_update(renderer, native_type, native_handle, curr_gen, event)
+        let component_ref = unsafe { &*c.cast::<C>() };
+        component_ref.native_update(renderer, native_type, native_handle, curr_gen, event);
     }
+
+    /// SAFETY: `c` must be a valid pointer to an instance of `C`.
+    /// The value pointed to by `c` must not be used after this
+    /// function is called.
+    unsafe fn native_children<'a, C: Component<'a>>(
+        c: *mut(),
+    ) -> &'a [View] {
+        let component = unsafe { c.cast::<C>().read() };
+        component.native_children()
+    }
+
 
     /// SAFETY: `c` must be a valid pointer to an instance of `C`.
     /// The value pointed to by `c` must not be used after this
@@ -294,7 +305,7 @@ mod dyn_component {
                 native_type: component.native_type(),
                 inner: BumpBox::into_raw(BumpBox::new_in(component, bump)).cast(),
                 vtable: &C::VTABLE,
-                native_update: native_update::<C>,
+                native_children: native_children::<C>,
                 component_dropped: false,
                 phantom: PhantomData,
             }
@@ -318,17 +329,16 @@ mod dyn_component {
         }
 
         pub(super) fn native_update(
-            mut self,
+            &self,
             renderer: &mut dyn Renderer,
             native_type: &NativeType,
             native_handle: &NativeHandle,
             curr_gen: Gen,
             event: Option<NativeEvent>,
-        ) -> &'a [View] {
-            self.component_dropped = true;
-            // SAFETY: self.inner is valid and is not dereferenced after this call.
-            let ret = unsafe {
-                (self.native_update)(
+        ) {
+            // SAFETY: self.inner is valid.
+            unsafe {
+                (self.vtable.native_update)(
                     self.inner,
                     renderer,
                     native_type,
@@ -337,8 +347,14 @@ mod dyn_component {
                     event,
                 )
             };
-
-            ret
+        }
+        
+        pub(super) fn native_children(mut self) -> &'a [View] {
+            self.component_dropped = true;
+            // SAFETY: self.inner is valid and is not dereferenced after this call.
+            unsafe {
+                (self.native_children)(self.inner)
+            }
         }
 
         pub(super) fn render(mut self, render_ctx: RenderContext, hook_ctx: HookContext) -> View {
@@ -381,6 +397,10 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
     /// A non-monomorphized implementation of the function to avoid a heavy code size penalty
     /// for every component rendered in an application.
     fn render_child<'a>(component: DynComponent, context: &RenderContext) -> View {
+        // Tracks whether the component being rendered, along with its corresponding
+        // native handle, was created during this call
+        let mut newly_created = false;
+
         let (child_component_id, child_vnode_dirty, native_component_is_some, original_view) =
             context.vdom.exec_mut(|vdom| {
                 let child_id = component.child_id();
@@ -406,6 +426,8 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
                 // exist yet, create a default value.
                 let mut child_vnode =
                     vdom.children.entry(child_component_id).or_insert_with(|| {
+                        newly_created = true;
+
                         let native_type = component.native_type();
                         let dispatch_native_event = DispatchNativeEvent {
                             component_id: child_component_id,
@@ -472,14 +494,20 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
 
                     // restore potentially modified current_native_event
                     context.current_native_event.set(current_native_event);
-
-                    let new_children = component.native_update(
-                        vdom.renderer.as_mut(),
-                        &native_component.native_type,
-                        &native_component.native_handle,
-                        vdom.gen.into(),
-                        native_event,
-                    );
+                    
+                    // Update only required if the component was not created during
+                    // this call
+                    if !newly_created {
+                        component.native_update(
+                            vdom.renderer.as_mut(),
+                            &native_component.native_type,
+                            &native_component.native_handle,
+                            vdom.gen.into(),
+                            native_event,
+                        );
+                    }
+                    
+                    let new_children = component.native_children();
 
                     let new_native_children: BumpVec<_> = new_children
                         .iter()
@@ -622,6 +650,18 @@ pub(crate) fn update_native_children(
     vdom: &mut VDom,
     bump: &Bump,
 ) {
+    let parent_native_component = vdom.children[&parent_id].native_component.as_ref().unwrap();
+    let parent_type = &parent_native_component.native_type;
+    let parent_handle = &parent_native_component.native_handle;
+
+    // Fast path for component being completely cleared of children
+    if new_native_children.is_empty() {
+        vdom.renderer.truncate_children(parent_type, parent_handle, 0);
+        return;
+    }
+    
+    // TODO: implement better diffing algorithm.
+    
     // Filter out components from old_native_children that have been reparented elsewhere, and thus are no longer
     // present within the given `parent_handle`
     old_native_children.retain(|child| {
@@ -647,9 +687,6 @@ pub(crate) fn update_native_children(
 
     let mut set_native_parent = BumpVec::new_in(bump);
 
-    let parent_native_component = vdom.children[&parent_id].native_component.as_ref().unwrap();
-    let parent_type = &parent_native_component.native_type;
-    let parent_handle = &parent_native_component.native_handle;
 
     for (i, new_child) in new_native_children.iter().enumerate() {
         let (j, _) = old_native_children_map

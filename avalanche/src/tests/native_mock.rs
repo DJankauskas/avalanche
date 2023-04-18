@@ -246,13 +246,13 @@ impl<'a> Component<'a> for Native<'a> {
     }
 
     fn native_update(
-            self,
+            &self,
             _renderer: &mut dyn Renderer,
             _native_type: &NativeType,
             native_handle: &crate::renderer::NativeHandle,
             curr_gen: Gen,
             event: Option<crate::renderer::NativeEvent>,
-        ) -> &'a [View] {
+        ) {
         let handle = native_handle.downcast_ref::<Node>().unwrap();
         if let (Some(_), Some(on_click)) = (event, &self.on_click) {
             on_click();
@@ -265,6 +265,9 @@ impl<'a> Component<'a> for Native<'a> {
         if self.value_updated(curr_gen) {
             handle.set_value(self.value.to_string());
         }
+    }
+    
+    fn native_children(self) -> &'a [View] {
         self.children.into_bump_slice()
     }
 

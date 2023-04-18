@@ -89,18 +89,21 @@ impl<'a> Component<'a> for TextImpl<'a> {
     }
 
     fn native_update(
-        self,
+        &self,
         renderer: &mut dyn Renderer,
         _native_type: &NativeType,
         native_handle: &NativeHandle,
         _curr_gen: Gen,
         _event: Option<NativeEvent>,
-    ) -> &'a [View] {
+    ) {
         let renderer = renderer.downcast_mut::<WebRenderer>().unwrap();
         let web_handle = native_handle.downcast_ref::<WebNativeHandle>().unwrap();
         // TODO: compare with old text?
         let text_idx = renderer.string_idx(self.text.as_ref());
         super::bridge::set_text_content(&web_handle.node, text_idx);
+    }
+    
+    fn native_children(self) -> &'a [View] {
         &[]
     }
 
@@ -236,7 +239,6 @@ impl<'a> Component<'a> for RawElement<'a> {
             );
         }
         
-        
         for (name, (attr, _)) in self.attrs.iter() {
             match attr {
                 Attr::Prop(prop) => {
@@ -256,96 +258,6 @@ impl<'a> Component<'a> for RawElement<'a> {
             }
         }
 
-        /* 
-        match self.tag {
-            "input" => {
-                let input_element = element
-                    .clone()
-                    .dyn_into::<web_sys::HtmlInputElement>()
-                    .expect("HTMLInputElement");
-
-                for (name, (attr, _)) in self.attrs.iter() {
-                    match attr {
-                        Attr::Prop(prop) => {
-                            if let Some(prop) = prop {
-                                match *name {
-                                    "value" => {
-                                        input_element.set_value(prop);
-                                    }
-                                    "checked" => {
-                                        input_element.set_checked(!prop.is_empty());
-                                    }
-                                    _ => {
-                                        input_element.set_attribute(name, prop).unwrap();
-                                    }
-                                }
-                            }
-                        }
-                        Attr::Handler(_) => {
-                            let dispatcher = dispatch_native_event.clone();
-                            add_listener(
-                                &element,
-                                name,
-                                create_handler(name, dispatcher),
-                                &mut listeners,
-                            )
-                        }
-                    }
-                }
-            }
-            "textarea" => {
-                let text_area_element = element
-                    .clone()
-                    .dyn_into::<web_sys::HtmlTextAreaElement>()
-                    .expect("HTMLTextAreaElement");
-
-                for (name, (attr, _)) in self.attrs.iter() {
-                    match attr {
-                        Attr::Prop(prop) => {
-                            if let Some(prop) = prop {
-                                match *name {
-                                    "value" => text_area_element.set_value(prop),
-                                    _ => {
-                                        text_area_element.set_attribute(name, prop).unwrap()
-                                    }
-                                }
-                            }
-                        }
-                        Attr::Handler(_) => {
-                            let dispatcher = dispatch_native_event.clone();
-                            add_listener(
-                                &element,
-                                name,
-                                create_handler(name, dispatcher),
-                                &mut listeners,
-                            )
-                        }
-                    }
-                }
-            }
-            _ => {
-                for (name, (attr, _)) in self.attrs.iter() {
-                    match attr {
-                        Attr::Prop(prop) => {
-                            if let Some(prop) = prop {
-                                element.set_attribute(name, prop).unwrap();
-                            }
-                        }
-                        Attr::Handler(_) => {
-                            let dispatcher = dispatch_native_event.clone();
-                            add_listener(
-                                &element,
-                                name,
-                                create_handler(name, dispatcher),
-                                &mut listeners,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        */
-
         Box::new(WebNativeHandle {
             node: web_sys::Node::from(element),
             _listeners: listeners,
@@ -353,13 +265,13 @@ impl<'a> Component<'a> for RawElement<'a> {
     }
 
     fn native_update(
-        self,
+        &self,
         renderer: &mut dyn Renderer,
         _native_type: &NativeType,
         native_handle: &NativeHandle,
         curr_gen: Gen,
         event: Option<NativeEvent>,
-    ) -> &'a [View] {
+    ) {
         let renderer = renderer.downcast_mut::<WebRenderer>().unwrap();
         let web_handle = native_handle.downcast_ref::<WebNativeHandle>().unwrap();
         let node = web_handle.node.clone();
@@ -389,64 +301,10 @@ impl<'a> Component<'a> for RawElement<'a> {
                     }
                 }
             }
-            /* 
-            match self.tag {
-                "input" => {
-                    let input_element = element
-                        .clone()
-                        .dyn_into::<web_sys::HtmlInputElement>()
-                        .expect("HTMLInputElement");
-                    for (name, (attr, gen)) in self.attrs.iter() {
-                        if *gen >= curr_gen {
-                            if let Attr::Prop(prop) = attr {
-                                match *name {
-                                    "value" => {
-                                        if let Some(prop) = prop {
-                                            input_element.set_value(prop);
-                                        }
-                                    }
-                                    "checked" => {
-                                        input_element.set_checked(prop.is_some());
-                                    }
-                                    _ => {
-                                        update_generic_prop(&element, name, prop.as_deref())
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                "textarea" => {
-                    let text_area_element = element
-                        .clone()
-                        .dyn_into::<web_sys::HtmlTextAreaElement>()
-                        .expect("HTMLTextAreaElement");
-                    for (name, (attr, gen)) in self.attrs.iter() {
-                        if *gen >= curr_gen {
-                            if let Attr::Prop(prop) = attr {
-                                if *name == "value" {
-                                    if let Some(prop) = prop {
-                                        text_area_element.set_value(prop);
-                                    }
-                                } else {
-                                    update_generic_prop(&element, name, prop.as_deref())
-                                }
-                            }
-                        }
-                    }
-                }
-                _ => {
-                    for (name, (attr, gen)) in self.attrs.iter() {
-                        if *gen >= curr_gen {
-                            if let Attr::Prop(prop) = attr {
-                                update_generic_prop(&element, name, prop.as_deref())
-                            }
-                        }
-                    }
-                }
-            }
-        */
         }
+    }
+    
+    fn native_children(self) -> &'a [View] {
         self.children.into_bump_slice()
     }
 
