@@ -6,8 +6,9 @@ use std::cmp::max;
 use rustc_hash::FxHashMap;
 
 use wasm_bindgen::JsCast;
+use web_sys::Element;
 
-use crate::{events::*, WebNativeEvent, WebNativeHandle, update_generic_prop, WebRenderer, add_named_listener, add_listener, create_handler};
+use crate::{events::*, WebNativeEvent, WebNativeHandle, WebRenderer, add_named_listener, add_listener, create_handler};
 use avalanche::{Component, View};
 use avalanche::renderer::{Renderer, NativeType, NativeHandle, NativeEvent, DispatchNativeEvent};
 use avalanche::tracked::Gen;
@@ -78,26 +79,28 @@ impl<'a> Component<'a> for TextImpl<'a> {
     }
     
     fn native_create(&self, renderer: &mut dyn Renderer, _dispatch_native_event: DispatchNativeEvent) -> NativeHandle {
-        let renderer = renderer.downcast_ref::<WebRenderer>().unwrap();
-        let text_node = renderer.document.create_text_node(&self.text);
+        let renderer = renderer.downcast_mut::<WebRenderer>().unwrap();
+        let text_idx = renderer.string_idx(&self.text);
+        let text_node = super::bridge::create_text_node(text_idx);
         Box::new(WebNativeHandle {
-            node: web_sys::Node::from(text_node),
+            node: text_node.unchecked_into(),
             _listeners: FxHashMap::default(),
-            children_offset: 0,
         })
     }
 
     fn native_update(
         self,
-        _renderer: &mut dyn Renderer,
+        renderer: &mut dyn Renderer,
         _native_type: &NativeType,
         native_handle: &NativeHandle,
         _curr_gen: Gen,
         _event: Option<NativeEvent>,
     ) -> &'a [View] {
+        let renderer = renderer.downcast_mut::<WebRenderer>().unwrap();
         let web_handle = native_handle.downcast_ref::<WebNativeHandle>().unwrap();
         // TODO: compare with old text?
-        web_handle.node.set_text_content(Some(self.text.as_ref()));
+        let text_idx = renderer.string_idx(self.text.as_ref());
+        super::bridge::set_text_content(&web_handle.node, text_idx);
         &[]
     }
 
@@ -205,11 +208,10 @@ impl<'a> Component<'a> for RawElement<'a> {
     }
     
     fn native_create(&self, renderer: &mut dyn Renderer, dispatch_native_event: DispatchNativeEvent) -> NativeHandle {
-        let renderer = renderer.downcast_ref::<WebRenderer>().unwrap();
-        let element = renderer
-            .document
-            .create_element(self.tag)
-            .expect("WebRenderer: element creation failed from syntax error.");
+        let renderer = renderer.downcast_mut::<WebRenderer>().unwrap();
+        let tag_idx = renderer.string_idx(self.tag);
+        let element: Element = 
+            super::bridge::create_element(tag_idx).unchecked_into();
 
         let mut listeners = FxHashMap::default();
 
@@ -233,7 +235,28 @@ impl<'a> Component<'a> for RawElement<'a> {
                 &mut listeners,
             );
         }
+        
+        
+        for (name, (attr, _)) in self.attrs.iter() {
+            match attr {
+                Attr::Prop(prop) => {
+                    if let Some(prop) = prop {
+                        renderer.set_attribute(&element, name, prop);
+                    }
+                }
+                Attr::Handler(_) => {
+                    let dispatcher = dispatch_native_event.clone();
+                    add_listener(
+                        &element,
+                        name,
+                        create_handler(name, dispatcher),
+                        &mut listeners,
+                    )
+                }
+            }
+        }
 
+        /* 
         match self.tag {
             "input" => {
                 let input_element = element
@@ -321,25 +344,26 @@ impl<'a> Component<'a> for RawElement<'a> {
                 }
             }
         }
+        */
 
         Box::new(WebNativeHandle {
             node: web_sys::Node::from(element),
             _listeners: listeners,
-            children_offset: 0,
         })
     }
 
     fn native_update(
         self,
-        _renderer: &mut dyn Renderer,
+        renderer: &mut dyn Renderer,
         _native_type: &NativeType,
         native_handle: &NativeHandle,
         curr_gen: Gen,
         event: Option<NativeEvent>,
     ) -> &'a [View] {
+        let renderer = renderer.downcast_mut::<WebRenderer>().unwrap();
         let web_handle = native_handle.downcast_ref::<WebNativeHandle>().unwrap();
         let node = web_handle.node.clone();
-        let element = node.dyn_into::<web_sys::Element>().unwrap();
+        let element = node.unchecked_into::<web_sys::Element>();
 
         if let Some(native_event) = event {
             match &self.attrs[&native_event.name].0 {
@@ -358,6 +382,14 @@ impl<'a> Component<'a> for RawElement<'a> {
         }
 
         if self.max_gen >= curr_gen {
+            for (name, (attr, gen)) in self.attrs.iter() {
+                if *gen >= curr_gen {
+                    if let Attr::Prop(prop) = attr {
+                        renderer.set_attribute(&element, name, prop.as_deref().unwrap_or_default());
+                    }
+                }
+            }
+            /* 
             match self.tag {
                 "input" => {
                     let input_element = element
@@ -413,6 +445,7 @@ impl<'a> Component<'a> for RawElement<'a> {
                     }
                 }
             }
+        */
         }
         self.children.into_bump_slice()
     }
@@ -616,7 +649,7 @@ macro_rules! def_component_attrs {
                                 self.raw.set_attr(
                                     $listennative,
                                     Attr::Handler(Box::new(move |e: WebNativeEvent| f(
-                                        TypedEvent::<$listentype, <$tag as AssociatedNativeElement>::NativeElement>::new(e.event.dyn_into::<$listentype>().unwrap(), e.current_target)
+                                        TypedEvent::<$listentype, <$tag as AssociatedNativeElement>::NativeElement>::new(e.event.unchecked_into::<$listentype>(), e.current_target)
                                     ))),
                                     gen
                                 );

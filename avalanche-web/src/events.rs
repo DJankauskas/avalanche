@@ -29,7 +29,7 @@ impl<E: JsCast + Clone + Into<Event>, C: JsCast + Clone> TypedEvent<E, C> {
     pub(crate) fn new(event: E, current_target: Option<EventTarget>) -> Self {
         Self {
             event,
-            current_target: current_target.and_then(|ct| ct.dyn_into::<C>().ok()),
+            current_target: current_target.map(|ct| ct.unchecked_into::<C>()),
         }
     }
 

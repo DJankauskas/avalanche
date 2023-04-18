@@ -37,6 +37,7 @@ name = "avalanche-web"
 version = "0.1.0"
 dependencies = [
  "avalanche",
+ "clru",
  "doc-comment",
  "gloo-events",
  "rand 0.8.4",
@@ -62,6 +63,12 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
+name = "clru"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8191fa7302e03607ff0e237d4246cc043ff5b3cb9409d995172ba3bea16b807"
 
 [[package]]
 name = "console_error_panic_hook"

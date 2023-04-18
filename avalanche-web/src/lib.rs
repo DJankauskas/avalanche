@@ -5,18 +5,22 @@ use avalanche::shared::Shared;
 use avalanche::vdom::Root;
 use avalanche::DefaultComponent;
 
-use std::collections::{VecDeque};
+use clru::CLruCache;
 use rustc_hash::FxHashMap;
+use std::collections::VecDeque;
+use std::num::NonZeroUsize;
 
-use crate::events::Event;
 use gloo_events::{EventListener, EventListenerOptions};
-use wasm_bindgen::JsCast;
+use wasm_bindgen::{JsCast, JsValue, intern};
 use web_sys::{Element, EventTarget};
 
+pub mod bridge;
 pub mod components;
 pub mod events;
 
-static TIMEOUT_MSG_NAME: &str = "avalanche_web_message_name";
+use crate::events::Event;
+
+static TIMEOUT_MSG_NAME: &str = "avalanche_web_message";
 
 /// Renders the given component onto the `element` parameter.
 ///
@@ -28,8 +32,12 @@ pub fn mount<C: DefaultComponent>(element: Element) -> Root {
         handler: "avalanche_web",
         name: "avalanche_web",
     };
+
+    // Clear children of the mount element to ensure children modification
+    // indices are consistent with internal state
+    bridge::truncate_children(element.unchecked_ref(), 0);
+
     let native_parent_handle = WebNativeHandle {
-        children_offset: element.child_nodes().length(),
         node: element.into(),
         _listeners: Default::default(),
     };
@@ -110,39 +118,23 @@ impl Scheduler for WebScheduler {
 struct WebNativeHandle {
     node: web_sys::Node,
     _listeners: FxHashMap<&'static str, EventListener>,
-    /// position at which renderer indexing should begin
-    // TODO: more memory-efficient implementation?
-    children_offset: u32,
 }
 
 struct WebRenderer {
-    document: web_sys::Document,
+    string_cache: CLruCache<String, u32>,
 }
+
+const STRING_CACHE_CAPACITY: usize = 64;
 
 impl WebRenderer {
     fn new() -> Self {
+        // Intern string data for sending window messages
+        intern("*");
+        intern(TIMEOUT_MSG_NAME);
+
         WebRenderer {
-            document: web_sys::window().unwrap().document().unwrap(),
+            string_cache: CLruCache::new(NonZeroUsize::new(STRING_CACHE_CAPACITY).unwrap()),
         }
-    }
-
-    fn get_child(parent: &web_sys::Element, child_idx: usize, offset: u32) -> web_sys::Node {
-        Self::try_get_child(parent, child_idx, offset).unwrap()
-    }
-
-    fn try_get_child(
-        parent: &web_sys::Element,
-        child_idx: usize,
-        offset: u32,
-    ) -> Option<web_sys::Node> {
-        parent.child_nodes().item(child_idx as u32 + offset)
-    }
-
-    fn assert_handler_avalanche_web(native_type: &NativeType) {
-        assert_eq!(
-            native_type.handler, "avalanche_web",
-            "handler is not of type \"avalanche_web\""
-        )
     }
 
     fn handle_cast(native_handle: &NativeHandle) -> &WebNativeHandle {
@@ -151,116 +143,115 @@ impl WebRenderer {
             .expect("WebNativeHandle")
     }
 
-    fn node_to_element(node: web_sys::Node) -> web_sys::Element {
-        node.dyn_into::<web_sys::Element>()
-            .expect("Element (not Text node)")
+    /// Looks up the given string in the string cache.
+    // TODO: don't cache giant strings in lookup LRU
+    pub(crate) fn string_idx(&mut self, string: &str) -> u32 {
+        if string.is_empty() {
+            return 0;
+        }
+        match self.string_cache.get(string) {
+            Some(idx) => *idx,
+            None => {
+                // If we've reached capacity, evict the least-used entry from 
+                // bridge string cache, and insert new string there. Otherwise,
+                // place the string at the next valid index
+                let idx = if self.string_cache.len() == STRING_CACHE_CAPACITY {
+                    let value_to_insert_at = *self.string_cache.back().unwrap().1;
+                    value_to_insert_at
+                } else {
+                    self.string_cache.len() as u32 + 1
+                };
+                // TODO: reuse allocation?
+                let encoded_string: Vec<u16> = string.encode_utf16().collect();
+                self.string_cache.put(string.to_owned(), idx);
+                bridge::intern_string_at(&encoded_string, idx);
+                idx
+            }
+        }
+    }
+    
+    pub(crate) fn set_attribute(&mut self, element: &JsValue, name: &str, value: &str) {
+        let name_idx = self.string_idx(name);
+        let value_idx = self.string_idx(value);
+        bridge::set_attribute(element, name_idx, value_idx);
+
     }
 }
 
 impl Renderer for WebRenderer {
     fn append_child(
         &mut self,
-        parent_type: &NativeType,
+        _parent_type: &NativeType,
         parent_handle: &NativeHandle,
         _child_type: &NativeType,
         child_handle: &NativeHandle,
     ) {
-        Self::assert_handler_avalanche_web(parent_type);
-        let parent_node = Self::handle_cast(parent_handle).node.clone();
-        let parent_element = Self::node_to_element(parent_node);
+        let parent_node = &Self::handle_cast(parent_handle).node;
         let child_node = &Self::handle_cast(child_handle).node;
-        parent_element
-            .append_with_node_1(child_node)
-            .expect("append success");
+        bridge::append_child(parent_node, child_node);
     }
 
     fn insert_child(
         &mut self,
-        parent_type: &NativeType,
+        _parent_type: &NativeType,
         parent_handle: &NativeHandle,
         index: usize,
         _child_type: &NativeType,
         child_handle: &NativeHandle,
     ) {
-        self.log("inserting child");
-        Self::assert_handler_avalanche_web(parent_type);
-        let parent_handle = Self::handle_cast(parent_handle);
-        let parent_element = Self::node_to_element(parent_handle.node.clone());
+        let parent_node = &Self::handle_cast(parent_handle).node;
         let child_node = &Self::handle_cast(child_handle).node;
-        let component_after =
-            Self::try_get_child(&parent_element, index, parent_handle.children_offset);
-        parent_element
-            .insert_before(child_node, component_after.as_ref())
-            .expect("insert success");
+        bridge::insert_child(parent_node, index as u32, child_node)
     }
 
     fn swap_children(
         &mut self,
-        parent_type: &NativeType,
+        _parent_type: &NativeType,
         parent_handle: &NativeHandle,
         a: usize,
         b: usize,
     ) {
-        Self::assert_handler_avalanche_web(parent_type);
-        let parent_handle = Self::handle_cast(parent_handle);
-        let parent_element = Self::node_to_element(parent_handle.node.clone());
-        let lesser = std::cmp::min(a, b);
-        let greater = std::cmp::max(a, b);
+        let parent_node = &Self::handle_cast(parent_handle).node;
+        let lesser_idx = std::cmp::min(a, b);
+        let greater_idx = std::cmp::max(a, b);
 
         // TODO: throw exception if a and b are equal but out of bounds?
         if a != b {
-            let a = Self::get_child(&parent_element, lesser, parent_handle.children_offset);
-            let b = Self::get_child(&parent_element, greater, parent_handle.children_offset);
-            let after_b = b.next_sibling();
-            // note: idiosyncratic order, a is being replaced with b
-            parent_element
-                .replace_child(&b, &a)
-                .expect("replace succeeded");
-            parent_element
-                .insert_before(&a, after_b.as_ref())
-                .expect("insert succeeded");
+            bridge::swap_children(parent_node, lesser_idx as u32, greater_idx as u32);
         }
     }
 
     fn replace_child(
         &mut self,
-        parent_type: &NativeType,
-        parent_handle: &NativeHandle,
-        index: usize,
+        _parent_type: &NativeType,
+        _parent_handle: &NativeHandle,
+        _index: usize,
         _child_type: &NativeType,
-        child_handle: &NativeHandle,
+        _child_handle: &NativeHandle,
     ) {
-        Self::assert_handler_avalanche_web(parent_type);
+        /*
         let parent_handle = Self::handle_cast(parent_handle);
         let parent_element = Self::node_to_element(parent_handle.node.clone());
         let curr_child_node =
-            Self::get_child(&parent_element, index, parent_handle.children_offset);
+            Self::get_child(&parent_element, index);
         let replace_child_node = &Self::handle_cast(child_handle).node;
         if &curr_child_node != replace_child_node {
             parent_element
                 .replace_child(replace_child_node, &curr_child_node)
                 .expect("successful replace");
         }
+        */
+        unimplemented!("currently unused by avalanche")
     }
 
     fn truncate_children(
         &mut self,
-        parent_type: &NativeType,
+        _parent_type: &NativeType,
         parent_handle: &NativeHandle,
         len: usize,
     ) {
-        Self::assert_handler_avalanche_web(parent_type);
-        let parent_handle = Self::handle_cast(parent_handle);
-        let parent_element = Self::node_to_element(parent_handle.node.clone());
-
-        // TODO: more efficient implementation
-        while let Some(node) =
-            Self::try_get_child(&parent_element, len, parent_handle.children_offset)
-        {
-            parent_element
-                .remove_child(&node)
-                .expect("successful remove");
-        }
+        let parent_node = &Self::handle_cast(parent_handle).node;
+        bridge::truncate_children(parent_node, len as u32);
     }
 
     // fn remove_child(
@@ -281,17 +272,6 @@ impl Renderer for WebRenderer {
     fn log(&self, string: &str) {
         let js_val: wasm_bindgen::JsValue = string.into();
         web_sys::console::log_1(&js_val);
-    }
-}
-
-fn update_generic_prop(element: &Element, name: &str, prop: Option<&str>) {
-    match prop {
-        Some(prop) => {
-            element.set_attribute(name, prop).unwrap();
-        }
-        None => {
-            element.remove_attribute(name).unwrap();
-        }
     }
 }
 
@@ -316,6 +296,11 @@ fn add_named_listener(
         passive,
         ..Default::default()
     };
+    
+    // reduce overhead of passing event names etc to JS
+    intern(event);
+    intern(name);
+
     let listener = EventListener::new_with_options(element, event, options, move |event| {
         callback(event.clone())
     });
