@@ -440,13 +440,6 @@ macro_rules! def_component {
                 self
             }
 
-            pub fn child(mut self, child: View, gen: Gen<'a>) -> Self {
-                let mut children = BumpVec::with_capacity_in(1, self.raw.children.bump());
-                children.push(child);
-                self.raw.set_children(children, gen);
-                self
-            }
-
             pub fn children<I: IntoIterator<Item=View>>(mut self, children: I, gen: Gen<'a>) -> Self {
                 let children = children.into_iter().collect_in(self.raw.children.bump());
                 self.raw.set_children(children, gen);

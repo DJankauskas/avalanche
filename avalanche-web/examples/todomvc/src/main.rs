@@ -91,8 +91,8 @@ fn Todo() -> View {
             Header(
                 self,
                 class = "header",
-                children = [
-                    H1(self, child = Text(self, "todos")),
+                [
+                    H1(self, Text(self, "todos")),
                     Input(
                         self,
                         class = "new-todo",
@@ -140,7 +140,7 @@ fn Todo() -> View {
                             Label(
                                 self,
                                 for_ = "toggle-all",
-                                child = Text(self, "Mark all as complete"),
+                                Text(self, "Mark all as complete"),
                             ),
                             Ul(self, class = "todo-list", tracked!(children)),
                             Footer(
@@ -153,7 +153,7 @@ fn Todo() -> View {
                                         [
                                             Strong(
                                                 self,
-                                                child = Text(self, tracked!(num_active).to_string()),
+                                                Text(self, tracked!(num_active).to_string()),
                                             ),
                                             Text(
                                                 self,
@@ -171,40 +171,40 @@ fn Todo() -> View {
                                         [
                                             Li(
                                                 self,
-                                                child = A(
+                                                A(
                                                     self,
                                                     class = tracked!(filter).selected(Filter::All),
                                                     href = "#/",
-                                                    child = Text(self, "All"),
                                                     on_click = move |_| {
                                                         set_filter.set(Filter::All);
                                                     },
+                                                    Text(self, "All"),
                                                 ),
                                             ),
                                             Li(
                                                 self,
-                                                child = A(
+                                                A(
                                                     self,
                                                     class =
                                                         tracked!(filter).selected(Filter::Active),
                                                     href = "#/active",
-                                                    child = Text(self, "Active"),
                                                     on_click = move |_| {
                                                         set_filter.set(Filter::Active);
                                                     },
+                                                    Text(self, "Active"),
                                                 ),
                                             ),
                                             Li(
                                                 self,
-                                                child = A(
+                                                A(
                                                     self,
                                                     class = tracked!(filter)
                                                         .selected(Filter::Completed),
                                                     href = "#/completed",
-                                                    child = Text(self, "Completed"),
                                                     on_click = move |_| {
                                                         set_filter.set(Filter::Completed);
                                                     },
+                                                    Text(self, "Completed"),
                                                 ),
                                             ),
                                         ],
@@ -215,7 +215,7 @@ fn Todo() -> View {
                                                 self,
                                                 class = "clear-completed",
                                                 on_click = clear_completed,
-                                                child = Text(self, "Clear completed"),
+                                                Text(self, "Clear completed"),
                                             )
                                         })
                                         .into(),
@@ -264,10 +264,10 @@ fn TodoItem(
                     ),
                     Label(
                         self,
-                        child = Text(self, &tracked!(item).text),
                         on_double_click = move |_| {
                             tracked!(set_editing)(true);
                         },
+                        Text(self, &tracked!(item).text),
                     ),
                     Button(
                         self,

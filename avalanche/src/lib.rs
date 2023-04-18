@@ -52,7 +52,7 @@ pub use tracked::Tracked;
 ///         self,
 ///         id = class,
 ///         class = class,
-///         child = Text(self, format!("Hi there, {}!", tracked!(name)))
+///         Text(self, format!("Hi there, {}!", tracked!(name)))
 ///     )
 /// }
 /// ```
@@ -153,6 +153,16 @@ impl From<Option<View>> for View {
             Some(val) => val,
             None => ().into(),
         }
+    }
+}
+
+impl IntoIterator for View {
+    type Item = View;
+
+    type IntoIter = std::iter::Once<View>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        std::iter::once(self)
     }
 }
 

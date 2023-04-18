@@ -29,9 +29,7 @@ fn Random() -> View {
             Button(
                 self,
                 on_click = move |_| trigger_update.set(()),
-                [
-                    Text(self, "Generate new number")
-                ],
+                Text(self, "Generate new number"),
             ),
             Div(self, [
                 Text(self, random::<u16>().to_string())
@@ -64,9 +62,7 @@ fn Random() -> View {
             Button(
                 self,
                 on_click = move |_| set_value.set(random()),
-                [
-                    Text(self, "Generate new number")
-                ]
+                Text(self, "Generate new number"),
             ),
             Div(self, [
                 Text(self, tracked!(value).to_string())
@@ -121,19 +117,24 @@ here's a potential first attempt at rendering a list of dynamic children:
 #
 #[component]
 fn List() -> View {
-    let (items, update_items) = state(self, || vec![String::from("a")]);
+    let (items, update_items) = state(self, || vec!["a".to_string()]);
     Ul(
         self,
         tracked!(items).iter().map(|item| Li(
             self,
             key = item,
-            [Text(self, item)]
-        )).collect::<Vec<_>>()
+            Text(self, item)
+        ))
     )
 }
 ```
 
-Here, we use the standard iterator methods `map` and `collect` to turn a `Vec` of strings into a `Vec` of `View`s.
+Here, we use the standard iterator method `map` and `collect` to create an iterator
+producing `View`s from a `Vec` of `String`s. `avalanche_web` elements can take any
+type implementing `IntoIterator<Item = View>` as children. 
+Both iterators and `View` implement this trait. This allows us to pass 
+both our iterator mapping strings to views, and `Text(self, item)` as children to
+`Ul` and `Li` in this example.
 
 However, notice that in the component `Text(self, item)`, the implicit `text` parameter has no `tracked!` call, so if we later 
 update the element `"a"`, for example, that change won't be appropriately rendered. We can change that with the `store` hook,
@@ -156,8 +157,8 @@ fn List() -> View {
         tracked!(items).iter().map(|item| Li(
             self,
             key = tracked!(item),
-            [Text(self, tracked!(item))]
-        )).collect::<Vec<_>>()
+            Text(self, tracked!(item))
+        ))
     )
 }
 ```
@@ -171,18 +172,16 @@ So far, this explanation has only applied previous concepts, but there's the imp
 Li(
     self,
     key = tracked!(item),
-    [
-        Text(self, tracked!(item))
-    ]
+    Text(self, tracked!(item))
 )
 ```
 is good but this is not:
 ```rust,should_panic,ignore,
-Li(self, [
+Li(self, 
     Text(
         self,
         key = tracked!(item),
         tracked!(item)
     )
-])
+)
 ```

@@ -2,7 +2,7 @@ mod puzzle;
 
 use std::fmt::Display;
 
-use avalanche::{component, state, store, tracked, Tracked, View};
+use avalanche::{component, state, store, tracked, View};
 use avalanche_web::{
     components::{Button, Div, Img, Text},
     mount_to_body,
@@ -102,7 +102,7 @@ fn Board() -> View {
     let width = tracked!(puzzle).width();
     let height = tracked!(puzzle).height();
 
-    let tiles: Tracked<Vec<_>> = tracked!(puzzle)
+    let tiles = tracked!(puzzle)
         .tiles()
         .iter()
         .flatten()
@@ -128,19 +128,18 @@ fn Board() -> View {
                     })
                 },
             )
-        })
-        .collect();
+        });
     let style = format!("display: grid; grid-template-rows: repeat({}, 0fr); grid-template-columns: repeat({}, 0fr); grid-auto-layout: column;", tracked!(height), tracked!(width));
     Div(
         self,
         [
             Div(
                 self,
-                [Button(
+                Button(
                     self,
                     on_click = |_| reducer(Msg::NewGame(*tracked!(puzzle_type))),
                     [Text(self, reset_text(*tracked!(status)))],
-                )],
+                ),
             ),
             true.then(|| Div(self)).into(),
             Text(

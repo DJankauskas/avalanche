@@ -92,13 +92,11 @@ fn internal_state<'a, T: 'static, S: 'static>(
 /// fn Counter() -> View {
 ///     let (count, set_count) = state(self, || 0);
 ///     Div(self, [
-///         H2(self, [
-///             Text(self, "Counter!"),
-///         ]),
+///         H2(self, Text(self, "Counter!")),
 ///         Button(
 ///             self,
 ///             on_click = move |_| set_count.update(|count| *count += 1),
-///             child = Text(self, "+")
+///             Text(self, "+")
 ///         ),
 ///         Text(self, tracked!(count).to_string())
 ///     ])
@@ -270,13 +268,13 @@ impl<T> Clone for StateSetter<T> {
 ///                             key = n.to_string(),
 ///                             tracked!(text)
 ///                         )
-///         ).collect::<Vec<_>>();
+///         );
 ///
 ///     Div(self, [
 ///         Button(
 ///             self,
 ///             on_click = move |_| update_data.update(|data, gen| data.push(Tracked::new("another child", gen))),
-///             child = Text(self, "+")
+///             Text(self, "+")
 ///         ),
 ///         Div(self, tracked!(children))
 ///     ])
