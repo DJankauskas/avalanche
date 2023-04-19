@@ -31,9 +31,7 @@ fn Random() -> View {
                 on_click = move |_| trigger_update.set(()),
                 Text(self, "Generate new number"),
             ),
-            Div(self, [
-                Text(self, random::<u16>().to_string())
-            ]) 
+            Div(self, Text(self, random::<u16>().to_string())) 
         ]
     )
 }
@@ -64,9 +62,7 @@ fn Random() -> View {
                 on_click = move |_| set_value.set(random()),
                 Text(self, "Generate new number"),
             ),
-            Div(self, [
-                Text(self, tracked!(value).to_string())
-            ]) 
+            Div(self, Text(self, tracked!(value).to_string())) 
         ]
     )
 }
@@ -114,17 +110,16 @@ here's a potential first attempt at rendering a list of dynamic children:
 ```rust
 # use avalanche::{component, tracked, state, View};
 # use avalanche_web::components::{Ul, Li, Text};
-#
+use avalanche::keyed;
 #[component]
 fn List() -> View {
     let (items, update_items) = state(self, || vec!["a".to_string()]);
     Ul(
         self,
-        tracked!(items).iter().map(|item| Li(
+        tracked!(items).iter().map(|item| keyed(self, item, || Li(
             self,
-            key = item,
             Text(self, item)
-        ))
+        )))
     )
 }
 ```
@@ -146,7 +141,7 @@ us to create and modify tracked values.
 ```rust
 # use avalanche::{component, tracked, View};
 # use avalanche_web::components::{Ul, Li, Text};
-use avalanche::{store, Tracked};
+use avalanche::{store, keyed, Tracked};
 
 #[component]
 fn List() -> View {
@@ -154,11 +149,10 @@ fn List() -> View {
 
     Ul(
         self,
-        tracked!(items).iter().map(|item| Li(
+        tracked!(items).iter().map(|item| keyed(self, tracked!(item), || Li(
             self,
-            key = tracked!(item),
             Text(self, tracked!(item))
-        ))
+        )))
     )
 }
 ```
@@ -167,21 +161,10 @@ Now the `iter` method on `items` returns elements of type `Tracked<&String>` rat
 
 ### Keys
 
-So far, this explanation has only applied previous concepts, but there's the important new concept of keys. Every avalanche component has a special `String` `key` parameter. Whenever a particular component call location in code may be called more than once, it is required to specify a key to disambiguate the multiple instantiations; this is enforced with a runtime panic if not specified. Note that the key must be added on the topmost level, so in our example above,
-```rust,ignore
-Li(
-    self,
-    key = tracked!(item),
-    Text(self, tracked!(item))
-)
-```
-is good but this is not:
-```rust,should_panic,ignore,
-Li(self, 
-    Text(
-        self,
-        key = tracked!(item),
-        tracked!(item)
-    )
-)
-```
+So far, this explanation has only applied previous concepts, but there's the
+important new concept of keys. Whenever a particular component call location in code 
+may be called more than once, it is required to specify a key to disambiguate the 
+multiple instantiations; this is enforced with a runtime panic if not specified. 
+This is done with the `keyed` hook call, which takes the component context `self`,
+a key implementing `Display`, and a closure that renders the components called
+more than once.

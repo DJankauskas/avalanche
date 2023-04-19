@@ -147,7 +147,6 @@ pub(super) struct Native<'a> {
     pub value: &'a str,
     pub on_click: Option<Box<dyn Fn() + 'a>>,
     pub children: BumpVec<'a, View>,
-    key: Option<String>,
     location: (u32, u32),
     gens: [Gen<'a>; 4],
 }
@@ -159,7 +158,6 @@ impl<'a> Native<'a> {
             value: "",
             on_click: None,
             children: BumpVec::new_in(bump),
-            key: None,
             location: (0, 0),
             gens: [Gen::escape_hatch_new(false); 4],
         }
@@ -191,11 +189,6 @@ impl<'a> Native<'a> {
 
     pub fn __last(self, children: Vec<View>, gen: Gen<'a>) -> Self {
         self.children(children, gen)
-    }
-
-    pub fn key(mut self, key: String, _gen: Gen<'a>) -> Self {
-        self.key = Some(key);
-        self
     }
 
     // pub fn name_updated(&self, curr_gen: Gen<'a>) -> bool {
@@ -280,9 +273,5 @@ impl<'a> Component<'a> for Native<'a> {
 
     fn location(&self) -> Option<(u32, u32)> {
         Some(self.location)
-    }
-
-    fn key(&self) -> Option<String> {
-        self.key.clone()
     }
 }

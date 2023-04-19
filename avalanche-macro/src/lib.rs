@@ -211,7 +211,6 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
                 fn new<'__a, '__bump: '__a>(_: &#avalanche_path::alloc::Bump) -> Self::Impl<'__a> {
                     Self::Impl {
                         __internal_gens: [],
-                        __key: ::std::option::Option::None,
                         __location: (0, 0),
                         __phantom: ::std::marker::PhantomData,
                     }
@@ -225,7 +224,6 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     let component = quote! {
         #visibility struct #builder_name<#component_lifetime, #generic_params> #where_clause {
             __internal_gens: [#avalanche_path::tracked::Gen<#component_lifetime>; #inputs_len],
-            __key: ::std::option::Option<::std::string::String>,
             #(#param_ident: ::std::option::Option<#param_type>),*
         }
 
@@ -233,7 +231,6 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
             pub fn new<'__bump: #component_lifetime>(_: &'__bump #avalanche_path::alloc::Bump) -> Self {
                 Self {
                     __internal_gens: [#avalanche_path::tracked::Gen::escape_hatch_new(false); #inputs_len],
-                    __key: ::std::option::Option::None,
                     #(#param_ident: ::std::option::Option::None),*
                 }
             }
@@ -241,16 +238,10 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
             pub fn build(self, location: (::std::primitive::u32, ::std::primitive::u32)) -> #name<#component_lifetime, #generic_idents> {
                 #name {
                     __internal_gens: self.__internal_gens,
-                    __key: self.__key,
                     __location: location,
                     __phantom: ::std::marker::PhantomData,
                     #(#param_ident: #impl_init_expr),*
                 }
-            }
-
-            pub fn key<__T: ::std::string::ToString>(mut self, key: __T, _gen: #avalanche_path::tracked::Gen<#component_lifetime>) -> Self {
-                self.__key = ::std::option::Option::Some(::std::string::ToString::to_string(&key));
-                self
             }
 
             #(
@@ -275,7 +266,6 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
         #[derive(::std::clone::Clone)]
         #visibility struct #name<#component_lifetime, #generic_params> #where_clause {
             __internal_gens: [#avalanche_path::tracked::Gen<#component_lifetime>; #inputs_len],
-            __key: std::option::Option<::std::string::String>,
             __location: (::std::primitive::u32, ::std::primitive::u32),
             __phantom: ::std::marker::PhantomData<&#component_lifetime (#generic_types)>,
             #(#param_ident: #impl_param_type),*
@@ -303,10 +293,6 @@ pub fn component(_metadata: TokenStream, input: TokenStream) -> TokenStream {
                 return false;
             }
 
-            fn key(&self) -> ::std::option::Option<String> {
-                ::std::clone::Clone::clone(&self.__key)
-            }
-            
             fn location(&self) -> ::std::option::Option<(::std::primitive::u32, ::std::primitive::u32)> {
                 ::std::option::Option::Some(self.__location)
             }

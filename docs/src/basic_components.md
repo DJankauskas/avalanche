@@ -34,9 +34,7 @@ fn LinkExplicit() -> View {
     A(
         self,
         href = FIRST_SITE,
-        children = [
-            Text(self, text = "The first website")
-        ]
+        Text(self, text = "The first website")
     )
 }
 
@@ -45,9 +43,7 @@ fn LinkImplicit() -> View {
     A(
         self,
         href = FIRST_SITE,
-        [
-            Text(self, "The first website")
-        ]
+        Text(self, "The first website")
     )
 }
 ```
@@ -71,9 +67,7 @@ fn Link(to: &str, text: &str) -> View {
     A(
         self,
         href = tracked!(to),
-        [
-            Text(self, tracked!(text))
-        ]
+        Text(self, tracked!(text))
     )
 }
 ```
@@ -96,9 +90,7 @@ use avalanche_web::components::{Text, Div};
 #     A(
 #         self,
 #         href = tracked!(to),
-#         [
-#             Text(self, tracked!(text))
-#         ]
+#         Text(self, tracked!(text))
 #     )
 # }
 

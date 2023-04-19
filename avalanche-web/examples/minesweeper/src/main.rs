@@ -2,7 +2,7 @@ mod puzzle;
 
 use std::fmt::Display;
 
-use avalanche::{component, state, store, tracked, View};
+use avalanche::{component, keyed, state, store, tracked, View};
 use avalanche_web::{
     components::{Button, Div, Img, Text},
     mount_to_body,
@@ -110,24 +110,25 @@ fn Board() -> View {
         .map(|(num, tile)| {
             let x = num % tracked!(width);
             let y = num / tracked!(width);
-            Tile(
-                self,
-                key = num.to_string(),
-                tile = tracked!(tile),
-                on_primary = &|| {
-                    web_sys::console::log_1(&format!("{} {}", tracked!(x), tracked!(y)).into());
-                    reducer(Msg::PrimaryAction {
-                        x: tracked!(x),
-                        y: tracked!(y),
-                    })
-                },
-                on_secondary = &|| {
-                    reducer(Msg::SecondaryAction {
-                        x: tracked!(x),
-                        y: tracked!(y),
-                    })
-                },
-            )
+            keyed(self, num, || {
+                Tile(
+                    self,
+                    tile = tracked!(tile),
+                    on_primary = &|| {
+                        web_sys::console::log_1(&format!("{} {}", tracked!(x), tracked!(y)).into());
+                        reducer(Msg::PrimaryAction {
+                            x: tracked!(x),
+                            y: tracked!(y),
+                        })
+                    },
+                    on_secondary = &|| {
+                        reducer(Msg::SecondaryAction {
+                            x: tracked!(x),
+                            y: tracked!(y),
+                        })
+                    },
+                )
+            })
         });
     let style = format!("display: grid; grid-template-rows: repeat({}, 0fr); grid-template-columns: repeat({}, 0fr); grid-auto-layout: column;", tracked!(height), tracked!(width));
     Div(

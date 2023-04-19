@@ -17,15 +17,11 @@ use avalanche_web::components::{Div, H2, Button, Text};
 #[component]
 fn Counter() -> View {
     Div(self, [
-        H2(self, [
-            Text(self, "Counter!")
-        ]),
+        H2(self, Text(self, "Counter!")),
         Button(
             self,
             on_click = |_| todo!(),
-            [
-                Text(self, "+")
-            ]
+            Text(self, "+")
         ),
         Text(self, 0.to_string())
     ])
@@ -50,15 +46,11 @@ fn Counter() -> View {
     let (count, set_count) = state::<u64>(self, || 0);
 
     Div(self, [
-        H2(self, [
-            Text(self, "Counter!")
-        ]),
+        H2(self, Text(self, "Counter!")),
         Button(
             self,
             on_click = move |_| set_count.update(|count| *count += 1),
-            [
-                Text(self, "+")
-            ]
+            Text(self, "+")
         ),
         Text(self, tracked!(count).to_string())
     ])

@@ -1,27 +1,29 @@
-use std::{cell::Cell, marker::PhantomData, panic::Location};
+use std::{cell::Cell, marker::PhantomData, panic::Location, fmt::{Display, Write}};
 
 use crate::{
     renderer::{NativeEvent, Scheduler},
     shared::{Shared, WeakShared},
     tracked::{Gen, InternalGen},
-    alloc::Bump,
+    alloc::{Bump, String as BumpString},
     vdom::{
         mark_node_dirty,
         wrappers::{ComponentStateAccess, SharedBox},
         CellBumpVec, ComponentId, VDom,
     },
-    ComponentPos, Tracked,
+    ComponentPos, Tracked, View,
 };
 
 /// Provides a hook with component-specific state.
 ///
 /// Accessed by passing `self` as the first parameter in a hook call.
 #[derive(Copy, Clone)]
-pub struct HookContext<'a> {
+pub struct HookContext<'a, 'bump: 'a> {
     pub gen: Gen<'a>,
     pub(crate) state: &'a Shared<ComponentStateAccess<'a>>,
     pub(crate) component_pos: ComponentPos<'a>,
     pub(crate) scheduler: &'a Shared<dyn Scheduler>,
+    pub(crate) key: &'a Cell<Option<&'bump str>>,
+    pub(crate) bump: &'bump Bump,
 }
 
 /// Provides a component with component-specific state.
@@ -35,6 +37,7 @@ pub struct RenderContext<'a, 'bump: 'a> {
     pub(crate) current_native_event: &'a Cell<Option<(NativeEvent, ComponentId)>>,
     /// components that need to be removed from the vdom at the end of a UI update iteration
     pub(crate) components_to_remove: &'a CellBumpVec<'bump, ComponentId>,
+    pub(crate) key: &'a Cell<Option<&'bump str>>,
     #[doc(hidden)]
     pub bump: &'bump Bump,
 }
@@ -49,7 +52,7 @@ struct InternalState<T: 'static, S: 'static> {
 /// Provides common state storage and access for other state hooks.
 #[track_caller]
 fn internal_state<'a, T: 'static, S: 'static>(
-    ctx: HookContext<'a>,
+    ctx: HookContext<'a, '_>,
     f: impl FnOnce() -> T,
     setter: S,
 ) -> (&'a InternalState<T, S>, Location<'static>) {
@@ -106,7 +109,7 @@ fn internal_state<'a, T: 'static, S: 'static>(
 /// [counter example.](https://github.com/DJankauskas/avalanche/blob/38ec4ccb83f93550c7d444351fa395708505d053/avalanche-web/examples/counter/src/lib.rs)*
 #[track_caller]
 pub fn state<'a, T: 'static>(
-    ctx: HookContext<'a>,
+    ctx: HookContext<'a, '_>,
     f: fn() -> T,
 ) -> (Tracked<&'a T>, &'a StateSetter<T>) {
     let location = Location::caller();
@@ -254,7 +257,7 @@ impl<T> Clone for StateSetter<T> {
 ///
 /// ## Example
 /// ```rust
-/// use avalanche::{component, tracked, Tracked, View, store};
+/// use avalanche::{component, tracked, Tracked, View, store, keyed};
 /// use avalanche_web::components::{Div, H2, Button, Text};
 ///
 /// #[component]
@@ -263,11 +266,10 @@ impl<T> Clone for StateSetter<T> {
 ///     let children = tracked!(data)
 ///         .iter()
 ///         .enumerate()
-///         .map(|(n, text)| Text(
+///         .map(|(n, text)| keyed(self, n, || Text(
 ///                             self,
-///                             key = n.to_string(),
 ///                             tracked!(text)
-///                         )
+///                         ))
 ///         );
 ///
 ///     Div(self, [
@@ -282,7 +284,7 @@ impl<T> Clone for StateSetter<T> {
 /// ```
 #[track_caller]
 pub fn store<'a, T: 'static>(
-    ctx: HookContext<'a>,
+    ctx: HookContext<'a, '_>,
     f: fn(Gen) -> T,
 ) -> (Tracked<&'a T>, &'a StoreSetter<T>) {
     let setter = StoreSetter {
@@ -325,4 +327,20 @@ impl<T> Clone for StoreSetter<T> {
             setter: self.setter.clone(),
         }
     }
+}
+
+/// Disambiguates dynamically created components by providing them keys.
+///
+/// For performance and correctness reasons, components must have unique identities.
+/// Components by default have unique identities based on their location in source code,
+/// but if they are called more than once in the same location, they will be treated as the same component.
+/// This is a problem if you want to have multiple instances of the same component in the same view.
+/// To solve this, you can use the `keyed` hook to provide a unique key for each instance of the component.
+pub fn keyed<K: Display>(ctx: HookContext, key: K, render: impl FnOnce() -> View) -> View {
+    let mut bump_key = BumpString::new_in(ctx.bump);
+    write!(bump_key, "{key}").expect("a Display implementation returned an error unexpectedly");
+    let key = ctx.key.replace(Some(bump_key.into_bump_str()));
+    let view = render();
+    ctx.key.replace(key);
+    view
 }

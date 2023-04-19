@@ -1,4 +1,4 @@
-use avalanche::{component, state, store, tracked, updated, Tracked, View};
+use avalanche::{component, state, store, keyed, tracked, updated, Tracked, View};
 use avalanche_web::components::{
     Button, Div, Footer, Header, Input, Label, Li, Section, Span, Strong, Text, Ul, A, H1,
 };
@@ -54,35 +54,39 @@ fn Todo() -> View {
     let children = tracked!(items)
         .iter()
         .enumerate()
-        .filter(|(_, item)| {
-            match *tracked!(filter) {
-                Filter::All => true,
-                Filter::Completed => tracked!(item).completed,
-                Filter::Active => !tracked!(item).completed
-            }
+        .filter(|(_, item)| match *tracked!(filter) {
+            Filter::All => true,
+            Filter::Completed => tracked!(item).completed,
+            Filter::Active => !tracked!(item).completed,
         })
         .map(|(i, item)| {
             let id = tracked!(item).id;
-            TodoItem(
-                self,
-                key = tracked!(id),
-                item = &tracked!(item),
-                is_editing = *tracked!(editing) == Some(tracked!(id)),
-                toggle_completed = &move || {
-                    updated!(items);
-                    update_items.update(move |items, gen| items[i].mutate(gen).completed = !tracked!(&items[i]).completed)
-                },
-                set_editing = &move |editing| {
-                    set_editing.set(editing.then(|| tracked!(id)));
-                },
-                update_item = &move |item| {
-                    updated!(items);
-                    match item {
-                        Some(item) => update_items.update(move |items, gen| items[i] = Tracked::new(item, gen)),
-                        None => update_items.update(move |items, _| { items.remove(i); }),
-                    }
-                }
-            )
+            keyed(self, tracked!(id), || {
+                TodoItem(
+                    self,
+                    item = &tracked!(item),
+                    is_editing = *tracked!(editing) == Some(tracked!(id)),
+                    toggle_completed = &move || {
+                        updated!(items);
+                        update_items.update(move |items, gen| {
+                            items[i].mutate(gen).completed = !tracked!(&items[i]).completed
+                        })
+                    },
+                    set_editing = &move |editing| {
+                        set_editing.set(editing.then(|| tracked!(id)));
+                    },
+                    update_item = &move |item| {
+                        updated!(items);
+                        match item {
+                            Some(item) => update_items
+                                .update(move |items, gen| items[i] = Tracked::new(item, gen)),
+                            None => update_items.update(move |items, _| {
+                                items.remove(i);
+                            }),
+                        }
+                    },
+                )
+            })
         });
 
     Div(
@@ -106,7 +110,7 @@ fn Todo() -> View {
                                     let new_item = Item {
                                         text: value,
                                         completed: false,
-                                        id: tracked!(monotonic_id)
+                                        id: tracked!(monotonic_id),
                                     };
                                     items.push(new_item);
                                 });

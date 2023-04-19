@@ -38,9 +38,7 @@ use avalanche_web::components::{H1, Text};
 
 #[component]
 fn HelloWorld() -> View {
-    H1(self, [
-        Text(self, "Hello world!")
-    ])
+    H1(self, Text(self, "Hello world!"))
 }
 ```
 
@@ -51,9 +49,7 @@ Finally, add this call in `main`:
 # 
 # #[component]
 # fn HelloWorld() -> View {
-#     H1(self, [
-#         Text(self, "Hello world!")
-#     ])
+#     H1(self, Text(self, "Hello world!"))
 # }
 # fn main_dont_run() {
 avalanche_web::mount_to_body::<HelloWorld>();

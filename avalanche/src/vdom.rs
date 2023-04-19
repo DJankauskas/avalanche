@@ -194,7 +194,6 @@ mod dyn_component {
         native_create: unsafe fn(*mut (), &mut dyn Renderer, DispatchNativeEvent) -> NativeHandle,
         get_render: unsafe fn(*mut (), RenderContext, HookContext) -> View,
         native_update: NativeUpdateType,
-        get_child_id: unsafe fn(*mut ()) -> ChildId,
         drop: unsafe fn(*mut ()),
     }
 
@@ -203,6 +202,7 @@ mod dyn_component {
     pub(crate) struct DynComponent<'a, 'b> {
         updated: bool,
         native_type: Option<NativeType>,
+        location: Option<(u32, u32)>,
         /// A pointer to a `Box`-allocated instance of a Component<'a>.
         /// It must never be null and always be valid when dropped.
         inner: *mut (),
@@ -234,7 +234,6 @@ mod dyn_component {
             native_create: native_create::<C>,
             get_render: get_render::<C>,
             native_update: native_update::<C>,
-            get_child_id: get_child_id::<C>,
             drop: drop::<C>,
         };
     }
@@ -278,16 +277,6 @@ mod dyn_component {
     }
 
     /// SAFETY: `c` must be a valid pointer to an instance of `C`.
-    unsafe fn get_child_id<'a, C: Component<'a>>(c: *mut ()) -> ChildId {
-        // SAFETY: by the conditions of `get_child_id`.
-        let c_ref = unsafe { &*c.cast::<C>() };
-        ChildId {
-            location: c_ref.location().unwrap_or_default(),
-            key: c_ref.key(),
-        }
-    }
-
-    /// SAFETY: `c` must be a valid pointer to an instance of `C`.
     /// The value pointed to by `c` must not be used after this
     /// function is called.
     unsafe fn drop<'a, C: Component<'a>>(c: *mut ()) {
@@ -303,6 +292,7 @@ mod dyn_component {
             Self {
                 updated: component.updated(gen.into()),
                 native_type: component.native_type(),
+                location: component.location(),
                 inner: BumpBox::into_raw(BumpBox::new_in(component, bump)).cast(),
                 vtable: &C::VTABLE,
                 native_children: native_children::<C>,
@@ -317,6 +307,10 @@ mod dyn_component {
 
         pub(super) fn native_type(&self) -> Option<NativeType> {
             self.native_type
+        }
+        
+        pub(super) fn location(&self) -> Option<(u32, u32)> {
+            self.location
         }
 
         pub(super) fn native_create(
@@ -364,11 +358,6 @@ mod dyn_component {
 
             ret
         }
-
-        pub(super) fn child_id(&self) -> ChildId {
-            // SAFETY: self.inner is valid.
-            unsafe { (self.vtable.get_child_id)(self.inner) }
-        }
     }
 
     impl<'a, 'b> Drop for DynComponent<'a, 'b> {
@@ -403,7 +392,10 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
 
         let (child_component_id, child_vnode_dirty, native_component_is_some, original_view) =
             context.vdom.exec_mut(|vdom| {
-                let child_id = component.child_id();
+                let child_id = ChildId {
+                    key: context.key.get().map(ToOwned::to_owned),
+                    location: component.location().unwrap_or_default(),
+                };
                 // Gets the `ComponentId` of the child if it existed previously,
                 // and generates a new one otherwise.
                 let body_child = vdom
@@ -564,16 +556,6 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
                 // wrap state to allow joint hook creation and state consumption
                 let shared_state = Shared::new(ComponentStateAccess::new(&mut state));
 
-                let child_hook_context = HookContext {
-                    gen: vdom_gen.into(),
-                    state: &shared_state,
-                    component_pos: ComponentPos {
-                        component_id: child_component_id,
-                        vdom: context.component_pos.vdom,
-                    },
-                    scheduler: context.scheduler,
-                };
-
                 let child_render_context = RenderContext {
                     vdom: context.vdom,
                     body_parent_id: child_component_id,
@@ -584,10 +566,30 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
                     scheduler: context.scheduler,
                     current_native_event: context.current_native_event,
                     components_to_remove: context.components_to_remove,
+                    key: context.key,
                     bump: context.bump,
                 };
 
+                let child_hook_context = HookContext {
+                    gen: vdom_gen.into(),
+                    state: &shared_state,
+                    component_pos: ComponentPos {
+                        component_id: child_component_id,
+                        vdom: context.component_pos.vdom,
+                    },
+                    scheduler: context.scheduler,
+                    key: context.key,
+                    bump: context.bump,
+                };
+                
+                // Set key to None, as within the component, it becomes a body parent
+                // to its children, which shouldn't inherit the body parent's key
+                let key = context.key.replace(None);
+
                 let view: View = component.render(child_render_context, child_hook_context);
+                
+                // Restore key
+                context.key.replace(key);
 
                 context.vdom.exec_mut(|vdom| {
                     let child_vnode = vdom.children.get_mut(&child_component_id).unwrap();
@@ -875,6 +877,7 @@ fn render_vdom<'a, C: DefaultComponent>(
             scheduler,
             current_native_event: &Cell::new(current_native_event),
             components_to_remove: &components_to_remove,
+            key: &Cell::new(None),
             bump: &bump,
         },
     );

@@ -8,7 +8,7 @@ use native_mock::Root;
 use native_repr::Repr;
 
 use crate::{
-    component,
+    component, keyed,
     renderer::{NativeType, Scheduler},
     shared::{Shared, WeakShared},
     state, store, tracked, updated, DefaultComponent, Tracked, View,
@@ -269,11 +269,9 @@ fn AddChildren() -> View {
             .iter()
             .map(|child| {
                 println!("Child {} is updated: {}", tracked!(child), updated!(child));
-                Native(
-                    self,
-                    key = tracked!(child).to_string(),
-                    name = tracked!(child),
-                )
+                keyed(self, tracked!(child), || {
+                    Native(self, name = tracked!(child))
+                })
             })
             .collect(),
     )
@@ -336,11 +334,9 @@ fn OptionalChildren() -> View {
             .map(|child| {
                 child
                     .map(|child| {
-                        Native(
-                            self,
-                            name = tracked!(child),
-                            key = tracked!(child).to_string(),
-                        )
+                        keyed(self, tracked!(child), || {
+                            Native(self, name = tracked!(child))
+                        })
                     })
                     .into()
             })
@@ -450,6 +446,74 @@ fn reparent_child() {
                     value: String::new(),
                     has_on_click: false,
                     children: vec![],
+                },
+            ],
+        }],
+    )
+}
+
+#[component]
+fn NestedKeyed() -> View {
+    let (data, _) = state(self, || vec!["a", "b", "c"]);
+    Native(
+        self,
+        name = "container",
+        tracked!(data)
+            .iter()
+            .map(|d| {
+                keyed(self, d, || {
+                    Native(
+                        self,
+                        name = d,
+                        vec![Native(self, name = &format!("{d}-child"))],
+                    )
+                })
+            })
+            .collect(),
+    )
+}
+
+#[test]
+fn nested_keyed() {
+    test::<NestedKeyed>(
+        vec![],
+        vec![Repr {
+            name: "container".into(),
+            value: String::new(),
+            has_on_click: false,
+            children: vec![
+                Repr {
+                    name: "a".into(),
+                    value: String::new(),
+                    has_on_click: false,
+                    children: vec![Repr {
+                        name: "a-child".into(),
+                        value: String::new(),
+                        has_on_click: false,
+                        children: vec![],
+                    }],
+                },
+                Repr {
+                    name: "b".into(),
+                    value: String::new(),
+                    has_on_click: false,
+                    children: vec![Repr {
+                        name: "b-child".into(),
+                        value: String::new(),
+                        has_on_click: false,
+                        children: vec![],
+                    }],
+                },
+                Repr {
+                    name: "c".into(),
+                    value: String::new(),
+                    has_on_click: false,
+                    children: vec![Repr {
+                        name: "c-child".into(),
+                        value: String::new(),
+                        has_on_click: false,
+                        children: vec![],
+                    }],
                 },
             ],
         }],

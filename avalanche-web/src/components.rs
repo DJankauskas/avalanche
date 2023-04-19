@@ -21,12 +21,10 @@ pub struct TextImpl<'a> {
     pub(crate) text: Cow<'a, str>,
     gen: Gen<'a>,
     location: (u32, u32),
-    key: Option<String>,
 }
 pub struct Text<'a> {
     text: Option<Cow<'a, str>>,
     gen: Gen<'a>,
-    key: Option<String>,
 }
 
 impl<'a> Text<'a> {
@@ -34,7 +32,6 @@ impl<'a> Text<'a> {
         Self {
             text: None,
             gen: Gen::escape_hatch_new(false),
-            key: None,
         }
     }
 
@@ -50,16 +47,10 @@ impl<'a> Text<'a> {
         self
     }
 
-    pub fn key<T: ToString>(mut self, key: T, _gen: Gen<'a>) -> Self {
-        self.key = Some(key.to_string());
-        self
-    }
-
     pub fn build(self, location: (u32, u32)) -> TextImpl<'a> {
         TextImpl {
             text: self.text.unwrap(),
             gen: self.gen,
-            key: self.key,
             location,
         }
     }
@@ -113,10 +104,6 @@ impl<'a> Component<'a> for TextImpl<'a> {
 
     fn location(&self) -> Option<(u32, u32)> {
         Some(self.location)
-    }
-
-    fn key(&self) -> Option<String> {
-        self.key.clone()
     }
 }
 
@@ -175,7 +162,6 @@ pub struct RawElement<'a> {
     pub(crate) children_gen: Gen<'a>,
     pub(crate) value_controlled: bool,
     pub(crate) checked_controlled: bool,
-    pub(crate) key: Option<String>,
     pub(crate) location: (u32, u32),
     pub(crate) tag: &'static str,
 }
@@ -189,7 +175,6 @@ impl<'a> RawElement<'a> {
             children_gen: Gen::escape_hatch_new(false),
             value_controlled: Default::default(),
             checked_controlled: Default::default(),
-            key: Default::default(),
             location: Default::default(),
             tag: Default::default(),
         }
@@ -322,10 +307,6 @@ impl<'a> Component<'a> for RawElement<'a> {
     fn location(&self) -> Option<(u32, u32)> {
         Some(self.location)
     }
-
-    fn key(&self) -> Option<String> {
-        self.key.clone()
-    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -433,11 +414,6 @@ macro_rules! def_component {
                 self.raw.location = location;
                 self.raw.tag = $native_tag;
                 self.raw
-            }
-
-            pub fn key<S: ToString>(mut self, key: S, _gen: Gen<'a>) -> Self {
-                self.raw.key = Some(key.to_string());
-                self
             }
 
             pub fn children<I: IntoIterator<Item=View>>(mut self, children: I, gen: Gen<'a>) -> Self {

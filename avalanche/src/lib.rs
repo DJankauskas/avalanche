@@ -23,7 +23,7 @@ use tracked::Gen;
 use vdom::{ComponentId, VDom};
 use alloc::Bump;
 
-pub use hooks::{state, store};
+pub use hooks::{state, store, keyed};
 pub use tracked::Tracked;
 
 /// An attribute macro used to define components.
@@ -206,10 +206,6 @@ pub trait Component<'a>: Sized + 'a {
     }
 
     fn location(&self) -> Option<(u32, u32)>;
-
-    fn key(&self) -> Option<String> {
-        None
-    }
 }
 
 impl<'a> Component<'a> for () {
