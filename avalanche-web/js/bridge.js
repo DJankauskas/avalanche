@@ -4,9 +4,13 @@ export function clear_string_cache() {
     stringCache.length = 1;
 }
 
+const stringChunkSize = 1024;
 export function intern_string_at(string, pos) {
-    const decodedString = String.fromCodePoint(...string);
-    stringCache[pos] = decodedString;
+    let result = '';
+    for (let i = 0; i < string.length; i += stringChunkSize) {
+        result += String.fromCharCode(...string.subarray(i, i + stringChunkSize));
+    }
+    stringCache[pos] = result;
 }
 
 export function append_child(parent, child) {
