@@ -5,7 +5,7 @@ use std::{any::Any, cell::RefCell, hash::Hash, panic::Location, rc::Rc};
 
 use rustc_hash::FxHashMap;
 
-use crate::hooks::{HookContext, RenderContext};
+use crate::hooks::{HookContext, RenderContext, SharedContext};
 use crate::renderer::{DispatchNativeEvent, NativeEvent};
 use crate::tracked::Gen;
 use crate::{
@@ -393,7 +393,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
         let (child_component_id, child_vnode_dirty, native_component_is_some, original_view) =
             context.vdom.exec_mut(|vdom| {
                 let child_id = ChildId {
-                    key: context.key.get().map(ToOwned::to_owned),
+                    key: context.shared.key.get().map(ToOwned::to_owned),
                     location: component.location().unwrap_or_default(),
                 };
                 // Gets the `ComponentId` of the child if it existed previously,
@@ -424,7 +424,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
                         let dispatch_native_event = DispatchNativeEvent {
                             component_id: child_component_id,
                             vdom: context.component_pos.vdom.downgrade(),
-                            scheduler: context.scheduler.clone(),
+                            scheduler: context.shared.scheduler.clone(),
                         };
                         let native_component = native_type.map(|native_type| {
                             let native_handle = component
@@ -471,7 +471,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
                         .unwrap();
 
                     // Extract current_native_event
-                    let mut current_native_event = context.current_native_event.take();
+                    let mut current_native_event = context.shared.current_native_event.take();
 
                     let native_event = match &current_native_event {
                         Some((_, id)) => {
@@ -485,7 +485,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
                     };
 
                     // restore potentially modified current_native_event
-                    context.current_native_event.set(current_native_event);
+                    context.shared.current_native_event.set(current_native_event);
                     
                     // Update only required if the component was not created during
                     // this call
@@ -563,11 +563,8 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
                         component_id: child_component_id,
                         vdom: context.component_pos.vdom,
                     },
-                    scheduler: context.scheduler,
-                    current_native_event: context.current_native_event,
-                    components_to_remove: context.components_to_remove,
-                    key: context.key,
                     bump: context.bump,
+                    shared: context.shared,
                 };
 
                 let child_hook_context = HookContext {
@@ -577,19 +574,18 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
                         component_id: child_component_id,
                         vdom: context.component_pos.vdom,
                     },
-                    scheduler: context.scheduler,
-                    key: context.key,
                     bump: context.bump,
+                    shared: context.shared,
                 };
                 
                 // Set key to None, as within the component, it becomes a body parent
                 // to its children, which shouldn't inherit the body parent's key
-                let key = context.key.replace(None);
+                let key = context.shared.key.replace(None);
 
                 let view: View = component.render(child_render_context, child_hook_context);
                 
                 // Restore key
-                context.key.replace(key);
+                context.shared.key.replace(key);
 
                 context.vdom.exec_mut(|vdom| {
                     let child_vnode = vdom.children.get_mut(&child_component_id).unwrap();
@@ -598,7 +594,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
                         .body_children
                         .retain(|_, BodyChild { id, used }| {
                             if !*used {
-                                context.components_to_remove.push(*id, context.bump);
+                                context.shared.components_to_remove.push(*id, context.bump);
                             };
                             *used
                         });
@@ -864,6 +860,13 @@ fn render_vdom<'a, C: DefaultComponent>(
     swap(&mut vdom.bump, &mut bump);
 
     let components_to_remove = CellBumpVec::new_in(&bump);
+    
+    let shared_context = SharedContext {
+            scheduler,
+            current_native_event: &Cell::new(current_native_event),
+            components_to_remove: &components_to_remove,
+            key: &Cell::new(None),
+    };
 
     render_child(
         C::new(&bump),
@@ -874,11 +877,8 @@ fn render_vdom<'a, C: DefaultComponent>(
                 component_id: ComponentId::new(),
                 vdom: shared_vdom,
             },
-            scheduler,
-            current_native_event: &Cell::new(current_native_event),
-            components_to_remove: &components_to_remove,
-            key: &Cell::new(None),
             bump: &bump,
+            shared: &shared_context,
         },
     );
 

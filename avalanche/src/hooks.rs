@@ -13,6 +13,18 @@ use crate::{
     ComponentPos, Tracked, View,
 };
 
+/// Shared context between HookContext and RenderContext.
+/// The data here remains unchanged during rendering the VDom.
+/// It is stored here to prevent needing recopying and stack space
+/// during every new render.
+pub(crate) struct SharedContext<'a, 'bump: 'a> {
+    pub(crate) scheduler: &'a Shared<dyn Scheduler>,
+    pub(crate) key: &'a Cell<Option<&'bump str>>,
+    pub(crate) current_native_event: &'a Cell<Option<(NativeEvent, ComponentId)>>,
+    /// components that need to be removed from the vdom at the end of a UI update iteration
+    pub(crate) components_to_remove: &'a CellBumpVec<'bump, ComponentId>,
+}
+
 /// Provides a hook with component-specific state.
 ///
 /// Accessed by passing `self` as the first parameter in a hook call.
@@ -21,8 +33,7 @@ pub struct HookContext<'a, 'bump: 'a> {
     pub gen: Gen<'a>,
     pub(crate) state: &'a Shared<ComponentStateAccess<'a>>,
     pub(crate) component_pos: ComponentPos<'a>,
-    pub(crate) scheduler: &'a Shared<dyn Scheduler>,
-    pub(crate) key: &'a Cell<Option<&'bump str>>,
+    pub(crate) shared: &'a SharedContext<'a, 'bump>,
     pub(crate) bump: &'bump Bump,
 }
 
@@ -33,13 +44,8 @@ pub struct RenderContext<'a, 'bump: 'a> {
     /// VNode of parent.
     pub(crate) body_parent_id: ComponentId,
     pub(crate) component_pos: ComponentPos<'a>,
-    pub(crate) scheduler: &'a Shared<dyn Scheduler>,
-    pub(crate) current_native_event: &'a Cell<Option<(NativeEvent, ComponentId)>>,
-    /// components that need to be removed from the vdom at the end of a UI update iteration
-    pub(crate) components_to_remove: &'a CellBumpVec<'bump, ComponentId>,
-    pub(crate) key: &'a Cell<Option<&'bump str>>,
-    #[doc(hidden)]
     pub bump: &'bump Bump,
+    pub(crate) shared: &'a SharedContext<'a, 'bump>,
 }
 
 /// Stores some state and its setter for `internal_state`.
@@ -116,7 +122,7 @@ pub fn state<'a, T: 'static>(
     let setter = StateSetter {
         internal_setter: InternalStateSetter::new(
             ctx.component_pos,
-            ctx.scheduler.clone(),
+            ctx.shared.scheduler.clone(),
             *location,
         ),
     };
@@ -290,7 +296,7 @@ pub fn store<'a, T: 'static>(
     let setter = StoreSetter {
         setter: InternalStateSetter::new(
             ctx.component_pos,
-            ctx.scheduler.clone(),
+            ctx.shared.scheduler.clone(),
             *Location::caller(),
         ),
     };
@@ -339,8 +345,8 @@ impl<T> Clone for StoreSetter<T> {
 pub fn keyed<K: Display>(ctx: HookContext, key: K, render: impl FnOnce() -> View) -> View {
     let mut bump_key = BumpString::new_in(ctx.bump);
     write!(bump_key, "{key}").expect("a Display implementation returned an error unexpectedly");
-    let key = ctx.key.replace(Some(bump_key.into_bump_str()));
+    let key = ctx.shared.key.replace(Some(bump_key.into_bump_str()));
     let view = render();
-    ctx.key.replace(key);
+    ctx.shared.key.replace(key);
     view
 }

@@ -27,8 +27,8 @@ impl<T> Tracked<T> {
             __avalanche_internal_gen: gen.gen.into(),
         }
     }
-    
-    /// Provides mutable access to the tracked value, updating its generation to 
+
+    /// Provides mutable access to the tracked value, updating its generation to
     /// the current (provided) one.
     pub fn mutate(&mut self, gen: Gen) -> &mut T {
         if self.__avalanche_internal_gen < gen {
@@ -56,7 +56,7 @@ impl<T> Tracked<T> {
 /// #[component]
 /// fn ComponentBody(a: u32, d: u32) -> View {
 ///     // a has been updated since the last render, d has not been
-/// 
+///
 ///     let b: Tracked<u32> = tracked!(a);
 ///
 ///     // c has type Tracked<u32>
@@ -86,18 +86,18 @@ macro_rules! tracked {
 }
 
 /// Like the [tracked](tracked!) macro, but more performant when changes to the _location_ of a [Tracked] value is not
-/// important, but its identity, or _key_, is. 
-/// 
+/// important, but its identity, or _key_, is.
+///
 /// This is an experimental API.
-/// 
-/// For example, for a variable `vec` of type 
-/// `Tracked<Vec<Tracked<T>>`, in the expression `tracked!(tracked!(vec)[0])`, the location of the resulting value 
-/// is important because we retrieve it by index. However, with this construct, any change within `vec` will 
+///
+/// For example, for a variable `vec` of type
+/// `Tracked<Vec<Tracked<T>>`, in the expression `tracked!(tracked!(vec)[0])`, the location of the resulting value
+/// is important because we retrieve it by index. However, with this construct, any change within `vec` will
 /// mark the value as updated, even if what is at the zeroth index stayed the same.
-/// 
-/// However, when we know that the location of a tracked value 
+///
+/// However, when we know that the location of a tracked value
 /// is either not important or always static, `keyed_tracked` should be used instead for values coming
-/// from the `store` hook to enable more efficient, fine-grained updates. 
+/// from the `store` hook to enable more efficient, fine-grained updates.
 ///
 // TODO: is this the right approach? Also, better documentation + examples
 #[macro_export]
@@ -108,11 +108,13 @@ macro_rules! tracked_keyed {
 }
 
 /// Returns whether the given [Tracked] value has been updated since the last render.
-/// 
+///
 /// It can only be called within a `#[component]` function, and behaves similarly to [tracked](tracked!).
 #[macro_export]
 macro_rules! updated {
-    ($e:expr) => { ::std::compile_error!("updated must be invoked within a #[component]") };
+    ($e:expr) => {
+        ::std::compile_error!("updated must be invoked within a #[component]")
+    };
     (@internal $internal_ctxt:expr; $gen:expr) => {
         $internal_ctxt.gen <= $gen
     };
@@ -120,15 +122,16 @@ macro_rules! updated {
 
 /// Like [updated], but with the tracking performance properties of [tracked_keyed].
 ///
-/// This is an experimental API. 
+/// This is an experimental API.
 #[macro_export]
 macro_rules! updated_keyed {
-    ($e:expr) => { ::std::compile_error!("updated must be invoked within a #[component]") };
+    ($e:expr) => {
+        ::std::compile_error!("updated must be invoked within a #[component]")
+    };
     (@internal $internal_ctxt:expr; $gen:expr) => {
         $internal_ctxt.gen <= $gen
     };
 }
-
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 /// Represents the generation in which a value was last updated, which may be the generation of
@@ -174,12 +177,15 @@ pub struct Gen<'a> {
 }
 
 impl<'a> Gen<'a> {
-    /// Creates a `Gen` that will always register as updated if `updated` 
-    /// is true, and always not updated if false. Using this function is usually 
+    /// Creates a `Gen` that will always register as updated if `updated`
+    /// is true, and always not updated if false. Using this function is usually
     /// not what you want, and is generally helpful only for manual component implementations
     /// that need a default not updated generation.
     pub fn escape_hatch_new(updated: bool) -> Self {
         let gen = if updated { u32::MAX } else { 0 };
-        Self { gen: InternalGen { gen }, phantom: PhantomData }
+        Self {
+            gen: InternalGen { gen },
+            phantom: PhantomData,
+        }
     }
 }
