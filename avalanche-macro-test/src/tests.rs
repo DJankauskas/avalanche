@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use avalanche::renderer::{
-    DispatchNativeEvent, NativeEvent, NativeHandle, NativeType, Renderer, Scheduler,
+    DispatchNativeEvent, NativeEvent, NativeHandle, Renderer, Scheduler,
 };
 use avalanche::tracked::Gen;
 use avalanche::vdom::Root;
@@ -16,36 +16,29 @@ struct TestRenderer;
 impl Renderer for TestRenderer {
     fn append_child(
         &mut self,
-        _parent_type: &NativeType,
         _parent_handle: &NativeHandle,
-        _child_type: &NativeType,
         _child_handle: &NativeHandle,
     ) {
     }
 
     fn insert_child(
         &mut self,
-        _parent_type: &NativeType,
         _parent_handle: &NativeHandle,
         _index: usize,
-        _child_type: &NativeType,
         _child_handle: &NativeHandle,
     ) {
     }
 
     fn replace_child(
         &mut self,
-        _parent_type: &NativeType,
         _parent_handle: &NativeHandle,
         _index: usize,
-        _child_type: &NativeType,
         _child_handle: &NativeHandle,
     ) {
     }
 
     fn swap_children(
         &mut self,
-        _parent_type: &NativeType,
         _parent_handle: &NativeHandle,
         _a: usize,
         _b: usize,
@@ -54,7 +47,6 @@ impl Renderer for TestRenderer {
 
     fn truncate_children(
         &mut self,
-        parent_type: &NativeType,
         parent_handle: &NativeHandle,
         len: usize,
     ) {
@@ -108,7 +100,6 @@ impl<'a> Component<'a> for TestChildren<'a> {
     fn native_update(
         &self,
         renderer: &mut dyn Renderer,
-        native_type: &NativeType,
         native_handle: &NativeHandle,
         curr_gen: Gen,
         event: Option<NativeEvent>,
@@ -123,11 +114,8 @@ impl<'a> Component<'a> for TestChildren<'a> {
         true
     }
 
-    fn native_type(&self) -> Option<NativeType> {
-        Some(NativeType {
-            handler: "",
-            name: "",
-        })
+    fn is_native(&self) -> bool {
+        true
     }
 
     fn location(&self) -> Option<(u32, u32)> {
@@ -138,10 +126,6 @@ impl<'a> Component<'a> for TestChildren<'a> {
 #[test]
 fn test() {
     let root = Root::new::<_, _, Test>(
-        NativeType {
-            handler: "",
-            name: "",
-        },
         Box::new(()),
         TestRenderer,
         TestScheduler,

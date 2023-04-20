@@ -1,7 +1,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    renderer::{NativeType, NativeEvent, Renderer},
+    renderer::{NativeEvent, Renderer},
     shared::{Shared, WeakShared},
     tracked::Gen,
     alloc::{Bump, Vec as BumpVec, CollectIn},
@@ -241,7 +241,6 @@ impl<'a> Component<'a> for Native<'a> {
     fn native_update(
             &self,
             _renderer: &mut dyn Renderer,
-            _native_type: &NativeType,
             native_handle: &crate::renderer::NativeHandle,
             curr_gen: Gen,
             event: Option<crate::renderer::NativeEvent>,
@@ -264,12 +263,10 @@ impl<'a> Component<'a> for Native<'a> {
         self.children.into_bump_slice()
     }
 
-    fn native_type(&self) -> Option<NativeType> {
-        Some(NativeType {
-            handler: "test",
-            name: "test",
-        })
+    fn is_native(&self) -> bool {
+        true
     }
+        
 
     fn location(&self) -> Option<(u32, u32)> {
         Some(self.location)

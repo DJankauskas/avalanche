@@ -10,7 +10,7 @@ use web_sys::Element;
 
 use crate::{events::*, WebNativeEvent, WebNativeHandle, WebRenderer, add_named_listener, add_listener, create_handler};
 use avalanche::{Component, View};
-use avalanche::renderer::{Renderer, NativeType, NativeHandle, NativeEvent, DispatchNativeEvent};
+use avalanche::renderer::{Renderer, NativeHandle, NativeEvent, DispatchNativeEvent};
 use avalanche::tracked::Gen;
 use avalanche::hooks::{HookContext, RenderContext};
 use avalanche::alloc::{Bump, Vec as BumpVec, CollectIn};
@@ -60,13 +60,8 @@ impl<'a> Component<'a> for TextImpl<'a> {
     fn render(self, _: RenderContext, _: HookContext) -> View {
         unimplemented!()
     }
-    fn native_type(&self) -> Option<NativeType> {
-        let action = NativeType {
-            handler: "avalanche_web_text",
-            name: "",
-        };
-
-        Some(action)
+    fn is_native(&self) -> bool {
+        true
     }
     
     fn native_create(&self, renderer: &mut dyn Renderer, _dispatch_native_event: DispatchNativeEvent) -> NativeHandle {
@@ -82,7 +77,6 @@ impl<'a> Component<'a> for TextImpl<'a> {
     fn native_update(
         &self,
         renderer: &mut dyn Renderer,
-        _native_type: &NativeType,
         native_handle: &NativeHandle,
         _curr_gen: Gen,
         _event: Option<NativeEvent>,
@@ -252,7 +246,6 @@ impl<'a> Component<'a> for RawElement<'a> {
     fn native_update(
         &self,
         renderer: &mut dyn Renderer,
-        _native_type: &NativeType,
         native_handle: &NativeHandle,
         curr_gen: Gen,
         event: Option<NativeEvent>,
@@ -297,11 +290,8 @@ impl<'a> Component<'a> for RawElement<'a> {
         max(self.max_gen, self.children_gen) >= curr_gen
     }
 
-    fn native_type(&self) -> Option<NativeType> {
-        Some(NativeType {
-            handler: "avalanche_web",
-            name: self.tag,
-        })
+    fn is_native(&self) -> bool {
+        true
     }
 
     fn location(&self) -> Option<(u32, u32)> {

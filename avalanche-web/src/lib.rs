@@ -1,5 +1,5 @@
 use avalanche::renderer::{
-    DispatchNativeEvent, NativeEvent, NativeHandle, NativeType, Renderer, Scheduler,
+    DispatchNativeEvent, NativeEvent, NativeHandle, Renderer, Scheduler,
 };
 use avalanche::shared::Shared;
 use avalanche::vdom::Root;
@@ -28,10 +28,6 @@ static TIMEOUT_MSG_NAME: &str = "avalanche_web_message";
 pub fn mount<C: DefaultComponent>(element: Element) -> Root {
     let renderer = WebRenderer::new();
     let scheduler = WebScheduler::new();
-    let native_parent_type = NativeType {
-        handler: "avalanche_web",
-        name: "avalanche_web",
-    };
 
     // Clear children of the mount element to ensure children modification
     // indices are consistent with internal state
@@ -43,7 +39,6 @@ pub fn mount<C: DefaultComponent>(element: Element) -> Root {
     };
 
     let root = avalanche::vdom::Root::new::<_, _, C>(
-        native_parent_type,
         Box::new(native_parent_handle),
         renderer,
         scheduler,
@@ -181,9 +176,7 @@ impl WebRenderer {
 impl Renderer for WebRenderer {
     fn append_child(
         &mut self,
-        _parent_type: &NativeType,
         parent_handle: &NativeHandle,
-        _child_type: &NativeType,
         child_handle: &NativeHandle,
     ) {
         let parent_node = &Self::handle_cast(parent_handle).node;
@@ -193,10 +186,8 @@ impl Renderer for WebRenderer {
 
     fn insert_child(
         &mut self,
-        _parent_type: &NativeType,
         parent_handle: &NativeHandle,
         index: usize,
-        _child_type: &NativeType,
         child_handle: &NativeHandle,
     ) {
         let parent_node = &Self::handle_cast(parent_handle).node;
@@ -206,7 +197,6 @@ impl Renderer for WebRenderer {
 
     fn swap_children(
         &mut self,
-        _parent_type: &NativeType,
         parent_handle: &NativeHandle,
         a: usize,
         b: usize,
@@ -223,10 +213,8 @@ impl Renderer for WebRenderer {
 
     fn replace_child(
         &mut self,
-        _parent_type: &NativeType,
         _parent_handle: &NativeHandle,
         _index: usize,
-        _child_type: &NativeType,
         _child_handle: &NativeHandle,
     ) {
         /*
@@ -246,7 +234,6 @@ impl Renderer for WebRenderer {
 
     fn truncate_children(
         &mut self,
-        _parent_type: &NativeType,
         parent_handle: &NativeHandle,
         len: usize,
     ) {
@@ -256,7 +243,6 @@ impl Renderer for WebRenderer {
 
     // fn remove_child(
     //     &mut self,
-    //     parent_type: &NativeType,
     //     parent_handle: &mut NativeHandle,
     //     index: usize,
     // ) {

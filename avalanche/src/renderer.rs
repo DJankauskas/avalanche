@@ -17,9 +17,7 @@ pub trait Renderer: Downcast {
     /// handle `parent_handle`'s children.
     fn append_child(
         &mut self,
-        parent_type: &NativeType,
         parent_handle: &NativeHandle,
-        child_type: &NativeType,
         child_handle: &NativeHandle,
     );
 
@@ -30,10 +28,8 @@ pub trait Renderer: Downcast {
     /// Panics if `index > len`, where `len` is the number of children the parent has.
     fn insert_child(
         &mut self,
-        parent_type: &NativeType,
         parent_handle: &NativeHandle,
         index: usize,
-        child_type: &NativeType,
         child_handle: &NativeHandle,
     );
 
@@ -44,10 +40,8 @@ pub trait Renderer: Downcast {
     /// Panics if `index > len - 1`, where `len` is the number of children the parent has.
     fn replace_child(
         &mut self,
-        parent_type: &NativeType,
         parent_handle: &NativeHandle,
         index: usize,
-        child_type: &NativeType,
         child_handle: &NativeHandle,
     );
 
@@ -56,7 +50,6 @@ pub trait Renderer: Downcast {
     /// Panics if `a` or `b` are less than `len`, where `len` is the number of children the parent has.
     fn swap_children(
         &mut self,
-        parent_type: &NativeType,
         parent_handle: &NativeHandle,
         a: usize,
         b: usize,
@@ -66,7 +59,6 @@ pub trait Renderer: Downcast {
     /// greater in count than `len`.
     fn truncate_children(
         &mut self,
-        parent_type: &NativeType,
         parent_handle: &NativeHandle,
         len: usize,
     );
@@ -83,14 +75,6 @@ impl_downcast!(Renderer);
 pub trait Scheduler {
     /// Schedule the given function to be run on the ui thread in the future.
     fn schedule_on_ui_thread(&mut self, f: Box<dyn FnOnce()>);
-}
-
-/// Describes the native element type a given [Component](crate::Component) corresponds to.
-/// The meaning of its fields is up to a particular renderer implementation to define.
-#[derive(Copy, Clone)]
-pub struct NativeType {
-    pub handler: &'static str,
-    pub name: &'static str,
 }
 
 /// The event data and type of an event dispatched to a native component.

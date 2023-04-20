@@ -9,7 +9,7 @@ use crate::hooks::{HookContext, RenderContext, SharedContext};
 use crate::renderer::{DispatchNativeEvent, NativeEvent};
 use crate::tracked::Gen;
 use crate::{
-    renderer::{NativeHandle, NativeType, Renderer, Scheduler},
+    renderer::{NativeHandle, Renderer, Scheduler},
     tracked::InternalGen,
 };
 use crate::{ChildId, Component, ComponentPos, DefaultComponent, View};
@@ -142,7 +142,6 @@ impl ComponentId {
 /// Holds data specific to avalanche components representing native components.
 struct NativeComponent {
     native_handle: NativeHandle,
-    native_type: NativeType,
     native_parent: Option<ComponentId>,
     native_children: Vec<ComponentId>,
 }
@@ -182,7 +181,6 @@ mod dyn_component {
     type NativeUpdateType = unsafe fn(
         *mut (),
         &mut dyn Renderer,
-        &NativeType,
         &NativeHandle,
         Gen,
         Option<NativeEvent>,
@@ -201,11 +199,11 @@ mod dyn_component {
     /// to avoid code bloat.
     pub(crate) struct DynComponent<'a, 'b> {
         updated: bool,
-        native_type: Option<NativeType>,
         location: Option<(u32, u32)>,
         /// A pointer to a `Box`-allocated instance of a Component<'a>.
         /// It must never be null and always be valid when dropped.
         inner: *mut (),
+        is_native: bool,
         vtable: &'static DynComponentVTable,
         native_children: unsafe fn (*mut ()) -> &'a [View],
         /// whether the component pointed to by inner
@@ -242,14 +240,13 @@ mod dyn_component {
     unsafe fn native_update<'a, C: Component<'a>>(
         c: *mut (),
         renderer: &mut dyn Renderer,
-        native_type: &NativeType,
         native_handle: &NativeHandle,
         curr_gen: Gen,
         event: Option<NativeEvent>,
     ) {
         // SAFETY: by the conditions of `native_update`.
         let component_ref = unsafe { &*c.cast::<C>() };
-        component_ref.native_update(renderer, native_type, native_handle, curr_gen, event);
+        component_ref.native_update(renderer, native_handle, curr_gen, event);
     }
 
     /// SAFETY: `c` must be a valid pointer to an instance of `C`.
@@ -291,8 +288,8 @@ mod dyn_component {
         ) -> Self {
             Self {
                 updated: component.updated(gen.into()),
-                native_type: component.native_type(),
                 location: component.location(),
+                is_native: component.is_native(),
                 inner: BumpBox::into_raw(BumpBox::new_in(component, bump)).cast(),
                 vtable: &C::VTABLE,
                 native_children: native_children::<C>,
@@ -305,12 +302,12 @@ mod dyn_component {
             self.updated
         }
 
-        pub(super) fn native_type(&self) -> Option<NativeType> {
-            self.native_type
-        }
-        
         pub(super) fn location(&self) -> Option<(u32, u32)> {
             self.location
+        }
+        
+        pub(super) fn is_native(&self) -> bool {
+            self.is_native
         }
 
         pub(super) fn native_create(
@@ -325,7 +322,6 @@ mod dyn_component {
         pub(super) fn native_update(
             &self,
             renderer: &mut dyn Renderer,
-            native_type: &NativeType,
             native_handle: &NativeHandle,
             curr_gen: Gen,
             event: Option<NativeEvent>,
@@ -335,7 +331,6 @@ mod dyn_component {
                 (self.vtable.native_update)(
                     self.inner,
                     renderer,
-                    native_type,
                     native_handle,
                     curr_gen,
                     event,
@@ -420,18 +415,16 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
                     vdom.children.entry(child_component_id).or_insert_with(|| {
                         newly_created = true;
 
-                        let native_type = component.native_type();
                         let dispatch_native_event = DispatchNativeEvent {
                             component_id: child_component_id,
                             vdom: context.component_pos.vdom.downgrade(),
                             scheduler: context.shared.scheduler.clone(),
                         };
-                        let native_component = native_type.map(|native_type| {
+                        let native_component = component.is_native().then(|| {
                             let native_handle = component
                                 .native_create(vdom.renderer.as_mut(), dispatch_native_event);
                             NativeComponent {
                                 native_handle,
-                                native_type,
                                 native_parent: None,
                                 native_children: Vec::new(),
                             }
@@ -492,7 +485,6 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
                     if !newly_created {
                         component.native_update(
                             vdom.renderer.as_mut(),
-                            &native_component.native_type,
                             &native_component.native_handle,
                             vdom.gen.into(),
                             native_event,
@@ -648,13 +640,12 @@ pub(crate) fn update_native_children(
     bump: &Bump,
 ) {
     let parent_native_component = vdom.children[&parent_id].native_component.as_ref().unwrap();
-    let parent_type = &parent_native_component.native_type;
     let parent_handle = &parent_native_component.native_handle;
 
     // Fast path for component being completely cleared of children
     if new_native_children.is_empty() {
         if !old_native_children.is_empty() {
-            vdom.renderer.truncate_children(parent_type, parent_handle, 0);
+            vdom.renderer.truncate_children(parent_handle, 0);
         }
         return;
     }
@@ -697,9 +688,7 @@ pub(crate) fn update_native_children(
                     set_native_parent.push(*new_child);
                 }
                 vdom.renderer.append_child(
-                    parent_type,
                     parent_handle,
-                    &new_native_component.native_type,
                     &new_native_component.native_handle,
                 );
                 let i = old_native_children.len();
@@ -709,7 +698,7 @@ pub(crate) fn update_native_children(
         let j = *j;
         if i != j {
             vdom.renderer
-                .swap_children(parent_type, parent_handle, i, j);
+                .swap_children(parent_handle, i, j);
             let swap_child = old_native_children[i];
             old_native_children_map.get_mut(&swap_child).unwrap().0 = j;
             old_native_children.swap(i, j);
@@ -718,7 +707,7 @@ pub(crate) fn update_native_children(
 
     if new_native_children.len() < old_native_children.len() {
         vdom.renderer
-            .truncate_children(parent_type, parent_handle, new_native_children.len());
+            .truncate_children(parent_handle, new_native_children.len());
     }
 
     for native_id in set_native_parent {
@@ -769,13 +758,12 @@ impl Root {
     /// `unmount` method is called. Modifying those children before `unmount` is called will likely result
     /// in panics.
     pub fn new<'a, R: Renderer + 'static, S: Scheduler + 'static, C: DefaultComponent>(
-        native_type: NativeType,
         mut native_handle: NativeHandle,
         mut renderer: R,
         scheduler: S,
     ) -> Self {
         // Remove all the children of `native_handle`.
-        renderer.truncate_children(&native_type, &mut native_handle, 0);
+        renderer.truncate_children( &mut native_handle, 0);
 
         let mut curr_component_id = ComponentId::new();
         let root_component_id = curr_component_id.create_next();
@@ -788,7 +776,6 @@ impl Root {
             })],
             native_component: Some(NativeComponent {
                 native_handle,
-                native_type,
                 native_parent: None,
                 native_children: Vec::new(),
             }),
@@ -834,7 +821,6 @@ impl Root {
 
                 // Clear children
                 vdom.renderer.truncate_children(
-                    &native_root.native_type,
                     &mut native_root.native_handle,
                     0,
                 );

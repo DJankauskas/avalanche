@@ -9,7 +9,7 @@ use native_repr::Repr;
 
 use crate::{
     component, keyed,
-    renderer::{NativeType, Scheduler},
+    renderer::Scheduler,
     shared::{Shared, WeakShared},
     state, store, tracked, updated, DefaultComponent, Tracked, View,
 };
@@ -80,10 +80,6 @@ pub fn test<C: DefaultComponent>(events: Vec<&str>, expected: Vec<Repr>) {
     let scheduler = TestScheduler::new(events, root.downgrade());
 
     let avalanche_root = crate::vdom::Root::new::<_, _, C>(
-        NativeType {
-            handler: "",
-            name: "",
-        },
         Box::new(root_node.clone()),
         renderer,
         scheduler.clone(),

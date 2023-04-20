@@ -17,7 +17,7 @@ pub mod alloc;
 
 use hooks::{HookContext, RenderContext};
 
-use renderer::{DispatchNativeEvent, NativeEvent, NativeHandle, NativeType, Renderer};
+use renderer::{DispatchNativeEvent, NativeEvent, NativeHandle, Renderer};
 use shared::Shared;
 use tracked::Gen;
 use vdom::{ComponentId, VDom};
@@ -175,8 +175,8 @@ pub trait Component<'a>: Sized + 'a {
 
     fn updated(&self, gen: Gen) -> bool;
 
-    fn native_type(&self) -> Option<NativeType> {
-        None
+    fn is_native(&self) -> bool {
+        false
     }
 
     #[allow(unused)]
@@ -193,7 +193,6 @@ pub trait Component<'a>: Sized + 'a {
     fn native_update(
         &self,
         renderer: &mut dyn Renderer,
-        native_type: &NativeType,
         native_handle: &NativeHandle,
         curr_gen: Gen,
         event: Option<NativeEvent>,
