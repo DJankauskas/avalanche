@@ -628,11 +628,10 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
 }
 
 /// Remove a vnode from `vdom`, along with all of its descendents.
-fn remove_node(vdom: &mut VDom, node: ComponentId) {
-    let removed_node = vdom.children.remove(&node);
-    if let Some(removed_node) = removed_node {
-        for child in removed_node.children.into_iter().flatten() {
-            remove_node(vdom, child);
+fn remove_node(vdom: &mut VDom, mut to_remove: BumpVec<ComponentId>) {
+    while let Some(node) = to_remove.pop() {
+        if let Some(node) = vdom.children.remove(&node) {
+            to_remove.extend(node.children.into_iter().flatten());
         }
     }
 }
@@ -654,7 +653,9 @@ pub(crate) fn update_native_children(
 
     // Fast path for component being completely cleared of children
     if new_native_children.is_empty() {
-        vdom.renderer.truncate_children(parent_type, parent_handle, 0);
+        if !old_native_children.is_empty() {
+            vdom.renderer.truncate_children(parent_type, parent_handle, 0);
+        }
         return;
     }
     
@@ -715,7 +716,7 @@ pub(crate) fn update_native_children(
         }
     }
 
-    if new_native_children.len() != old_native_children.len() {
+    if new_native_children.len() < old_native_children.len() {
         vdom.renderer
             .truncate_children(parent_type, parent_handle, new_native_children.len());
     }
@@ -908,9 +909,7 @@ fn render_vdom<'a, C: DefaultComponent>(
     drop(old_native_children);
 
     // Remove the vnodes marked for deletion
-    for component in components_to_remove.into_inner() {
-        remove_node(vdom, component);
-    }
+    remove_node(vdom, components_to_remove.into_inner());
 
     let vnode = vdom.children.get_mut(&ComponentId::new()).unwrap();
     let native_component = vnode.native_component.as_mut().unwrap();

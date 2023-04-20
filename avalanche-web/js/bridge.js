@@ -31,6 +31,10 @@ export function swap_children(parent, lesserIdx, greaterIdx) {
 }
 
 export function truncate_children(parent, len) {
+    if (len === 0) {
+        parent.innerHTML = '';
+        return;
+    }
     while (parent.childNodes.length > len) {
         parent.removeChild(parent.lastChild);
     }
