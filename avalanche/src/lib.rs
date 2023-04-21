@@ -20,7 +20,7 @@ use hooks::{HookContext, RenderContext};
 use renderer::{DispatchNativeEvent, NativeEvent, NativeHandle, Renderer};
 use shared::Shared;
 use tracked::Gen;
-use vdom::{ComponentId, VDom};
+use vdom::data::{ComponentId, VDom};
 use alloc::Bump;
 
 pub use hooks::{state, store, keyed};

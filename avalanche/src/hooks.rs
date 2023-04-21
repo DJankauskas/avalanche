@@ -6,9 +6,8 @@ use crate::{
     tracked::{Gen, InternalGen},
     alloc::{Bump, String as BumpString},
     vdom::{
-        mark_node_dirty,
-        wrappers::{ComponentStateAccess, SharedBox},
-        CellBumpVec, ComponentId, VDom,
+        state::{ComponentStateAccess, SharedBox},
+        data::{CellBumpVec, ComponentId, VDom}
     },
     ComponentPos, Tracked, View,
 };
@@ -205,7 +204,7 @@ impl<T: 'static, S: 'static> InternalStateSetter<T, S> {
                     f(&mut state.val, vdom_gen.into());
                     state.gen = vdom_gen;
 
-                    mark_node_dirty(vdom, component_id_copy);
+                    vdom.mark_node_dirty(component_id_copy);
                     (vdom.update_vdom)(vdom, &vdom_clone_2, &scheduler_clone, None);
                 })
             }));

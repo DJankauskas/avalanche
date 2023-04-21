@@ -2,7 +2,7 @@
 pub use crate::vdom::Root;
 use crate::{
     shared::{Shared, WeakShared},
-    vdom::{mark_node_dirty, ComponentId, VDom},
+    vdom::data::{ComponentId, VDom},
 };
 use std::any::Any;
 use downcast_rs::{Downcast, impl_downcast};
@@ -112,7 +112,7 @@ impl DispatchNativeEvent {
         let exec_event = move || {
             let vdom_clone2 = vdom_clone.clone();
             vdom_clone.exec_mut(move |vdom| {
-                mark_node_dirty(vdom, self_clone.component_id);
+                vdom.mark_node_dirty(self_clone.component_id);
                 (vdom.update_vdom)(
                     vdom,
                     &vdom_clone2,
