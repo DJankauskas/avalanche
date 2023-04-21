@@ -160,9 +160,6 @@ pub(crate) struct VNode {
     pub body_parent: Option<ComponentId>,
     /// The components rendered within the render function of the component, if any.
     body_children: FxHashMap<ChildId, BodyChild>,
-    /// The direct children of the component, where `()`-derived ones are represented
-    /// by `None`.
-    pub children: Vec<Option<ComponentId>>,
     /// The native information of the given component, if it is native.
     native_component: Option<NativeComponent>,
     /// The hook state of the given component.
@@ -432,7 +429,6 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
                         VNode {
                             body_parent: Some(context.component_pos.component_id),
                             body_children: FxHashMap::default(),
-                            children: Vec::new(),
                             native_component,
                             state: FxHashMap::default(),
                             dirty: true,
@@ -498,11 +494,6 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
                         .filter_map(|child| child.native_component_id)
                         .collect_in(context.bump);
 
-                    let new_children: BumpVec<_> = new_children
-                        .into_iter()
-                        .map(|child| child.id)
-                        .collect_in(context.bump);
-
                     let mut old_native_children = native_component
                         .native_children
                         .iter()
@@ -525,9 +516,6 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
                     // vector's allocation
                     native_component.native_children.clear();
                     native_component.native_children.extend(new_native_children);
-
-                    child_vnode.children.clear();
-                    child_vnode.children.extend(new_children);
                 });
 
                 Some(child_component_id)
@@ -593,7 +581,6 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
 
                     // restore the vnode's state after swapping it out earlier
                     std::mem::swap(&mut state, &mut child_vnode.state);
-                    child_vnode.children = view.id.into_iter().map(Some).collect();
                 });
 
                 view.native_component_id
@@ -623,7 +610,7 @@ pub fn render_child<'a>(component: impl Component<'a>, context: &RenderContext) 
 fn remove_node(vdom: &mut VDom, mut to_remove: BumpVec<ComponentId>) {
     while let Some(node) = to_remove.pop() {
         if let Some(node) = vdom.children.remove(&node) {
-            to_remove.extend(node.children.into_iter().flatten());
+            to_remove.extend(node.body_children.iter().map(|(_, child)| child.id));
         }
     }
 }
@@ -767,13 +754,11 @@ impl Root {
 
         let mut curr_component_id = ComponentId::new();
         let root_component_id = curr_component_id.create_next();
+        let body_children = FxHashMap::with_capacity_and_hasher(1, Default::default());
         let mut children = FxHashMap::with_capacity_and_hasher(16, Default::default());
         let vnode = VNode {
             body_parent: None,
-            body_children: FxHashMap::with_capacity_and_hasher(1, Default::default()),
-            children: vec![Some(ComponentId {
-                id: NonZeroU64::new(2).unwrap(),
-            })],
+            body_children,
             native_component: Some(NativeComponent {
                 native_handle,
                 native_parent: None,
@@ -870,14 +855,14 @@ fn render_vdom<'a, C: DefaultComponent>(
     );
 
     // TODO: code duplicated from render_child; factor out into function?
-    let new_children: Vec<Option<ComponentId>> =
-        vdom.children[&ComponentId::new()].children.clone();
-    let new_native_children: BumpVec<_> = new_children
-        .iter()
-        .filter_map(|id| id.and_then(|id| vdom.children[&id].view.native_component_id))
-        .collect_in(&bump);
     let vnode = &vdom.children[&ComponentId::new()];
     let native_component = vnode.native_component.as_ref().unwrap();
+    let new_native_children: BumpVec<_> = vdom.children[&ComponentId { id: NonZeroU64::new(2).unwrap() }]
+        .view
+        .native_component_id
+        .iter()
+        .cloned()
+        .collect_in(&bump);
     let mut old_native_children = native_component
         .native_children
         .iter()
