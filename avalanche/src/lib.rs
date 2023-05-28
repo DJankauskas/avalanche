@@ -35,11 +35,10 @@ pub use tracked::Tracked;
 ///
 /// The function can optionally take parameters. Parameter types must implement `Clone`.
 /// Parameters must have concrete types: they cannot use the `impl Trait`
-/// syntax. Components currently cannot be `async` or generic over types.
+/// syntax. Components currently cannot be `async`.
 ///
 /// A component must return a [View] describing what it will render.
-/// Components are invoked with the same syntax as function calls, except with
-/// the macro `!` after the type name:
+/// Components are invoked with the same syntax as function calls, except the first parameter must be `self`.
 /// ```rust
 /// use avalanche::{component, tracked, View};
 /// use avalanche_web::components::{H1, Text};
